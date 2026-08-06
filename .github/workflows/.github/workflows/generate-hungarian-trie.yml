@@ -1,0 +1,46 @@
+name: Generate Hungarian hyphenation trie
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Download Hungarian Hypher trie
+        run: |
+          mkdir -p build
+          wget \
+            -O build/hu.bin \
+            https://github.com/typst/hypher/raw/refs/heads/main/tries/hu.bin
+
+      - name: Convert trie to a CrossPoint header
+        run: |
+          python scripts/generate_hyphenation_trie.py \
+            --input build/hu.bin \
+            --output lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+
+      - name: Verify generated header
+        run: |
+          test -s lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q "hu_trie_data" \
+            lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q "hu_patterns" \
+            lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+
+      - name: Upload generated header
+        uses: actions/upload-artifact@v4
+        with:
+          name: hyph-hu-trie-header
+          path: lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          if-no-files-found: error
+          retention-days: 30
