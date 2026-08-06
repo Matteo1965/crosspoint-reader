@@ -29,6 +29,11 @@ jobs:
           python -m pip install \
             "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
 
+      - name: Generate Hungarian trie
+        run: |
+          chmod +x scripts/update_hyphenation.sh
+          scripts/update_hyphenation.sh
+          
       - name: Verify Hungarian files
         run: |
           test -s lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
