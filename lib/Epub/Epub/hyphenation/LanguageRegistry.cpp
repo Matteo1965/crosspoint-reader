@@ -16,8 +16,10 @@ LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin)
 using EntryArray = std::array<LanguageEntry, 2>;
 
 const EntryArray& entries() {
-  static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
-                                       {"hungarian", "hu", &hungarianHyphenator},
+  static const EntryArray kEntries = {{
+      {"english", "en", &englishHyphenator},
+      {"hungarian", "hu", &hungarianHyphenator},
+  }};
   return kEntries;
 }
 
