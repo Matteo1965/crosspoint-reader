@@ -1,0 +1,36 @@
+name: Generate Hungarian hyphenation trie
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Generate hyphenation headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/update_hyphenation.sh
+          scripts/update_hyphenation.sh
+
+          test -s lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'hu_patterns' \
+            lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+
+      - name: Package Hungarian header
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-trie
+          path: lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          if-no-files-found: error
+          retention-days: 30
