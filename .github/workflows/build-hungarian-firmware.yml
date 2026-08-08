@@ -33,7 +33,7 @@ jobs:
         run: |
           chmod +x scripts/update_hyphenation.sh
           scripts/update_hyphenation.sh
-          
+
       - name: Verify Hungarian files
         run: |
           test -s lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
@@ -64,12 +64,10 @@ jobs:
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CrossPoint-Hungarian-Firmware
+          name: CrossPoint-Hungarian-Firmware-v1.5.0
           path: |
             .pio/build/gh_release/firmware.bin
-            .pio/build/gh_release/bootloader.bin
-            .pio/build/gh_release/partitions.bin
-            .pio/build/gh_release/firmware.elf
-            .pio/build/gh_release/firmware.map
+            LICENSE
+            THIRD_PARTY_NOTICES.md
           if-no-files-found: error
           retention-days: 30
