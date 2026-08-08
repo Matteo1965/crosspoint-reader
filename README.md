@@ -1,3 +1,13 @@
+# CrossPoint 1.5.0 – Hungarian Hyphenation
+
+Unofficial CrossPoint Reader firmware for the Xteink X4, based on the official CrossPoint v1.5.0 release.
+
+Changes: 
+Adds Hungarian automatic hyphenation.
+Retains English hyphenation.
+Other built-in hyphenation dictionaries were removed to keep the firmware within the X4 OTA partition size.
+Includes the fixes and improvements from the official CrossPoint v1.5.0 release.
+
 # CrossPoint Reader
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
