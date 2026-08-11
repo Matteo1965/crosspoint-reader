@@ -1,0 +1,79 @@
+name: Build Hungarian dictionary stemming firmware
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out Hungarian dictionary stemming branch
+        uses: actions/checkout@v4
+        with:
+          ref: hungarian-dictionary-stemming
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply Hungarian dictionary stemming patch
+        run: |
+          git apply --check patches/hungarian-dictionary-stemming.patch
+          git apply patches/hungarian-dictionary-stemming.patch
+          grep -q "HU_CASE_SUFFIXES" src/util/Dictionary.cpp
+          grep -q "HU_INNER_SUFFIXES" src/util/Dictionary.cpp
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PioArduino PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            "https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip"
+
+      - name: Generate Hungarian trie
+        run: |
+          chmod +x scripts/update_hyphenation.sh
+          scripts/update_hyphenation.sh
+
+      - name: Verify Hungarian hyphenation files
+        run: |
+          test -s lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q "hu_patterns" lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q '"hungarian", "hu"' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+
+      - name: Build release firmware
+        run: pio run -e gh_release
+
+      - name: Check firmware size
+        run: |
+          firmware=".pio/build/gh_release/firmware.bin"
+          limit=$((0x640000))
+          size=$(stat --format="%s" "$firmware")
+          remaining=$((limit - size))
+          echo "Firmware size: $size bytes"
+          echo "OTA partition: $limit bytes"
+          echo "Remaining: $remaining bytes"
+          if [ "$size" -gt "$limit" ]; then
+            echo "::error::Firmware exceeds the OTA partition."
+            exit 1
+          fi
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CrossPoint-Hungarian-Dictionary-Stemming
+          path: |
+            .pio/build/gh_release/firmware.bin
+            .pio/build/gh_release/bootloader.bin
+            .pio/build/gh_release/partitions.bin
+            .pio/build/gh_release/firmware.elf
+            .pio/build/gh_release/firmware.map
+          if-no-files-found: error
+          retention-days: 30
