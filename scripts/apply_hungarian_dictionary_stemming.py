@@ -8,9 +8,9 @@ end = text.index("\nbool Dictionary::lookup(", start)
 
 replacement = r'''void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
   out.clear();
-  out.reserve(24);
+  out.reserve(40);
   const size_t n = word.size();
-  constexpr size_t MAX_STEM_VARIANTS = 24;
+  constexpr size_t MAX_STEM_VARIANTS = 40;
 
   const auto add = [&out](std::string v) {
     if (v.size() < 2 || out.size() >= MAX_STEM_VARIANTS) return;
@@ -56,14 +56,53 @@ replacement = r'''void Dictionary::stemVariants(const std::string& word, std::ve
     }
   };
 
+  // Noun/adjective: stem + plural/possessive + case suffix.
   for (const char* suffix : HU_CASE_SUFFIXES) {
     std::string outerStem;
     if (!stripSuffix(word, suffix, outerStem)) continue;
     add(outerStem);
     addHungarianInnerForms(outerStem);
   }
-
   addHungarianInnerForms(word);
+
+  // Possessive + accusative forms: monokliját -> monokli, könyvét -> könyv.
+  for (const char* suffix : {"ját", "jét", "át", "ét"}) {
+    std::string stem;
+    if (stripSuffix(word, suffix, stem)) add(std::move(stem));
+  }
+
+  // Infinitive: igazgatni -> igazgat.
+  {
+    std::string stem;
+    if (stripSuffix(word, "ni", stem)) add(std::move(stem));
+  }
+
+  // Adverbial participle: csodálkozva -> csodálkoz -> csodálkozik,
+  // gyanakodva -> gyanakod -> gyanakodik. The +ik candidate is only used if
+  // that headword actually exists in the dictionary index.
+  for (const char* suffix : {"va", "ve"}) {
+    std::string stem;
+    if (stripSuffix(word, suffix, stem)) {
+      add(stem);
+      add(stem + "ik");
+    }
+  }
+
+  // Common past-tense personal endings. Exact dictionary matches still win,
+  // and every generated candidate must exist in the StarDict index.
+  static constexpr const char* HU_PAST_SUFFIXES[] = {
+      "ottam", "ettem", "öttem", "tam", "tem",
+      "ottál", "ettél", "öttél", "tál", "tél",
+      "ottunk", "ettünk", "öttünk", "tunk", "tünk",
+      "ottatok", "ettetek", "öttetek", "tatok", "tetek",
+      "ottak", "ettek", "öttek", "tak", "tek",
+      "otta", "ette", "ötte", "ta", "te",
+      "ott", "ett", "ött",
+  };
+  for (const char* suffix : HU_PAST_SUFFIXES) {
+    std::string stem;
+    if (stripSuffix(word, suffix, stem)) add(std::move(stem));
+  }
 
   if (endsWith("'s")) add(word.substr(0, n - 2));
   if (endsWith("\\xE2\\x80\\x99s")) add(word.substr(0, n - 4));
@@ -87,8 +126,16 @@ updated = text[:start] + replacement + text[end:]
 path.write_text(updated, encoding="utf-8")
 
 check = path.read_text(encoding="utf-8")
-for marker in ("HU_CASE_SUFFIXES", "HU_INNER_SUFFIXES", "MAX_STEM_VARIANTS"):
+for marker in (
+    "HU_CASE_SUFFIXES",
+    "HU_INNER_SUFFIXES",
+    "HU_PAST_SUFFIXES",
+    "MAX_STEM_VARIANTS",
+    'stripSuffix(word, "ni"',
+    'stem + "ik"',
+    '"ját", "jét"',
+):
     if marker not in check:
         raise SystemExit(f"Missing marker after rewrite: {marker}")
 
-print("Hungarian dictionary stemming applied to src/util/Dictionary.cpp")
+print("Hungarian dictionary stemming v2 applied to src/util/Dictionary.cpp")
