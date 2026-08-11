@@ -22,9 +22,11 @@ jobs:
       - name: Apply Hungarian dictionary stemming source rewrite
         run: |
           python scripts/apply_hungarian_dictionary_stemming.py
+          python scripts/apply_hungarian_dictionary_stemming_v4.py
           grep -q "HU_CASE_SUFFIXES" src/util/Dictionary.cpp
           grep -q "HU_INNER_SUFFIXES" src/util/Dictionary.cpp
           grep -q "MAX_STEM_VARIANTS" src/util/Dictionary.cpp
+          grep -q "Hungarian dictionary stemming v4" src/util/Dictionary.cpp
 
       - name: Set up Python
         uses: actions/setup-python@v5
