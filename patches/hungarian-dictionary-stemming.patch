@@ -1,0 +1,76 @@
+diff --git a/src/util/Dictionary.cpp b/src/util/Dictionary.cpp
+--- a/src/util/Dictionary.cpp
++++ b/src/util/Dictionary.cpp
+@@ -1,8 +1,16 @@
+ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
+   out.clear();
+-  out.reserve(6);
++  // Keep this bounded: every variant triggers another StarDict index probe and
++  // the ESP32-C3 has very limited RAM. 24 is enough for the common Hungarian
++  // noun/adjective forms below while still leaving room for the existing
++  // English fallback forms.
++  out.reserve(24);
+   const size_t n = word.size();
++  constexpr size_t MAX_STEM_VARIANTS = 24;
++
+   const auto add = [&out](std::string v) {
++    // Avoid very short stems and cap the number of SD-card lookup probes.
++    if (v.size() < 2 || out.size() >= MAX_STEM_VARIANTS) return;
+     if (std::find(out.begin(), out.end(), v) == out.end()) out.push_back(std::move(v));
+   };
+   // endsWith requires a non-empty remainder so variants never come out empty.
+@@ -10,6 +18,54 @@
+     const size_t len = strlen(suffix);
+     return n > len && word.compare(n - len, len, suffix) == 0;
+   };
++
++  // Hungarian fallback stemming. This is intentionally conservative: exact
++  // dictionary matches are tried before these candidates, and a generated stem
++  // is used only when it actually exists in the StarDict index.
++  static constexpr const char* HU_CASE_SUFFIXES[] = {
++      "képpen", "ként",
++      "ból", "ből", "tól", "től", "ról", "ről",
++      "hoz", "hez", "höz", "nál", "nél",
++      "ban", "ben", "nak", "nek", "ért",
++      "ba", "be", "ra", "re", "on", "en", "ön",
++      "ig", "kor", "ul", "ül", "vá", "vé",
++      "at", "et", "ot", "öt", "t",
++  };
++
++  static constexpr const char* HU_INNER_SUFFIXES[] = {
++      "atok", "etek", "otok", "ötök",
++      "unk", "ünk",
++      "am", "em", "om", "öm",
++      "ad", "ed", "od", "öd",
++      "ja", "je", "uk", "ük", "juk", "jük",
++      "ak", "ek", "ok", "ök", "k",
++      "a", "e",
++  };
++
++  const auto stripSuffix = [](const std::string& s, const char* suffix, std::string& stem) {
++    const size_t len = strlen(suffix);
++    if (s.size() <= len || s.compare(s.size() - len, len, suffix) != 0) return false;
++    stem.assign(s, 0, s.size() - len);
++    return !stem.empty();
++  };
++
++  const auto addHungarianInnerForms = [&add, &stripSuffix](const std::string& form) {
++    for (const char* suffix : HU_INNER_SUFFIXES) {
++      std::string stem;
++      if (stripSuffix(form, suffix, stem)) add(std::move(stem));
++    }
++  };
++
++  // stem + plural/possessive + case suffix, e.g. házakban / házamban.
++  for (const char* suffix : HU_CASE_SUFFIXES) {
++    std::string outerStem;
++    if (!stripSuffix(word, suffix, outerStem)) continue;
++    add(outerStem);
++    addHungarianInnerForms(outerStem);
++  }
++
++  // Forms without an outer case suffix, e.g. házak / könyvem.
++  addHungarianInnerForms(word);
+ 
+   if (endsWith("'s")) add(word.substr(0, n - 2));
+   if (endsWith("\\xE2\\x80\\x99s")) add(word.substr(0, n - 4));  // U+2019 apostrophe
