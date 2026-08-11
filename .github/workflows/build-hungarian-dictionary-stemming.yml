@@ -18,12 +18,12 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply Hungarian dictionary stemming patch
+      - name: Apply Hungarian dictionary stemming source rewrite
         run: |
-          git apply --check patches/hungarian-dictionary-stemming.patch
-          git apply patches/hungarian-dictionary-stemming.patch
+          python scripts/apply_hungarian_dictionary_stemming.py
           grep -q "HU_CASE_SUFFIXES" src/util/Dictionary.cpp
           grep -q "HU_INNER_SUFFIXES" src/util/Dictionary.cpp
+          grep -q "MAX_STEM_VARIANTS" src/util/Dictionary.cpp
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,11 +56,9 @@ jobs:
           limit=$((0x640000))
           size=$(stat --format="%s" "$firmware")
           remaining=$((limit - size))
-
           echo "Firmware size: $size bytes"
           echo "OTA partition: $limit bytes"
           echo "Remaining: $remaining bytes"
-
           if [ "$size" -gt "$limit" ]; then
             echo "::error::Firmware exceeds the OTA partition."
             exit 1
