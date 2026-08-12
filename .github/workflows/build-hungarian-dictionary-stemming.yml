@@ -27,6 +27,7 @@ jobs:
           python scripts/apply_hungarian_dictionary_stemming_v6.py
           python scripts/apply_hungarian_dictionary_stemming_v7.py
           python scripts/apply_hungarian_dictionary_stemming_v8.py
+          python scripts/apply_hungarian_dictionary_stemming_v9.py
           grep -q "HU_CASE_SUFFIXES" src/util/Dictionary.cpp
           grep -q "HU_INNER_SUFFIXES" src/util/Dictionary.cpp
           grep -q "MAX_STEM_VARIANTS" src/util/Dictionary.cpp
@@ -35,6 +36,7 @@ jobs:
           grep -q "Hungarian dictionary stemming v6" src/util/Dictionary.cpp
           grep -q "Hungarian dictionary stemming v7: preferred lemmas" src/util/Dictionary.cpp
           grep -q "Hungarian dictionary lookup v8" src/util/Dictionary.cpp
+          grep -q "Hungarian dictionary lookup v9" src/util/Dictionary.cpp
 
       - name: Set up Python
         uses: actions/setup-python@v5
