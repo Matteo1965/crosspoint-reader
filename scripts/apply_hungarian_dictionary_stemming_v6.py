@@ -22,6 +22,15 @@ insert = r'''
     std::string stem;
     if (stripSuffix(word, suffix, stem)) add(stem);
   }
+
+  // Subjunctive/imperative -ssen form of an -sik verb:
+  // beleessen -> beleesik, essen -> esik.
+  // This must precede the generic suffix rules, otherwise a real but wrong
+  // headword such as "ess" can win before the intended lemma is tried.
+  {
+    std::string stem;
+    if (stripSuffix(word, "ssen", stem)) add(stem + "sik");
+  }
 '''
 
 if "Hungarian dictionary stemming v6" not in text:
@@ -36,6 +45,8 @@ for marker in (
     "Hungarian dictionary stemming v6",
     '"ja", "je"',
     '"tan", "ten"',
+    'stripSuffix(word, "ssen"',
+    'stem + "sik"',
 ):
     if marker not in check:
         raise SystemExit(f"Missing v6 marker: {marker}")
