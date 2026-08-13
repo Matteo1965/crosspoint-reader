@@ -49,6 +49,9 @@ jobs:
       - name: Run Hungarian dictionary regression tests
         run: python scripts/run_hungarian_stemming_regression.py
 
+      - name: Run actual C++ firmware stemming regression tests
+        run: python scripts/run_hungarian_cpp_regression.py
+
       - name: Install PioArduino PlatformIO Core
         run: |
           python -m pip install --upgrade pip
