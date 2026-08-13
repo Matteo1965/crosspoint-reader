@@ -5,10 +5,13 @@ from hungarian_stemmer_model import lookup
 ROOT=Path(__file__).resolve().parents[1]
 CASES=ROOT/"tests"/"hungarian_stemming_cases.tsv"
 FIXTURE=ROOT/"tests"/"hungarian_dictionary_headwords_fixture.txt"
+EXTRA=ROOT/"tests"/"hungarian_dictionary_headwords_extra.txt"
 
 
 def main():
     headwords={x.strip().lower() for x in FIXTURE.read_text(encoding="utf-8").splitlines() if x.strip()}
+    if EXTRA.exists():
+        headwords.update(x.strip().lower() for x in EXTRA.read_text(encoding="utf-8").splitlines() if x.strip())
     cases=[]
     for line in CASES.read_text(encoding="utf-8").splitlines():
         if not line.strip() or line.startswith("#"): continue
