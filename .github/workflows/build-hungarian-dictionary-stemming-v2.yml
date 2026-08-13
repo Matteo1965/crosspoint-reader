@@ -1,4 +1,4 @@
-name: Build Hungarian dictionary stemming firmware v2
+name: Hungarian Stemming v2
 
 on:
   workflow_dispatch:
