@@ -21,6 +21,12 @@ def candidates(word):
     for s in ("va","ve"):
         if w.endswith(s):
             stem=w[:-len(s)]; c.extend((stem+"ik",stem))
+
+    # Hungarian plural stem restoration with vowel lengthening:
+    # pálmafák -> pálmafa, mesék -> mese.
+    if w.endswith("ák") and len(w)>2: c.append(w[:-2]+"a")
+    if w.endswith("ék") and len(w)>2: c.append(w[:-2]+"e")
+
     for s in ("ak","ek","ok","ök"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
     for s in ("jait","jeit","ait","eit","ját","jét","át","ét","jai","jei","ai","ei","ja","je","a","e"):
@@ -106,6 +112,13 @@ def candidates(word):
             stem=w[:-len(s)]; c.extend((stem+"ik",stem))
     for s in ("ás","és"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # Present participle / deverbal adjective: kiáramló -> kiáramlik.
+    # Try the -ik dictionary form before the raw stem.
+    for s in ("ó","ő"):
+        if w.endswith(s) and len(w)>1:
+            stem=w[:-1]; c.extend((stem+"ik",stem))
+
     return uniq(c)
 
 def lookup(word, headwords):
