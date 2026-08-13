@@ -21,12 +21,8 @@ def candidates(word):
     for s in ("va","ve"):
         if w.endswith(s):
             stem=w[:-len(s)]; c.extend((stem+"ik",stem))
-
-    # Hungarian plural stem restoration with vowel lengthening:
-    # pálmafák -> pálmafa, mesék -> mese.
     if w.endswith("ák") and len(w)>2: c.append(w[:-2]+"a")
     if w.endswith("ék") and len(w)>2: c.append(w[:-2]+"e")
-
     for s in ("ak","ek","ok","ök"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
     for s in ("jait","jeit","ait","eit","ját","jét","át","ét","jai","jei","ai","ei","ja","je","a","e"):
@@ -112,30 +108,32 @@ def candidates(word):
             stem=w[:-len(s)]; c.extend((stem+"ik",stem))
     for s in ("ás","és"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
-
-    # Present participle / deverbal adjective: kiáramló -> kiáramlik.
-    # Try the -ik dictionary form before the raw stem.
     for s in ("ó","ő"):
         if w.endswith(s) and len(w)>1:
             stem=w[:-1]; c.extend((stem+"ik",stem))
-
     return uniq(c)
 
 def lookup(word, headwords):
     w=word.lower()
     if w in headwords: return w
-    queue=candidates(w); seen=set()
+    queue=candidates(w); seen=[]; seen_set=set()
     for _ in range(3):
         nxt=[]
         for cand in queue:
-            if cand in seen: continue
-            seen.add(cand)
+            if cand in seen_set: continue
+            seen_set.add(cand); seen.append(cand)
             if cand in headwords: return cand
             nxt.extend(candidates(cand))
         queue=uniq(nxt)
-    # Compound fallback is deliberately last: szakemberekben must reach szakember before berek.
-    for source in [w]+list(seen):
+    # Compound fallback is deliberately last. Collect all dictionary suffixes and
+    # choose the longest one, so óriásivadékot -> ivadék wins over the shorter
+    # accidental match vad; szakemberekben likewise cannot collapse to berek.
+    matches=[]
+    for source in [w]+seen:
         for i in range(1,len(source)):
             cand=source[i:]
-            if len(cand)>=3 and cand in headwords: return cand
+            if len(cand)>=3 and cand in headwords:
+                matches.append(cand)
+    if matches:
+        return max(matches, key=lambda x: (len(x), x))
     return None
