@@ -30,7 +30,9 @@ jobs:
           python scripts/apply_hungarian_dictionary_stemming_v10.py
           python scripts/apply_hungarian_dictionary_stemming_v11.py
           python scripts/apply_hungarian_dictionary_stemming_v12.py
+          python scripts/apply_hungarian_dictionary_stemming_v13.py
           grep -q "Hungarian dictionary stemming v12: morphology-first engine" src/util/Dictionary.cpp
+          grep -q "Hungarian dictionary stemming v13" src/util/Dictionary.cpp
           grep -q "Hungarian dictionary lookup v11" src/util/Dictionary.cpp
 
       - name: Set up Python
