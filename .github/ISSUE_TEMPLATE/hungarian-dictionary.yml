@@ -1,0 +1,64 @@
+name: Hungarian dictionary / stemming bug
+
+description: Report a Hungarian word that resolves to the wrong StarDict headword or is not found.
+
+title: "[HU Dictionary] "
+
+labels: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the Hungarian dictionary and stemming support.
+        Please provide the word exactly as it appears in the book and the expected dictionary headword.
+
+  - type: input
+    id: word
+    attributes:
+      label: Keresett szó / Word looked up
+      placeholder: szakemberekben
+    validations:
+      required: true
+
+  - type: input
+    id: actual
+    attributes:
+      label: Kapott találat / Actual result
+      description: If there was no result, enter None.
+      placeholder: None
+    validations:
+      required: true
+
+  - type: input
+    id: expected
+    attributes:
+      label: Elvárt találat / Expected headword
+      placeholder: szakember
+    validations:
+      required: true
+
+  - type: input
+    id: release
+    attributes:
+      label: Firmware release
+      value: hu-v1.5.0-dict-beta.1
+    validations:
+      required: true
+
+  - type: input
+    id: dictionary
+    attributes:
+      label: StarDict dictionary
+      description: Name/source/version of the dictionary if known.
+      placeholder: Magyar Értelmező Szótár
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Megjegyzés / Additional context
+      description: Optional context, sentence from the book, or other observations. Please avoid copyrighted long passages.
+    validations:
+      required: false
