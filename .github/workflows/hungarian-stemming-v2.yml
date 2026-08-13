@@ -31,7 +31,20 @@ jobs:
           python scripts/apply_hungarian_dictionary_stemming_v12.py
           python scripts/apply_hungarian_dictionary_stemming_v13.py
           python scripts/apply_hungarian_dictionary_stemming_v14.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/util/Dictionary.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = 'StringUtils::asciiCaseCmp(wordBuf, target)'
+          count = s.count(old)
+          if count != 2:
+              raise SystemExit(f'Expected exactly 2 locate comparator calls, found {count}')
+          s = s.replace(old, 'strcmp(wordBuf, target)')
+          p.write_text(s, encoding='utf-8')
+          PY
           grep -q "Hungarian dictionary stemming v14" src/util/Dictionary.cpp
+          test "$(grep -c 'strcmp(wordBuf, target)' src/util/Dictionary.cpp)" -eq 2
+          test "$(grep -c 'StringUtils::asciiCaseCmp(wordBuf, target)' src/util/Dictionary.cpp || true)" -eq 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
