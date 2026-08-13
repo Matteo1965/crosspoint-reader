@@ -42,6 +42,7 @@ fedél
 fel
 felhoz
 fogad
+fogadó
 fontolgat
 furcsa
 függöny
@@ -72,6 +73,7 @@ kazán
 kel
 ken
 kertkapu
+keresztfiú
 kezd
 kihallgat
 kikérdez
@@ -85,6 +87,7 @@ kérdez
 kész
 készül
 könny
+könnyű
 közel
 közép
 l
@@ -132,6 +135,7 @@ szultán
 száj
 szél
 szül
+találkozik
 tat
 teke
 tele
@@ -157,6 +161,7 @@ zs
 zseb
 zár
 áll
+átröppen
 átvizsgál
 áramlik
 árny
