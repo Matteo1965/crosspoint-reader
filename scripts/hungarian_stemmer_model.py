@@ -89,7 +89,6 @@ def candidates(word):
         if w.endswith(s): c.append(w[:-len(s)])
     if len(w)>=4 and w[-2:] in ("al","el") and w[-3]==w[-4]: c.append(w[:-3])
 
-    # New general patterns from real-book regression corpus.
     # Nominalization + possessive instrumental: átvizsgálásával -> átvizsgál.
     for s in ("ásával","ésével"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
@@ -112,6 +111,29 @@ def candidates(word):
     # Potential + 1st plural: fogadhatunk -> fogad.
     for s in ("hatunk","hetünk"):
         if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # Past potential + 1st plural: fogadhattunk -> fogad.
+    for s in ("hattunk","hettünk"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # Possessive/accusative -fiát back to compound ending in -fiú.
+    if w.endswith("fiát") and len(w)>4:
+        c.append(w[:-4]+"fiú")
+
+    # Hyphenated relational adjective: fogadó-beli -> fogadó.
+    for s in ("-beli","-féle","-fajta"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # Comparative adverb with lexical long-vowel base candidate: könnyebben -> könnyű.
+    if w.endswith("ebben") and len(w)>5:
+        stem=w[:-5]; c.extend((stem+"ű",stem))
+    if w.endswith("abban") and len(w)>5:
+        stem=w[:-5]; c.extend((stem+"ú",stem))
+
+    # 3rd-person plural imperative in -zzanak/-zzenek: találkozzanak -> találkozik.
+    for s in ("zzanak","zzenek"):
+        if w.endswith(s) and len(w)>len(s):
+            stem=w[:-len(s)]; c.extend((stem+"zik",stem+"z"))
 
     for s in CASE:
         if w.endswith(s) and len(w)>len(s):
