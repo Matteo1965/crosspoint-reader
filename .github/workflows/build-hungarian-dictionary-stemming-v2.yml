@@ -30,6 +30,8 @@ jobs:
           python scripts/apply_hungarian_dictionary_stemming_v12.py
           python scripts/apply_hungarian_dictionary_stemming_v13.py
           python scripts/apply_hungarian_dictionary_stemming_v14.py
+          sed -i 's/StringUtils::asciiCaseCmp(wordBuf, target)/strcmp(wordBuf, target)/g' src/util/Dictionary.cpp
+          test "$(grep -c 'strcmp(wordBuf, target)' src/util/Dictionary.cpp)" -ge 2
           grep -q "Hungarian dictionary stemming v14" src/util/Dictionary.cpp
       - name: Set up Python
         uses: actions/setup-python@v5
