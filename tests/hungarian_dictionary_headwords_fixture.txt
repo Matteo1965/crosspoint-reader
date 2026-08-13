@@ -11,6 +11,7 @@ beleesik
 belegondol
 berek
 bezár
+biztosít
 báb
 bába
 cipel
@@ -40,6 +41,8 @@ farok
 fedél
 fel
 felhoz
+fogad
+fontolgat
 furcsa
 függöny
 fürdőszoba
@@ -126,6 +129,7 @@ szi
 szik
 szoba
 szultán
+száj
 szél
 szül
 tat
@@ -153,6 +157,7 @@ zs
 zseb
 zár
 áll
+átvizsgál
 áramlik
 árny
 árnyék
@@ -168,6 +173,7 @@ zár
 ölt
 örül
 ú
+újságol
 út
 ülte
 üvölt
