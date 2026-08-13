@@ -88,6 +88,31 @@ def candidates(word):
     for s in ("ával","ével","val","vel"):
         if w.endswith(s): c.append(w[:-len(s)])
     if len(w)>=4 and w[-2:] in ("al","el") and w[-3]==w[-4]: c.append(w[:-3])
+
+    # New general patterns from real-book regression corpus.
+    # Nominalization + possessive instrumental: átvizsgálásával -> átvizsgál.
+    for s in ("ásával","ésével"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # 3rd-person definite past: biztosította -> biztosít, újságolta -> újságol.
+    for s in ("otta","ette","ötte","olta","elte"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
+    # Possessed plural + elative: szátokból -> száj.
+    for s in ("tokból","tekből","tökből"):
+        if w.endswith(s) and len(w)>len(s):
+            stem=w[:-len(s)]
+            c.append(stem)
+            if stem.endswith("szá"): c.append(stem[:-2]+"száj")
+
+    # Iterative verb + definite 3rd plural: fontolgatják -> fontolgat.
+    for s in ("gatják","getik","gatja","geti"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)]+s[:3])
+
+    # Potential + 1st plural: fogadhatunk -> fogad.
+    for s in ("hatunk","hetünk"):
+        if w.endswith(s) and len(w)>len(s): c.append(w[:-len(s)])
+
     for s in CASE:
         if w.endswith(s) and len(w)>len(s):
             base=w[:-len(s)]; c.append(base)
@@ -125,9 +150,6 @@ def lookup(word, headwords):
             if cand in headwords: return cand
             nxt.extend(candidates(cand))
         queue=uniq(nxt)
-    # Compound fallback is deliberately last. Collect all dictionary suffixes and
-    # choose the longest one, so óriásivadékot -> ivadék wins over the shorter
-    # accidental match vad; szakemberekben likewise cannot collapse to berek.
     matches=[]
     for source in [w]+seen:
         for i in range(1,len(source)):
