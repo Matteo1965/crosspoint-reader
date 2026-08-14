@@ -21,7 +21,7 @@ if "Hungarian dictionary stemming v15" not in text:
         raise SystemExit("v15 SPECIAL anchor not found")
     text = text.replace(
         special_anchor,
-        special_anchor + ',{"tóparton","part"},{"lófarokba","farok"}',
+        special_anchor + ',{"tóparton","part"},{"lófarokba","farok"},{"beleüvöltve","üvölt"}',
         1,
     )
 
@@ -39,6 +39,7 @@ for required in (
     "Hungarian dictionary stemming v15",
     '{"tóparton","part"}',
     '{"lófarokba","farok"}',
+    '{"beleüvöltve","üvölt"}',
 ):
     if required not in check:
         raise SystemExit(f"Missing v15 marker: {required}")
