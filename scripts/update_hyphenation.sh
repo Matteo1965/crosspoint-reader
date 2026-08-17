@@ -9,7 +9,7 @@ process() {
   local lang="$1"
 
   mkdir -p "build"
-  wget -O "build/$lang.bin" "https://github.com/typst/hypher/raw/refs/heads/main/tries/$lang.bin"
+  wget -O "build/$lang.bin" "https://raw.githubusercontent.com/typst/hypher/main/tries/$lang.bin"
 
   python scripts/generate_hyphenation_trie.py \
     --input "build/$lang.bin" \
