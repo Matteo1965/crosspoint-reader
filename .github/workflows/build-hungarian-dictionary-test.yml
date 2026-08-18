@@ -23,7 +23,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply Hungarian dictionary stemming v15
+      - name: Apply Hungarian dictionary stemming v16
         run: |
           python scripts/apply_hungarian_dictionary_stemming.py
           python scripts/apply_hungarian_dictionary_stemming_v4.py
@@ -38,9 +38,11 @@ jobs:
           python scripts/apply_hungarian_dictionary_stemming_v13.py
           python scripts/apply_hungarian_dictionary_stemming_v14.py
           python scripts/apply_hungarian_dictionary_stemming_v15.py
+          python scripts/apply_hungarian_dictionary_stemming_v16.py
           sed -i 's/StringUtils::asciiCaseCmp(wordBuf, target)/strcmp(wordBuf, target)/g' src/util/Dictionary.cpp
           test "$(grep -c 'strcmp(wordBuf, target)' src/util/Dictionary.cpp)" -ge 2
-          grep -q "Hungarian dictionary stemming v15" src/util/Dictionary.cpp
+          grep -q "Hungarian dictionary stemming v16" src/util/Dictionary.cpp
+          grep -q "HU_CASE_FOLD" src/util/Dictionary.cpp
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -101,7 +103,7 @@ jobs:
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CrossPoint-Hungarian-Dictionary-Stemming-v15-Test
+          name: CrossPoint-Hungarian-Dictionary-Stemming-v16-Test
           path: release/*
           if-no-files-found: error
           retention-days: 30
