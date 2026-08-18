@@ -84,7 +84,7 @@ void DictionaryDefinitionActivity::wrapText() {
   bool sourceParagraph = definition.compare(0, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
 
   const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false) {
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, sourceParagraph});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -242,9 +242,9 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    // Keep source attribution visually secondary to the dictionary content.
-    const bool isSourceLine = strncmp(buf, "Forrás:", strlen("Forrás:")) == 0;
-    const int lineFontId = isSourceLine ? NOTOSANS_12_FONT_ID : fontId;
+    // Keep the full wrapped source paragraph visually secondary, including
+    // continuation lines that no longer begin with the "Forrás:" prefix.
+    const int lineFontId = lines[i].isSource ? NOTOSANS_12_FONT_ID : fontId;
     const int lineY = startY + (i - firstLine) * lineHeight;
     renderer.drawText(lineFontId, x, lineY, buf);
     if (lines[i].appendHyphen) {
