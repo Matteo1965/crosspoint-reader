@@ -1,5 +1,6 @@
 #include "DictionaryDefinitionActivity.h"
 
+#include <Epub/hyphenation/Hyphenator.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -65,6 +66,7 @@ void DictionaryDefinitionActivity::wrapText() {
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
   const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+  const int hyphenWidth = renderer.getTextAdvanceX(fontId, "-", EpdFontFamily::REGULAR);
 
   const int lineHeight = renderer.getLineHeight(fontId);
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
@@ -74,11 +76,13 @@ void DictionaryDefinitionActivity::wrapText() {
   const char* text = definition.c_str();
   const uint32_t n = static_cast<uint32_t>(definition.size());
   uint32_t lineStart = 0;
-  uint32_t lineEnd = 0;  // one past the last token byte on the current line
+  uint32_t lineEnd = 0;
   int lineWidth = 0;
+  constexpr char SOURCE_PREFIX[] = "Forrás:";
+  bool sourceParagraph = definition.compare(0, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
 
-  const auto flushLine = [&](uint32_t nextStart) {
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart)});
+  const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false) {
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -90,6 +94,7 @@ void DictionaryDefinitionActivity::wrapText() {
     if (c == '\n' || c == '\0') {
       flushLine(i + 1);
       i++;
+      sourceParagraph = definition.compare(i, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
       continue;
     }
     if (c == ' ' || c == '\t' || c == '\r') {
@@ -97,62 +102,88 @@ void DictionaryDefinitionActivity::wrapText() {
       continue;
     }
 
-    // Token: run of non-whitespace bytes, capped at the measure buffer.
     const uint32_t tokenStart = i;
     while (i < n && text[i] != ' ' && text[i] != '\t' && text[i] != '\r' && text[i] != '\n' && text[i] != '\0' &&
            i - tokenStart < MAX_LINE_BYTES) {
       i++;
     }
-    // If the byte cap cut the token mid-UTF-8-sequence, back off to the last
-    // complete codepoint so measure/draw never see a partial sequence. A
-    // natural stop lands on whitespace or the terminating NUL, never on a
-    // continuation byte, so this is a no-op there.
     while (i - tokenStart > 1 && (text[i] & 0xC0) == 0x80) i--;
     const uint32_t tokenLen = i - tokenStart;
-    const int tokenWidth = measureSpan(fontId, text + tokenStart, tokenLen);
+    const std::string token(text + tokenStart, tokenLen);
+    const auto breakInfos =
+        sourceParagraph ? std::vector<Hyphenator::BreakInfo>{}
+                        : Hyphenator::breakOffsetsForLanguage(token, false, "hu");
 
-    if (lineEnd == lineStart) {
-      lineStart = tokenStart;
-      lineEnd = tokenStart + tokenLen;
-      lineWidth = tokenWidth;
-    } else if (lineWidth + spaceWidth + tokenWidth <= maxWidth &&
-               tokenStart + tokenLen - lineStart <= UINT16_MAX) {  // span len must fit Line::len
-      lineEnd = tokenStart + tokenLen;
-      lineWidth += spaceWidth + tokenWidth;
-    } else {
-      flushLine(tokenStart);
-      lineEnd = tokenStart + tokenLen;
-      lineWidth = tokenWidth;
-    }
+    uint32_t consumed = 0;
+    while (consumed < tokenLen) {
+      const uint32_t remainingLen = tokenLen - consumed;
+      const int remainingWidth = measureSpan(fontId, text + tokenStart + consumed, remainingLen);
+      const bool lineEmpty = lineEnd == lineStart;
+      const int gapWidth = lineEmpty ? 0 : spaceWidth;
 
-    // An unbreakable token wider than the screen is now alone on the line
-    // (any previous content was flushed above): split it at the widest
-    // fitting UTF-8 boundary and carry the remainder forward.
-    while (lineWidth > maxWidth && lineEnd - lineStart > 1) {
-      const uint32_t len = lineEnd - lineStart;
+      if (gapWidth + lineWidth + remainingWidth <= maxWidth) {
+        if (lineEmpty) lineStart = tokenStart + consumed;
+        lineEnd = tokenStart + tokenLen;
+        lineWidth += gapWidth + remainingWidth;
+        consumed = tokenLen;
+        continue;
+      }
+
+      const int availableWidth = maxWidth - lineWidth - gapWidth;
+      uint32_t bestOffset = 0;
+      bool bestNeedsHyphen = false;
+      int bestWidth = 0;
+      for (const auto& breakInfo : breakInfos) {
+        if (breakInfo.byteOffset <= consumed || breakInfo.byteOffset >= tokenLen) continue;
+        const uint32_t partLen = static_cast<uint32_t>(breakInfo.byteOffset) - consumed;
+        const int partWidth = measureSpan(fontId, text + tokenStart + consumed, partLen) +
+                              (breakInfo.requiresInsertedHyphen ? hyphenWidth : 0);
+        if (partWidth <= availableWidth) {
+          bestOffset = static_cast<uint32_t>(breakInfo.byteOffset);
+          bestNeedsHyphen = breakInfo.requiresInsertedHyphen;
+          bestWidth = partWidth;
+        }
+      }
+
+      if (bestOffset > consumed) {
+        if (lineEmpty) lineStart = tokenStart + consumed;
+        lineEnd = tokenStart + bestOffset;
+        lineWidth += gapWidth + bestWidth;
+        flushLine(tokenStart + bestOffset, bestNeedsHyphen);
+        consumed = bestOffset;
+        continue;
+      }
+
+      // Retry the full remaining token on an empty line before using the
+      // pathological-token fallback below.
+      if (!lineEmpty) {
+        flushLine(tokenStart + consumed);
+        continue;
+      }
+
+      // No legal Hungarian break fits. Preserve the old overflow protection:
+      // split at the widest complete UTF-8 boundary without inventing a
+      // linguistically invalid hyphen.
       uint32_t lastFit = 0;
-      for (uint32_t f = 1; f <= len; f++) {
-        if (f == len || (text[lineStart + f] & 0xC0) != 0x80) {  // codepoint boundary
-          if (measureSpan(fontId, text + lineStart, f) > maxWidth) break;
-          lastFit = f;
+      for (uint32_t partLen = 1; partLen <= remainingLen; partLen++) {
+        if (partLen == remainingLen || (text[tokenStart + consumed + partLen] & 0xC0) != 0x80) {
+          if (measureSpan(fontId, text + tokenStart + consumed, partLen) > maxWidth) break;
+          lastFit = partLen;
         }
       }
       if (lastFit == 0) {
-        // Even a single over-wide glyph must make progress; consume its whole
-        // UTF-8 sequence rather than splitting it into invalid fragments.
         lastFit = 1;
-        while (lastFit < len && (text[lineStart + lastFit] & 0xC0) == 0x80) lastFit++;
+        while (lastFit < remainingLen && (text[tokenStart + consumed + lastFit] & 0xC0) == 0x80) lastFit++;
       }
-      const uint32_t rest = lineStart + lastFit;
-      lineEnd = rest;
-      flushLine(rest);
-      lineEnd = rest + (len - lastFit);
-      lineWidth = measureSpan(fontId, text + lineStart, lineEnd - lineStart);
+      lineStart = tokenStart + consumed;
+      lineEnd = lineStart + lastFit;
+      lineWidth = measureSpan(fontId, text + lineStart, lastFit);
+      flushLine(lineEnd);
+      consumed += lastFit;
     }
   }
   if (lineEnd > lineStart) flushLine(n);
 
-  // Trim trailing blank lines so the last page is not empty padding.
   while (!lines.empty() && lines.back().len == 0) lines.pop_back();
 
   totalPages = std::max(1, (static_cast<int>(lines.size()) + linesPerPage - 1) / linesPerPage);
@@ -213,7 +244,12 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     // Keep source attribution visually secondary to the dictionary content.
     const bool isSourceLine = strncmp(buf, "Forrás:", strlen("Forrás:")) == 0;
     const int lineFontId = isSourceLine ? NOTOSANS_12_FONT_ID : fontId;
-    renderer.drawText(lineFontId, x, startY + (i - firstLine) * lineHeight, buf);
+    const int lineY = startY + (i - firstLine) * lineHeight;
+    renderer.drawText(lineFontId, x, lineY, buf);
+    if (lines[i].appendHyphen) {
+      const int hyphenX = x + renderer.getTextAdvanceX(lineFontId, buf, EpdFontFamily::REGULAR);
+      renderer.drawText(lineFontId, hyphenX, lineY, "-");
+    }
   }
 }
 
