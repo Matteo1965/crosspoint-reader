@@ -29,6 +29,7 @@ class DictionaryDefinitionActivity final : public Activity {
     uint32_t start;
     uint16_t len;
     bool appendHyphen = false;
+    bool isSource = false;
   };
 
   void wrapText();
