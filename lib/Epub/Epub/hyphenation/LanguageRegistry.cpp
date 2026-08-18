@@ -4,8 +4,8 @@
 #include <array>
 
 #include "HyphenationCommon.h"
-#include "generated/hyph-hu.trie.h"
 #include "generated/hyph-en.trie.h"
+#include "generated/hyph-hu.trie.h"
 
 namespace {
 
