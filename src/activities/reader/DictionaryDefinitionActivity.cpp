@@ -130,7 +130,12 @@ void DictionaryDefinitionActivity::wrapText() {
     if (c == '\n' || c == '\0') {
       flushLine(i + 1);
       i++;
-      sourceParagraph = definition.compare(i, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
+      const bool nextIsSource = definition.compare(i, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
+      // Guarantee one full body-line spacer before every source paragraph.
+      if (nextIsSource && !sourceParagraph && !lines.empty() && lines.back().len != 0) {
+        lines.push_back({i, 0, false, false, false});
+      }
+      sourceParagraph = nextIsSource;
       continue;
     }
     if (c == ' ' || c == '\t' || c == '\r') {
@@ -270,13 +275,16 @@ void DictionaryDefinitionActivity::loop() {
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
 void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY, const int maxWidth) const {
-  const int lineHeight = renderer.getLineHeight(fontId);
+  int lineY = startY;
   char buf[MAX_LINE_BYTES + 1];
   char wordBuf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
   for (int i = firstLine; i < lastLine; i++) {
-    if (lines[i].len == 0) continue;
+    if (lines[i].len == 0) {
+      lineY += renderer.getLineHeight(fontId);
+      continue;
+    }
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
@@ -284,7 +292,6 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     // Keep the full wrapped source paragraph visually secondary, including
     // continuation lines that no longer begin with the "Forrás:" prefix.
     const int lineFontId = lines[i].isSource ? NOTOSANS_12_FONT_ID : fontId;
-    const int lineY = startY + (i - firstLine) * lineHeight;
 
     int wordCount = 0;
     bool inWord = false;
@@ -341,6 +348,7 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
         }
       }
       if (lines[i].appendHyphen) renderer.drawText(lineFontId, cursorX, lineY, "-");
+      lineY += renderer.getLineHeight(lineFontId);
       continue;
     }
 
@@ -349,6 +357,7 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
       const int hyphenX = x + renderer.getTextAdvanceX(lineFontId, buf, EpdFontFamily::REGULAR);
       renderer.drawText(lineFontId, hyphenX, lineY, "-");
     }
+    lineY += renderer.getLineHeight(lineFontId);
   }
 }
 
@@ -368,7 +377,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Header: matched headword left, page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
   const std::string displayHeadword = uppercaseHungarian(headword);
-  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, displayHeadword.c_str());
+  renderer.drawText(NOTOSANS_16_FONT_ID, contentX + SIDE_PADDING, headerY, displayHeadword.c_str(), true,
+                    EpdFontFamily::REGULAR);
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
