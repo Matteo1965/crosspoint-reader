@@ -69,7 +69,9 @@ void DictionaryDefinitionActivity::wrapText() {
   const int hyphenWidth = renderer.getTextAdvanceX(fontId, "-", EpdFontFamily::REGULAR);
 
   const int lineHeight = renderer.getLineHeight(fontId);
-  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
+  // Reserve one full blank body line between the enlarged headword and the definition.
+  const int topArea =
+      (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight + lineHeight;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
   linesPerPage = std::max(1, (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight);
 
@@ -279,7 +281,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
   const int fontId = SETTINGS.getReaderFontId();
-  const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight;
+  // Keep one empty body line below the enlarged headword for clear visual separation.
+  const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight + renderer.getLineHeight(fontId);
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);  // scan pass: records codepoints only
