@@ -49,10 +49,10 @@ void CrossPointVersionActivity::render(RenderLock&&) {
   renderer.drawText(UI_10_FONT_ID, x, y, tr(STR_DIFFERENCES_FROM_BASE), true, EpdFontFamily::BOLD);
   y += lineHeight;
 
-  const StrId features[] = {STR_FEATURE_HUNGARIAN_UI, STR_FEATURE_HUNGARIAN_HYPHENATION,
-                            STR_FEATURE_HUNGARIAN_STEMMING, STR_FEATURE_DICTIONARY_DISPLAY};
+  const StrId features[] = {StrId::STR_FEATURE_HUNGARIAN_UI, StrId::STR_FEATURE_HUNGARIAN_HYPHENATION,
+                            StrId::STR_FEATURE_HUNGARIAN_STEMMING, StrId::STR_FEATURE_DICTIONARY_DISPLAY};
   for (const StrId feature : features) {
-    const std::string line = std::string("- ") + tr(feature);
+    const std::string line = std::string("- ") + I18N.get(feature);
     renderer.drawText(UI_10_FONT_ID, x, y, line.c_str());
     y += lineHeight;
   }
