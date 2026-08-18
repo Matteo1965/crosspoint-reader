@@ -24,6 +24,43 @@ constexpr size_t MAX_LINE_BYTES = 191;
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
+// Uppercase the Hungarian alphabet without depending on a locale (the ESP32
+// C locale only knows ASCII). Hungarian accented lower/uppercase pairs have
+// equal UTF-8 byte lengths, so the conversion can safely happen in place.
+std::string uppercaseHungarian(std::string text) {
+  for (size_t i = 0; i < text.size(); i++) {
+    const auto c = static_cast<unsigned char>(text[i]);
+    if (c >= 'a' && c <= 'z') {
+      text[i] = static_cast<char>(c - 'a' + 'A');
+      continue;
+    }
+    if (i + 1 >= text.size()) continue;
+
+    const auto next = static_cast<unsigned char>(text[i + 1]);
+    if (c == 0xC3) {
+      switch (next) {
+        case 0xA1:  // á -> Á
+        case 0xA9:  // é -> É
+        case 0xAD:  // í -> Í
+        case 0xB3:  // ó -> Ó
+        case 0xB6:  // ö -> Ö
+        case 0xBA:  // ú -> Ú
+        case 0xBC:  // ü -> Ü
+          text[i + 1] = static_cast<char>(next - 0x20);
+          i++;
+          break;
+        default:
+          break;
+      }
+    } else if (c == 0xC5 && (next == 0x91 || next == 0xB1)) {
+      // ő -> Ő, ű -> Ű
+      text[i + 1] = static_cast<char>(next - 1);
+      i++;
+    }
+  }
+  return text;
+}
+
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
@@ -65,9 +102,6 @@ void DictionaryDefinitionActivity::wrapText() {
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
   const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
-  const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
-  const int hyphenWidth = renderer.getTextAdvanceX(fontId, "-", EpdFontFamily::REGULAR);
-
   const int lineHeight = renderer.getLineHeight(fontId);
   // Reserve one full blank body line between the enlarged headword and the definition.
   const int topArea =
@@ -112,13 +146,16 @@ void DictionaryDefinitionActivity::wrapText() {
     while (i - tokenStart > 1 && (text[i] & 0xC0) == 0x80) i--;
     const uint32_t tokenLen = i - tokenStart;
     const std::string token(text + tokenStart, tokenLen);
+    const int wrapFontId = sourceParagraph ? NOTOSANS_12_FONT_ID : fontId;
+    const int spaceWidth = renderer.getSpaceWidth(wrapFontId, EpdFontFamily::REGULAR);
+    const int hyphenWidth = renderer.getTextAdvanceX(wrapFontId, "-", EpdFontFamily::REGULAR);
     const auto breakInfos = sourceParagraph ? std::vector<Hyphenator::BreakInfo>{}
                                             : Hyphenator::breakOffsetsForLanguage(token, false, "hu");
 
     uint32_t consumed = 0;
     while (consumed < tokenLen) {
       const uint32_t remainingLen = tokenLen - consumed;
-      const int remainingWidth = measureSpan(fontId, text + tokenStart + consumed, remainingLen);
+      const int remainingWidth = measureSpan(wrapFontId, text + tokenStart + consumed, remainingLen);
       const bool lineEmpty = lineEnd == lineStart;
       const int gapWidth = lineEmpty ? 0 : spaceWidth;
 
@@ -137,7 +174,7 @@ void DictionaryDefinitionActivity::wrapText() {
       for (const auto& breakInfo : breakInfos) {
         if (breakInfo.byteOffset <= consumed || breakInfo.byteOffset >= tokenLen) continue;
         const uint32_t partLen = static_cast<uint32_t>(breakInfo.byteOffset) - consumed;
-        const int partWidth = measureSpan(fontId, text + tokenStart + consumed, partLen) +
+        const int partWidth = measureSpan(wrapFontId, text + tokenStart + consumed, partLen) +
                               (breakInfo.requiresInsertedHyphen ? hyphenWidth : 0);
         if (partWidth <= availableWidth) {
           bestOffset = static_cast<uint32_t>(breakInfo.byteOffset);
@@ -168,7 +205,7 @@ void DictionaryDefinitionActivity::wrapText() {
       uint32_t lastFit = 0;
       for (uint32_t partLen = 1; partLen <= remainingLen; partLen++) {
         if (partLen == remainingLen || (text[tokenStart + consumed + partLen] & 0xC0) != 0x80) {
-          if (measureSpan(fontId, text + tokenStart + consumed, partLen) > maxWidth) break;
+          if (measureSpan(wrapFontId, text + tokenStart + consumed, partLen) > maxWidth) break;
           lastFit = partLen;
         }
       }
@@ -178,7 +215,7 @@ void DictionaryDefinitionActivity::wrapText() {
       }
       lineStart = tokenStart + consumed;
       lineEnd = lineStart + lastFit;
-      lineWidth = measureSpan(fontId, text + lineStart, lastFit);
+      lineWidth = measureSpan(wrapFontId, text + lineStart, lastFit);
       flushLine(lineEnd, false, true);
       consumed += lastFit;
     }
@@ -330,7 +367,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Header: matched headword left, page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
-  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
+  const std::string displayHeadword = uppercaseHungarian(headword);
+  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, displayHeadword.c_str());
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
