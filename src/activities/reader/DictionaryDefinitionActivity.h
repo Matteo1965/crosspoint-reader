@@ -28,11 +28,14 @@ class DictionaryDefinitionActivity final : public Activity {
   struct Line {
     uint32_t start;
     uint16_t len;
+    bool appendHyphen = false;
+    bool isSource = false;
+    bool justify = false;
   };
 
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
-  void drawBody(int fontId, int x, int startY) const;
+  void drawBody(int fontId, int x, int startY, int maxWidth) const;
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
