@@ -84,8 +84,7 @@ void DictionaryDefinitionActivity::wrapText() {
   bool sourceParagraph = definition.compare(0, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
 
   const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false, const bool justify = false) {
-    lines.push_back(
-        {lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, sourceParagraph, justify});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, sourceParagraph, justify});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -233,8 +232,7 @@ void DictionaryDefinitionActivity::loop() {
 // Draws the current page's line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
-void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY,
-                                                const int maxWidth) const {
+void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY, const int maxWidth) const {
   const int lineHeight = renderer.getLineHeight(fontId);
   char buf[MAX_LINE_BYTES + 1];
   char wordBuf[MAX_LINE_BYTES + 1];
