@@ -83,8 +83,9 @@ void DictionaryDefinitionActivity::wrapText() {
   constexpr char SOURCE_PREFIX[] = "Forrás:";
   bool sourceParagraph = definition.compare(0, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
 
-  const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false) {
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, sourceParagraph});
+  const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false, const bool justify = false) {
+    lines.push_back(
+        {lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, sourceParagraph, justify});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -150,7 +151,7 @@ void DictionaryDefinitionActivity::wrapText() {
         if (lineEmpty) lineStart = tokenStart + consumed;
         lineEnd = tokenStart + bestOffset;
         lineWidth += gapWidth + bestWidth;
-        flushLine(tokenStart + bestOffset, bestNeedsHyphen);
+        flushLine(tokenStart + bestOffset, bestNeedsHyphen, true);
         consumed = bestOffset;
         continue;
       }
@@ -158,7 +159,7 @@ void DictionaryDefinitionActivity::wrapText() {
       // Retry the full remaining token on an empty line before using the
       // pathological-token fallback below.
       if (!lineEmpty) {
-        flushLine(tokenStart + consumed);
+        flushLine(tokenStart + consumed, false, true);
         continue;
       }
 
@@ -179,7 +180,7 @@ void DictionaryDefinitionActivity::wrapText() {
       lineStart = tokenStart + consumed;
       lineEnd = lineStart + lastFit;
       lineWidth = measureSpan(fontId, text + lineStart, lastFit);
-      flushLine(lineEnd);
+      flushLine(lineEnd, false, true);
       consumed += lastFit;
     }
   }
@@ -232,9 +233,11 @@ void DictionaryDefinitionActivity::loop() {
 // Draws the current page's line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
-void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) const {
+void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY,
+                                                const int maxWidth) const {
   const int lineHeight = renderer.getLineHeight(fontId);
   char buf[MAX_LINE_BYTES + 1];
+  char wordBuf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
   for (int i = firstLine; i < lastLine; i++) {
@@ -242,10 +245,70 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
+
     // Keep the full wrapped source paragraph visually secondary, including
     // continuation lines that no longer begin with the "Forrás:" prefix.
     const int lineFontId = lines[i].isSource ? NOTOSANS_12_FONT_ID : fontId;
     const int lineY = startY + (i - firstLine) * lineHeight;
+
+    int wordCount = 0;
+    bool inWord = false;
+    for (size_t j = 0; j < len; j++) {
+      const bool whitespace = buf[j] == ' ' || buf[j] == '\t' || buf[j] == '\r';
+      if (whitespace) {
+        inWord = false;
+      } else if (!inWord) {
+        wordCount++;
+        inWord = true;
+      }
+    }
+
+    // Justify wrapped definition lines by distributing the remaining width
+    // across word gaps. Paragraph-final and source lines stay left-aligned.
+    if (lines[i].justify && !lines[i].isSource && wordCount > 1) {
+      int wordsWidth = 0;
+      size_t pos = 0;
+      while (pos < len) {
+        while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\r')) pos++;
+        const size_t wordStart = pos;
+        while (pos < len && buf[pos] != ' ' && buf[pos] != '\t' && buf[pos] != '\r') pos++;
+        const size_t wordLen = pos - wordStart;
+        if (wordLen == 0) continue;
+        memcpy(wordBuf, buf + wordStart, wordLen);
+        wordBuf[wordLen] = '\0';
+        wordsWidth += renderer.getTextAdvanceX(lineFontId, wordBuf, EpdFontFamily::REGULAR);
+      }
+
+      const int gapCount = wordCount - 1;
+      const int hyphenWidth =
+          lines[i].appendHyphen ? renderer.getTextAdvanceX(lineFontId, "-", EpdFontFamily::REGULAR) : 0;
+      const int naturalSpaceWidth = renderer.getSpaceWidth(lineFontId, EpdFontFamily::REGULAR);
+      const int extraWidth = std::max(0, maxWidth - wordsWidth - gapCount * naturalSpaceWidth - hyphenWidth);
+      const int extraPerGap = extraWidth / gapCount;
+      const int remainder = extraWidth % gapCount;
+
+      int cursorX = x;
+      int gapIndex = 0;
+      pos = 0;
+      while (pos < len) {
+        while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == '\r')) pos++;
+        const size_t wordStart = pos;
+        while (pos < len && buf[pos] != ' ' && buf[pos] != '\t' && buf[pos] != '\r') pos++;
+        const size_t wordLen = pos - wordStart;
+        if (wordLen == 0) continue;
+        memcpy(wordBuf, buf + wordStart, wordLen);
+        wordBuf[wordLen] = '\0';
+        renderer.drawText(lineFontId, cursorX, lineY, wordBuf);
+        cursorX += renderer.getTextAdvanceX(lineFontId, wordBuf, EpdFontFamily::REGULAR);
+        if (gapIndex < gapCount) {
+          cursorX += naturalSpaceWidth + extraPerGap + (gapIndex < remainder ? 1 : 0);
+          gapIndex++;
+        }
+      }
+      if (lines[i].appendHyphen) renderer.drawText(lineFontId, cursorX, lineY, "-");
+      continue;
+    }
+
     renderer.drawText(lineFontId, x, lineY, buf);
     if (lines[i].appendHyphen) {
       const int hyphenX = x + renderer.getTextAdvanceX(lineFontId, buf, EpdFontFamily::REGULAR);
@@ -285,9 +348,10 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight + renderer.getLineHeight(fontId);
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);  // scan pass: records codepoints only
+  const int bodyWidth = contentWidth - 2 * SIDE_PADDING;
+  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY, bodyWidth);  // scan pass: records codepoints only
   scope.endScanAndPrewarm();
-  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
+  drawBody(fontId, contentX + SIDE_PADDING, bodyStartY, bodyWidth);
 
   const auto labels =
       mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
