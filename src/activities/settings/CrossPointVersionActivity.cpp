@@ -29,7 +29,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
   const int pageWidth = renderer.getScreenWidth();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CROSSPOINT_VERSION));
 
-  const int x = metrics.horizontalMargin;
+  constexpr int x = 20;
   int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
