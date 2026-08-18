@@ -28,6 +28,7 @@ class DictionaryDefinitionActivity final : public Activity {
   struct Line {
     uint32_t start;
     uint16_t len;
+    bool appendHyphen = false;
   };
 
   void wrapText();
