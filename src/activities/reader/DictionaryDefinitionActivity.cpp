@@ -131,8 +131,10 @@ void DictionaryDefinitionActivity::wrapText() {
       flushLine(i + 1);
       i++;
       const bool nextIsSource = definition.compare(i, sizeof(SOURCE_PREFIX) - 1, SOURCE_PREFIX) == 0;
-      // Guarantee one full body-line spacer before every source paragraph.
-      if (nextIsSource && !sourceParagraph && !lines.empty() && lines.back().len != 0) {
+      // Normalize any number of source-separating newlines to exactly one
+      // visible blank body line before every source paragraph.
+      if (nextIsSource && !sourceParagraph && !lines.empty()) {
+        while (!lines.empty() && lines.back().len == 0) lines.pop_back();
         lines.push_back({i, 0, false, false, false});
       }
       sourceParagraph = nextIsSource;
@@ -378,7 +380,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   const int headerY = contentY + metrics.topPadding + 10;
   const std::string displayHeadword = uppercaseHungarian(headword);
   renderer.drawText(NOTOSANS_16_FONT_ID, contentX + SIDE_PADDING, headerY, displayHeadword.c_str(), true,
-                    EpdFontFamily::REGULAR);
+                    EpdFontFamily::BOLD);
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);

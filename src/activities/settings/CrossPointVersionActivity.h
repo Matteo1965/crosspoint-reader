@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activities/Activity.h"
+#include "util/ButtonNavigator.h"
 
 class CrossPointVersionActivity final : public Activity {
  public:
@@ -10,4 +11,8 @@ class CrossPointVersionActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+
+ private:
+  int currentPage = 0;
+  ButtonNavigator buttonNavigator;
 };
