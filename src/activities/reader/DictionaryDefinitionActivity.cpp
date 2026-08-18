@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
@@ -209,7 +210,10 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf);
+    // Keep source attribution visually secondary to the dictionary content.
+    const bool isSourceLine = strncmp(buf, "Forrás:", strlen("Forrás:")) == 0;
+    const int lineFontId = isSourceLine ? NOTOSANS_12_FONT_ID : fontId;
+    renderer.drawText(lineFontId, x, startY + (i - firstLine) * lineHeight, buf);
   }
 }
 
@@ -228,7 +232,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Header: matched headword left, page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
-  renderer.drawText(UI_12_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true,
+                    EpdFontFamily::BOLD);
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
