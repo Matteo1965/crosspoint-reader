@@ -3,7 +3,7 @@ from pathlib import Path
 from hungarian_stemmer_model import lookup
 
 ROOT=Path(__file__).resolve().parents[1]
-CASES=ROOT/"tests"/"hungarian_stemming_cases.tsv"
+CASES=[ROOT/"tests"/"hungarian_stemming_cases.tsv",ROOT/"tests"/"hungarian_stemming_cases_v16.tsv"]
 FIXTURES=[ROOT/"tests"/"hungarian_dictionary_headwords_fixture.txt",ROOT/"tests"/"hungarian_dictionary_headwords_extra.txt"]
 
 OVERRIDES={
@@ -21,12 +21,13 @@ def main():
     headwords=set()
     for fixture in FIXTURES:
         if fixture.exists():
-            headwords.update(x.strip().lower() for x in fixture.read_text(encoding="utf-8").splitlines() if x.strip())
+            headwords.update(x.strip() for x in fixture.read_text(encoding="utf-8").splitlines() if x.strip())
     cases=[]
-    for line in CASES.read_text(encoding="utf-8").splitlines():
-        if not line.strip() or line.startswith("#"): continue
-        word,expected=line.split("\t",1)
-        cases.append((word,expected.lower()))
+    for case_file in CASES:
+        for line in case_file.read_text(encoding="utf-8").splitlines():
+            if not line.strip() or line.startswith("#"): continue
+            word,expected=line.split("\t",1)
+            cases.append((word,expected))
     failed=0
     for word,expected in cases:
         actual=OVERRIDES.get(word.lower()) or lookup(word,headwords)

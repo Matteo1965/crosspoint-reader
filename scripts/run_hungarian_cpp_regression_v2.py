@@ -5,7 +5,7 @@ import tempfile
 
 ROOT=Path(__file__).resolve().parents[1]
 DICT_CPP=ROOT/"src/util/Dictionary.cpp"
-CASES=ROOT/"tests/hungarian_stemming_cases.tsv"
+CASES=[ROOT/"tests/hungarian_stemming_cases.tsv",ROOT/"tests/hungarian_stemming_cases_v16.tsv"]
 FIXTURES=[ROOT/"tests/hungarian_dictionary_headwords_fixture.txt",ROOT/"tests/hungarian_dictionary_headwords_extra.txt"]
 
 src=DICT_CPP.read_text(encoding="utf-8")
@@ -34,6 +34,16 @@ static std::string lookup(const std::string& word,const std::unordered_set<std::
   return {};
 }
 
+static std::string huLower(std::string word){
+  for(char& c:word) if((unsigned char)c<0x80) c=(char)std::tolower((unsigned char)c);
+  static constexpr const char* pairs[][2]={{"Á","á"},{"É","é"},{"Í","í"},{"Ó","ó"},{"Ö","ö"},{"Ő","ő"},{"Ú","ú"},{"Ü","ü"},{"Ű","ű"}};
+  for(const auto& p:pairs){
+    size_t pos=0;
+    while((pos=word.find(p[0],pos))!=std::string::npos){word.replace(pos,strlen(p[0]),p[1]);pos+=strlen(p[1]);}
+  }
+  return word;
+}
+
 int main(int argc,char** argv){
   if(argc!=3) return 2;
   std::unordered_set<std::string> headwords;
@@ -47,8 +57,7 @@ int main(int argc,char** argv){
     if(line.empty()) continue;
     auto tab=line.find('\t');
     if(tab==std::string::npos) continue;
-    std::string word=line.substr(0,tab),expected=line.substr(tab+1),lowered=word;
-    for(char& c:lowered) if((unsigned char)c<0x80) c=(char)std::tolower((unsigned char)c);
+    std::string word=line.substr(0,tab),expected=line.substr(tab+1),lowered=huLower(word);
     std::string actual=lookup(lowered,headwords);
     ++total;
     if(actual==expected){++pass;std::cout<<"PASS  "<<word<<" -> "<<actual<<"\n";}
@@ -72,5 +81,7 @@ with tempfile.TemporaryDirectory() as td:
     merged.write_text("\n".join(dict.fromkeys(words))+"\n",encoding="utf-8")
     cpp_path.write_text(cpp,encoding="utf-8")
     subprocess.run(["g++","-std=c++17","-O2","-Wall","-Wextra","-pedantic",str(cpp_path),"-o",str(exe_path)],check=True)
-    result=subprocess.run([str(exe_path),str(merged),str(CASES)])
+    combined=td/"cases.tsv"
+    combined.write_text("".join(case.read_text(encoding="utf-8").rstrip()+"\n" for case in CASES),encoding="utf-8")
+    result=subprocess.run([str(exe_path),str(merged),str(combined)])
     raise SystemExit(result.returncode)
