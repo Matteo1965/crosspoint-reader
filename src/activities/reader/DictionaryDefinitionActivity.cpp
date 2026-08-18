@@ -110,9 +110,8 @@ void DictionaryDefinitionActivity::wrapText() {
     while (i - tokenStart > 1 && (text[i] & 0xC0) == 0x80) i--;
     const uint32_t tokenLen = i - tokenStart;
     const std::string token(text + tokenStart, tokenLen);
-    const auto breakInfos =
-        sourceParagraph ? std::vector<Hyphenator::BreakInfo>{}
-                        : Hyphenator::breakOffsetsForLanguage(token, false, "hu");
+    const auto breakInfos = sourceParagraph ? std::vector<Hyphenator::BreakInfo>{}
+                                            : Hyphenator::breakOffsetsForLanguage(token, false, "hu");
 
     uint32_t consumed = 0;
     while (consumed < tokenLen) {
@@ -268,8 +267,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
 
   // Header: matched headword left, page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
-  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true,
-                    EpdFontFamily::BOLD);
+  renderer.drawText(NOTOSANS_18_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
