@@ -24,14 +24,16 @@ jobs:
 
       - name: Validate translations
         run: |
-          python -m pip install --disable-pip-version-check pyyaml
           python - <<'PY'
           from pathlib import Path
-          import yaml
+          import sys
+
+          sys.path.insert(0, "scripts")
+          from gen_i18n import parse_yaml_file
 
           root = Path("lib/I18n/translations")
-          english = yaml.safe_load((root / "english.yaml").read_text(encoding="utf-8"))
-          hungarian = yaml.safe_load((root / "hungarian.yaml").read_text(encoding="utf-8"))
+          english = parse_yaml_file(root / "english.yaml")
+          hungarian = parse_yaml_file(root / "hungarian.yaml")
           missing_hu = sorted(set(english) - set(hungarian))
           missing_en = sorted(set(hungarian) - set(english))
           if missing_hu or missing_en:
