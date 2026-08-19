@@ -272,4 +272,14 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
+std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage(const std::string& word,
+                                                                       const bool includeFallback,
+                                                                       const std::string& language) {
+  const auto* previousHyphenator = cachedHyphenator_;
+  cachedHyphenator_ = hyphenatorForLanguage(language);
+  auto breaks = breakOffsets(word, includeFallback);
+  cachedHyphenator_ = previousHyphenator;
+  return breaks;
+}
+
 void Hyphenator::setPreferredLanguage(const std::string& lang) { cachedHyphenator_ = hyphenatorForLanguage(lang); }
