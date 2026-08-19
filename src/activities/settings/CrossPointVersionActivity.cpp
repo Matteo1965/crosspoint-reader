@@ -68,7 +68,9 @@ void CrossPointVersionActivity::render(RenderLock&&) {
   char counter[16];
   snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, PAGE_COUNT);
   const int counterWidth = renderer.getTextWidth(UI_10_FONT_ID, counter);
-  renderer.drawText(UI_10_FONT_ID, pageWidth - SIDE_PADDING - counterWidth, metrics.topPadding + 10, counter);
+  const int counterY = renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                       renderer.getLineHeight(UI_10_FONT_ID);
+  renderer.drawText(UI_10_FONT_ID, pageWidth - SIDE_PADDING - counterWidth, counterY, counter);
 
   constexpr int x = SIDE_PADDING;
   const int maxWidth = pageWidth - 2 * SIDE_PADDING;
