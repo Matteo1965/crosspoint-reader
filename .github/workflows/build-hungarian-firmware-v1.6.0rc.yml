@@ -2,11 +2,6 @@ name: Build Hungarian firmware 1.6.0rc
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - agent/hungarian-integrated-v1.6.0rc
-    paths:
-      - .build-hungarian-rc-cleanup-trigger
 
 permissions:
   contents: read
