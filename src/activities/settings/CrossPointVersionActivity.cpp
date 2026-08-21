@@ -44,18 +44,17 @@ void CrossPointVersionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
-    if (currentPage + 1 < PAGE_COUNT) {
-      currentPage++;
-      requestUpdate();
-    }
-  });
-  buttonNavigator.onPrevious([this] {
-    if (currentPage > 0) {
-      currentPage--;
-      requestUpdate();
-    }
-  });
+  const bool nextPage = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                        mappedInput.wasReleased(MappedInputManager::Button::Right);
+  const bool previousPage = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                            mappedInput.wasReleased(MappedInputManager::Button::Left);
+  if (nextPage && currentPage + 1 < PAGE_COUNT) {
+    currentPage++;
+    requestUpdate();
+  } else if (previousPage && currentPage > 0) {
+    currentPage--;
+    requestUpdate();
+  }
 }
 
 void CrossPointVersionActivity::render(RenderLock&&) {
@@ -133,7 +132,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
                               StrId::STR_FEATURE_HUNGARIAN_STEMMING, StrId::STR_FEATURE_DICTIONARY_DISPLAY};
     for (const StrId feature : features) {
       const char* featureText = feature == StrId::STR_FEATURE_HUNGARIAN_STEMMING
-                                    ? "Magyar szótövezés: 300 egyedi szóalak"
+                                    ? "Magyar szótövezés: 357 új szóalak"
                                     : I18N.get(feature);
       const std::string line = std::string("- ") + featureText;
       drawWrapped(UI_12_FONT_ID, line.c_str());
