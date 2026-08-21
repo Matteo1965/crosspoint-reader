@@ -23,32 +23,15 @@ jobs:
           python-version: "3.13"
 
       - name: Apply Hungarian RC customizations
-        run: |
-          sed -i 's/^version = 1\.5\.0$/version = 1.6.0/' platformio.ini
-          sed -i 's/Magyar szótövezés: 300 egyedi szóalak/Magyar szótövezés: 357 új szóalak/' src/activities/settings/CrossPointVersionActivity.cpp
-          sed -i 's/Firmware-frissítés SD-kártya/Firmware frissítés SD-kártyáról/' lib/I18n/translations/hungarian.yaml
-          sed -i 's/\.homeCoverHeight = 368/\.homeCoverHeight = 392/' src/components/themes/roundedraff/RoundedRaffTheme.h
-          sed -i 's/\.homeCoverTileHeight = 392/\.homeCoverTileHeight = 400/' src/components/themes/roundedraff/RoundedRaffTheme.h
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp')
-          s = p.read_text()
-          old = '''  // Home screen header is custom-rendered in drawRecentBookCover.\n  if (title == nullptr) {\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
-          new = '''  // RoundedRaff home header: keep the book title, but omit the battery\n  // indicator so it cannot collide with long titles. Other RoundedRaff\n  // screens, and all other themes, retain the normal header battery.\n  if (title == nullptr) {\n    return;\n  }\n  if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {\n    const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;\n    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);\n    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),\n                      true, EpdFontFamily::BOLD);\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
-          if old not in s:
-              raise SystemExit('RoundedRaff home header marker not found')
-          p.write_text(s.replace(old, new))
-          PY
+        run: python scripts/apply_hungarian_rc_customizations.py
 
       - name: Validate translations
         run: |
           python - <<'PY'
           from pathlib import Path
           import sys
-
           sys.path.insert(0, "scripts")
           from gen_i18n import parse_yaml_file
-
           root = Path("lib/I18n/translations")
           english = parse_yaml_file(root / "english.yaml")
           hungarian = parse_yaml_file(root / "hungarian.yaml")
@@ -68,6 +51,9 @@ jobs:
           grep -q "HU_CASE_FOLD" src/util/Dictionary.cpp
           grep -q "CrossPointVersionActivity" src/activities/settings/SettingsActivity.cpp
           grep -q "Hungarian Edition" src/activities/boot_sleep/BootActivity.cpp
+          grep -q "Magyar szótövezés: 357 új szóalak" src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q "homeCoverHeight = 384" src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q "homeCoverTileHeight = 400" src/components/themes/roundedraff/RoundedRaffTheme.h
 
       - name: Run Hungarian dictionary regressions
         run: |
@@ -86,7 +72,7 @@ jobs:
       - name: Check C++ formatting
         run: |
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
-          git diff --exit-code -- src ':!platformio.ini' ':!lib/I18n/translations/hungarian.yaml' ':!src/activities/settings/CrossPointVersionActivity.cpp' ':!src/components/themes/roundedraff/RoundedRaffTheme.h' ':!src/components/themes/roundedraff/RoundedRaffTheme.cpp' || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
+          git diff --exit-code -- src ':!platformio.ini' ':!lib/I18n/translations/hungarian.yaml' ':!src/activities/settings/CrossPointVersionActivity.cpp' ':!src/components/themes/roundedraff/RoundedRaffTheme.h' ':!src/components/themes/roundedraff/RoundedRaffTheme.cpp' ':!src/activities/home/HomeActivity.cpp' ':!src/activities/settings/SettingsActivity.cpp' ':!src/components/themes/BaseTheme.cpp' || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
 
       - name: Install unit-test tools
         run: |
@@ -117,22 +103,7 @@ jobs:
           python-version: "3.13"
 
       - name: Apply Hungarian RC customizations
-        run: |
-          sed -i 's/^version = 1\.5\.0$/version = 1.6.0/' platformio.ini
-          sed -i 's/Magyar szótövezés: 300 egyedi szóalak/Magyar szótövezés: 357 új szóalak/' src/activities/settings/CrossPointVersionActivity.cpp
-          sed -i 's/Firmware-frissítés SD-kártya/Firmware frissítés SD-kártyáról/' lib/I18n/translations/hungarian.yaml
-          sed -i 's/\.homeCoverHeight = 368/\.homeCoverHeight = 392/' src/components/themes/roundedraff/RoundedRaffTheme.h
-          sed -i 's/\.homeCoverTileHeight = 392/\.homeCoverTileHeight = 400/' src/components/themes/roundedraff/RoundedRaffTheme.h
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp')
-          s = p.read_text()
-          old = '''  // Home screen header is custom-rendered in drawRecentBookCover.\n  if (title == nullptr) {\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
-          new = '''  // RoundedRaff home header: keep the book title, but omit the battery\n  // indicator so it cannot collide with long titles. Other RoundedRaff\n  // screens, and all other themes, retain the normal header battery.\n  if (title == nullptr) {\n    return;\n  }\n  if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {\n    const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;\n    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);\n    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),\n                      true, EpdFontFamily::BOLD);\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
-          if old not in s:
-              raise SystemExit('RoundedRaff home header marker not found')
-          p.write_text(s.replace(old, new))
-          PY
+        run: python scripts/apply_hungarian_rc_customizations.py
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -156,8 +127,6 @@ jobs:
           restore-keys: pio-${{ runner.os }}-
 
       - name: Build X4 release-candidate firmware
-        env:
-          CROSSPOINT_RC_HASH: ${{ github.sha }}
         run: pio run -e gh_release_rc -j1
 
       - name: Check firmware size
