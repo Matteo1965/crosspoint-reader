@@ -1,7 +1,5 @@
 #include "RoundedRaffTheme.h"
 
-#include "HungarianEditionFeatures.h"
-#include "HungarianImageBrightness.h"
 
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
@@ -140,9 +138,6 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
             coverWidth = bitmap.getWidth();
             const int coverX = tileX + (tileWidth - coverWidth) / 2;
             renderer.drawBitmap(bitmap, coverX, imgY, coverWidth, RoundedRaffMetrics::values.homeCoverHeight);
-            HungarianImageBrightness::apply(renderer, coverX, imgY, coverWidth,
-                                             RoundedRaffMetrics::values.homeCoverHeight,
-                                             HungarianEditionFeatures::brightnessPercentForCover());
             renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                    RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                    Color::LightGray);

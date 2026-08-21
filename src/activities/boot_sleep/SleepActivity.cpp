@@ -22,8 +22,6 @@
 #include <string>
 
 #include "CrossPointSettings.h"
-#include "HungarianEditionFeatures.h"
-#include "HungarianImageBrightness.h"
 #include "CrossPointState.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
@@ -629,11 +627,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-  if (!preserveBackground) {
-    HungarianImageBrightness::apply(renderer, 0, 0, pageWidth, pageHeight,
-                                     HungarianEditionFeatures::brightnessPercentForCover());
-  }
-
   if (!preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
@@ -654,10 +647,6 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-    if (!preserveBackground) {
-      HungarianImageBrightness::apply(renderer, 0, 0, pageWidth, pageHeight,
-                                       HungarianEditionFeatures::brightnessPercentForCover());
-    }
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();

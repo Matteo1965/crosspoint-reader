@@ -98,18 +98,10 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 }
 
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Left aligned: icon on left, percentage on right (reader mode)
+  if (!showPercentage) return;
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
-
-  if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
-  }
-
-  const Rect iconRect{rect.x, y, rect.width, rect.height};
-  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
-  fillBatteryIcon(renderer, iconRect, percentage);
+  const auto percentageText = std::to_string(percentage) + "%";
+  renderer.drawText(SMALL_FONT_ID, rect.x, rect.y, percentageText.c_str());
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
@@ -405,13 +397,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   const uint16_t percentage = powerManager.getBatteryPercentage();
   char percentText[8];
   snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
-  // The icon glyph extends 2px past glyphWidth (terminal nub); reserve it or
-  // the percent label's rect comes up short and the text truncates.
-  constexpr int16_t batteryNubWidth = 2;
-  int16_t batteryReserve = static_cast<int16_t>(metrics.batteryWidth + batteryNubWidth);
+  int16_t batteryReserve = 0;
   if (showBatteryPercentage) {
     batteryReserve = static_cast<int16_t>(
-        batteryReserve + batteryPercentSpacing +
         ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, percentText, tokens.smallText).width);
   }
 
@@ -477,12 +465,13 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = batteryLeft ? static_cast<int16_t>(band.x + batteryEdgeInset)
                                        : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
   const bool roundedRaffSettingsHeader =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF &&
       title != nullptr && strcmp(title, tr(STR_SETTINGS_TITLE)) == 0;
   const int16_t batteryY = static_cast<int16_t>(band.y + (roundedRaffSettingsHeader ? 8 : 0));
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);
+  if (showBatteryPercentage) {
+    renderer.drawText(SMALL_FONT_ID, batteryX, batteryY, percentText);
+  }
 
   if (manualRightLabel) {
     const fui::Size labelSize = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, subtitle, tokens.smallText);
