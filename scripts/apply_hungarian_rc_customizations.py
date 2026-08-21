@@ -59,4 +59,13 @@ replace_once(
     """  const char* settingsVersion =\n      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF\n          ? nullptr\n          : CROSSPOINT_VERSION;\n  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),\n                 settingsVersion);""",
 )
 
+# On the RoundedRaff Settings page only, move the battery icon and percentage
+# down by 8px. Other RoundedRaff headers and all other themes keep their normal
+# battery position.
+replace_once(
+    "src/components/themes/BaseTheme.cpp",
+    """  const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);\n  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);""",
+    """  const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);\n  const bool roundedRaffSettingsHeader =\n      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF &&\n      title != nullptr && strcmp(title, tr(STR_SETTINGS_TITLE)) == 0;\n  const int16_t batteryY = static_cast<int16_t>(band.y + (roundedRaffSettingsHeader ? 8 : 0));\n  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);""",
+)
+
 print("Hungarian RC customizations applied")
