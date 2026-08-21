@@ -132,8 +132,9 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     const StrId features[] = {StrId::STR_FEATURE_HUNGARIAN_UI, StrId::STR_FEATURE_HUNGARIAN_HYPHENATION,
                               StrId::STR_FEATURE_HUNGARIAN_STEMMING, StrId::STR_FEATURE_DICTIONARY_DISPLAY};
     for (const StrId feature : features) {
-      const char* featureText =
-          feature == StrId::STR_FEATURE_HUNGARIAN_STEMMING ? "Magyar szótövezés: 300 egyedi szóalak" : I18N.get(feature);
+      const char* featureText = feature == StrId::STR_FEATURE_HUNGARIAN_STEMMING
+                                    ? "Magyar szótövezés: 300 egyedi szóalak"
+                                    : I18N.get(feature);
       const std::string line = std::string("- ") + featureText;
       drawWrapped(UI_12_FONT_ID, line.c_str());
     }
