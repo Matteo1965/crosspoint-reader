@@ -101,3 +101,5 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "Bake Hungarian RC feature bundle into source"
           git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+
+# trigger: 2026-08-21
