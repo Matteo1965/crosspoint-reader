@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Bake Hungarian RC changes into source
+      - name: Apply Hungarian RC cleanup to source
         run: python scripts/prepare_hungarian_rc_source.py
 
       - name: Commit prepared source
@@ -34,21 +34,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- \
             platformio.ini \
-            lib/I18n/translations/english.yaml \
             lib/I18n/translations/hungarian.yaml \
-            src/activities/settings/CrossPointVersionActivity.cpp \
+            src/SettingsList.h \
             src/main.cpp \
-            src/util/ButtonNavigator.cpp \
             src/components/themes/roundedraff/RoundedRaffTheme.cpp \
-            src/activities/home/HomeActivity.cpp \
-            src/activities/settings/SettingsActivity.cpp \
             src/components/themes/BaseTheme.cpp \
             lib/Epub/Epub/blocks/ImageBlock.cpp \
-            src/activities/boot_sleep/SleepActivity.cpp \
-            src/HungarianImageBrightness.h \
-            .github/workflows/build-hungarian-firmware-v1.6.0rc.yml
+            src/activities/boot_sleep/SleepActivity.cpp
           git diff --cached --quiet && exit 0
-          git commit -m "Bake Hungarian RC feature bundle into source"
+          git commit -m "Remove rejected RC filters, screenshot option, and battery icons"
           git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
 
 # source-only preparation; never builds firmware
