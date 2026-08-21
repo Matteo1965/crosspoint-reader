@@ -29,8 +29,8 @@ replace_once(
 # Add the long lower-button screenshot setting label to the English master and Hungarian translation.
 replace_once(
     "lib/I18n/translations/english.yaml",
-    'STR_LONG_PRESS_MENU: "Long press: Menu"',
-    'STR_LONG_PRESS_MENU: "Long press: Menu"\nSTR_LONG_DOWN_SCREENSHOT: "Long lower button: Screenshot"',
+    'STR_LONG_PRESS_MENU: "Long-press Menu"',
+    'STR_LONG_PRESS_MENU: "Long-press Menu"\nSTR_LONG_DOWN_SCREENSHOT: "Long lower button: Screenshot"',
 )
 replace_once(
     "lib/I18n/translations/hungarian.yaml",
