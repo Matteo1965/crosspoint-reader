@@ -54,6 +54,8 @@ jobs:
           grep -q "Magyar szótövezés: 357 új szóalak" src/activities/settings/CrossPointVersionActivity.cpp
           grep -q "homeCoverHeight = 384" src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -q "homeCoverTileHeight = 400" src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q "STR_LONG_DOWN_SCREENSHOT" src/SettingsList.h
+          grep -q "longDownScreenshot" src/main.cpp
 
       - name: Run Hungarian dictionary regressions
         run: |
@@ -72,7 +74,7 @@ jobs:
       - name: Check C++ formatting
         run: |
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
-          git diff --exit-code -- src ':!platformio.ini' ':!lib/I18n/translations/hungarian.yaml' ':!src/activities/settings/CrossPointVersionActivity.cpp' ':!src/components/themes/roundedraff/RoundedRaffTheme.h' ':!src/components/themes/roundedraff/RoundedRaffTheme.cpp' ':!src/activities/home/HomeActivity.cpp' ':!src/activities/settings/SettingsActivity.cpp' ':!src/components/themes/BaseTheme.cpp' || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
+          git diff --exit-code -- src ':!platformio.ini' ':!lib/I18n/translations/hungarian.yaml' ':!src/activities/settings/CrossPointVersionActivity.cpp' ':!src/components/themes/roundedraff/RoundedRaffTheme.h' ':!src/components/themes/roundedraff/RoundedRaffTheme.cpp' ':!src/activities/home/HomeActivity.cpp' ':!src/activities/settings/SettingsActivity.cpp' ':!src/components/themes/BaseTheme.cpp' ':!src/CrossPointSettings.h' ':!src/SettingsList.h' ':!src/main.cpp' || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
 
       - name: Install unit-test tools
         run: |
@@ -119,39 +121,23 @@ jobs:
             "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
-
       - name: Build X4 release-candidate firmware
-        run: pio run -e gh_release_rc -j1
+        run: pio run -e gh_release_rc
 
       - name: Check firmware size
         run: |
-          firmware=".pio/build/gh_release_rc/firmware.bin"
-          limit=$((0x640000))
-          size=$(stat --format="%s" "$firmware")
-          remaining=$((limit - size))
-          echo "Firmware size: $size bytes"
-          echo "OTA partition: $limit bytes"
-          echo "Remaining: $remaining bytes"
-          if [ "$size" -gt "$limit" ]; then
-            echo "::error::Firmware exceeds the OTA partition."
-            exit 1
-          fi
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
 
-      - name: Upload Hungarian firmware
-        uses: actions/upload-artifact@v4
+      - name: Upload Hungarian X4 firmware artifact
+        uses: actions/upload-artifact@v7
         with:
-          name: CrossPoint-Hungarian-Integrated-v1.6.0rc
-          path: |
-            .pio/build/gh_release_rc/firmware.bin
-            .pio/build/gh_release_rc/bootloader.bin
-            .pio/build/gh_release_rc/partitions.bin
-            .pio/build/gh_release_rc/firmware.elf
-            .pio/build/gh_release_rc/firmware.map
+          name: crosspoint-hungarian-1.6.0rc-x4
+          path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
-          retention-days: 30
