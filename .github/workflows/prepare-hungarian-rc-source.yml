@@ -1,0 +1,103 @@
+name: Prepare Hungarian RC source
+
+on:
+  push:
+    branches:
+      - agent/hungarian-integrated-v1.6.0rc-staging
+    paths:
+      - .github/workflows/prepare-hungarian-rc-source.yml
+      - scripts/prepare_hungarian_rc_source.py
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc-staging
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Bake Hungarian RC changes into source
+        run: python scripts/prepare_hungarian_rc_source.py
+
+      - name: Validate English/Hungarian translations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "scripts")
+          from gen_i18n import parse_yaml_file
+          root = Path("lib/I18n/translations")
+          en = parse_yaml_file(root / "english.yaml")
+          hu = parse_yaml_file(root / "hungarian.yaml")
+          assert set(en) == set(hu), (sorted(set(en)-set(hu)), sorted(set(hu)-set(en)))
+          print(f"Translation keys: {len(en)}")
+          PY
+
+      - name: Install clang-format 21
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+
+      - name: Format changed C++
+        run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+
+      - name: Run Hungarian dictionary regressions
+        run: |
+          python scripts/run_hungarian_stemming_regression_v2.py
+          python scripts/run_hungarian_cpp_regression_v2.py
+          python scripts/run_hungarian_cpp_false_positive_regression.py
+
+      - name: Configure and run unit tests
+        run: |
+          sudo apt-get install -y cmake ninja-build
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test
+          ctest --test-dir build/test --output-on-failure -j
+
+      - name: Verify requested RC markers
+        run: |
+          grep -q 'homeCoverHeight = 376' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q 'homeCoverTileHeight = 400' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q 'STR_PICTURE_FILTER' lib/I18n/translations/english.yaml
+          grep -q 'STR_PICTURE_FILTER' lib/I18n/translations/hungarian.yaml
+          grep -q '10% Brighter' lib/I18n/translations/english.yaml
+          grep -q '10% Világosabb' lib/I18n/translations/hungarian.yaml
+          grep -q 'HungarianEditionFeatures::longDownScreenshot' src/main.cpp
+          grep -q 'MappedInputManager::Button::PageForward' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'brightnessPercentForPicture' lib/Epub/Epub/blocks/ImageBlock.cpp
+          ! grep -q 'Apply Hungarian RC customizations' .github/workflows/build-hungarian-firmware-v1.6.0rc.yml
+
+      - name: Commit prepared source to staging
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- \
+            platformio.ini \
+            lib/I18n/translations/english.yaml \
+            lib/I18n/translations/hungarian.yaml \
+            src/activities/settings/CrossPointVersionActivity.cpp \
+            src/main.cpp \
+            src/util/ButtonNavigator.cpp \
+            src/components/themes/roundedraff/RoundedRaffTheme.cpp \
+            src/activities/home/HomeActivity.cpp \
+            src/activities/settings/SettingsActivity.cpp \
+            src/components/themes/BaseTheme.cpp \
+            lib/Epub/Epub/blocks/ImageBlock.cpp \
+            src/activities/boot_sleep/SleepActivity.cpp \
+            src/HungarianImageBrightness.h \
+            .github/workflows/build-hungarian-firmware-v1.6.0rc.yml
+          git diff --cached --quiet && exit 0
+          git commit -m "Bake Hungarian RC feature bundle into source"
+          git push origin HEAD:agent/hungarian-integrated-v1.6.0rc-staging
