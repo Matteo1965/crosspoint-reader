@@ -653,11 +653,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-    if (!preserveBackground) {
-      HungarianImageBrightness::apply(renderer, 0, 0, pageWidth, pageHeight,
-                                       HungarianEditionFeatures::brightnessPercentForCover());
-    }
-    renderer.copyGrayscaleMsbBuffers();
+renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
