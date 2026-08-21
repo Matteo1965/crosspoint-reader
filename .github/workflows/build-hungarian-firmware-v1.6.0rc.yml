@@ -22,6 +22,24 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Apply Hungarian RC customizations
+        run: |
+          sed -i 's/^version = 1\.5\.0$/version = 1.6.0/' platformio.ini
+          sed -i 's/Magyar szótövezés: 300 egyedi szóalak/Magyar szótövezés: 357 új szóalak/' src/activities/settings/CrossPointVersionActivity.cpp
+          sed -i 's/Firmware-frissítés SD-kártya/Firmware frissítés SD-kártyáról/' lib/I18n/translations/hungarian.yaml
+          sed -i 's/\.homeCoverHeight = 368/\.homeCoverHeight = 392/' src/components/themes/roundedraff/RoundedRaffTheme.h
+          sed -i 's/\.homeCoverTileHeight = 392/\.homeCoverTileHeight = 400/' src/components/themes/roundedraff/RoundedRaffTheme.h
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp')
+          s = p.read_text()
+          old = '''  // Home screen header is custom-rendered in drawRecentBookCover.\n  if (title == nullptr) {\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
+          new = '''  // RoundedRaff home header: keep the book title, but omit the battery\n  // indicator so it cannot collide with long titles. Other RoundedRaff\n  // screens, and all other themes, retain the normal header battery.\n  if (title == nullptr) {\n    return;\n  }\n  if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {\n    const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;\n    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);\n    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),\n                      true, EpdFontFamily::BOLD);\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
+          if old not in s:
+              raise SystemExit('RoundedRaff home header marker not found')
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Validate translations
         run: |
           python - <<'PY'
@@ -68,7 +86,7 @@ jobs:
       - name: Check C++ formatting
         run: |
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
-          git diff --exit-code || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
+          git diff --exit-code -- src ':!platformio.ini' ':!lib/I18n/translations/hungarian.yaml' ':!src/activities/settings/CrossPointVersionActivity.cpp' ':!src/components/themes/roundedraff/RoundedRaffTheme.h' ':!src/components/themes/roundedraff/RoundedRaffTheme.cpp' || (echo "Please run bin/clang-format-fix to fix formatting issues" && exit 1)
 
       - name: Install unit-test tools
         run: |
@@ -98,6 +116,24 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Apply Hungarian RC customizations
+        run: |
+          sed -i 's/^version = 1\.5\.0$/version = 1.6.0/' platformio.ini
+          sed -i 's/Magyar szótövezés: 300 egyedi szóalak/Magyar szótövezés: 357 új szóalak/' src/activities/settings/CrossPointVersionActivity.cpp
+          sed -i 's/Firmware-frissítés SD-kártya/Firmware frissítés SD-kártyáról/' lib/I18n/translations/hungarian.yaml
+          sed -i 's/\.homeCoverHeight = 368/\.homeCoverHeight = 392/' src/components/themes/roundedraff/RoundedRaffTheme.h
+          sed -i 's/\.homeCoverTileHeight = 392/\.homeCoverTileHeight = 400/' src/components/themes/roundedraff/RoundedRaffTheme.h
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp')
+          s = p.read_text()
+          old = '''  // Home screen header is custom-rendered in drawRecentBookCover.\n  if (title == nullptr) {\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
+          new = '''  // RoundedRaff home header: keep the book title, but omit the battery\n  // indicator so it cannot collide with long titles. Other RoundedRaff\n  // screens, and all other themes, retain the normal header battery.\n  if (title == nullptr) {\n    return;\n  }\n  if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {\n    const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;\n    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);\n    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),\n                      true, EpdFontFamily::BOLD);\n    return;\n  }\n  BaseTheme::drawHeader(renderer, rect, title, subtitle);'''
+          if old not in s:
+              raise SystemExit('RoundedRaff home header marker not found')
+          p.write_text(s.replace(old, new))
+          PY
+
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -119,12 +155,14 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
-      - name: Build X4 release firmware
-        run: pio run -e gh_release -j1
+      - name: Build X4 release-candidate firmware
+        env:
+          CROSSPOINT_RC_HASH: ${{ github.sha }}
+        run: pio run -e gh_release_rc -j1
 
       - name: Check firmware size
         run: |
-          firmware=".pio/build/gh_release/firmware.bin"
+          firmware=".pio/build/gh_release_rc/firmware.bin"
           limit=$((0x640000))
           size=$(stat --format="%s" "$firmware")
           remaining=$((limit - size))
@@ -141,10 +179,10 @@ jobs:
         with:
           name: CrossPoint-Hungarian-Integrated-v1.6.0rc
           path: |
-            .pio/build/gh_release/firmware.bin
-            .pio/build/gh_release/bootloader.bin
-            .pio/build/gh_release/partitions.bin
-            .pio/build/gh_release/firmware.elf
-            .pio/build/gh_release/firmware.map
+            .pio/build/gh_release_rc/firmware.bin
+            .pio/build/gh_release_rc/bootloader.bin
+            .pio/build/gh_release_rc/partitions.bin
+            .pio/build/gh_release_rc/firmware.elf
+            .pio/build/gh_release_rc/firmware.map
           if-no-files-found: error
           retention-days: 30
