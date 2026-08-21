@@ -2,6 +2,11 @@ name: Build Hungarian firmware 1.6.0rc
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/hungarian-integrated-v1.6.0rc
+    paths:
+      - .github/build-hungarian-rc.trigger
 
 permissions:
   contents: read
@@ -52,6 +57,8 @@ jobs:
           ! grep -q "brightnessPercentForPicture" lib/Epub/Epub/blocks/ImageBlock.cpp
           ! grep -q "longDownScreenshot" src/main.cpp
           ! grep -q "batteryIndicator" src/components/themes/BaseTheme.cpp
+          ! grep -q "HungarianImageBrightness::" src/activities/boot_sleep/SleepActivity.cpp
+          ! grep -q "brightnessPercentForCover" src/activities/boot_sleep/SleepActivity.cpp
 
       - name: Run Hungarian dictionary regressions
         run: |
