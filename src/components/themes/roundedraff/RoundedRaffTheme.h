@@ -41,9 +41,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 55,
-                                 // Hungarian Edition home cover: 368px, tile remains 392px.
-                                 .homeCoverHeight = 368,
-                                 .homeCoverTileHeight = 392,
+                                 // Hungarian Edition home cover: 376px, tile 400px.
+                                 .homeCoverHeight = 376,
+                                 .homeCoverTileHeight = 400,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = true,
                                  .homeMenuTopOffset = 20,
