@@ -47,9 +47,11 @@ jobs:
           grep -q "Magyar szótövezés: 357 új szóalak" src/activities/settings/CrossPointVersionActivity.cpp
           grep -q "homeCoverHeight = 376" src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -q "homeCoverTileHeight = 400" src/components/themes/roundedraff/RoundedRaffTheme.h
-          grep -q "STR_LONG_DOWN_SCREENSHOT" src/SettingsList.h
-          grep -q "STR_PICTURE_FILTER" src/SettingsList.h
-          grep -q "brightnessPercentForPicture" lib/Epub/Epub/blocks/ImageBlock.cpp
+          ! grep -q "STR_LONG_DOWN_SCREENSHOT" src/SettingsList.h
+          ! grep -q "STR_PICTURE_FILTER" src/SettingsList.h
+          ! grep -q "brightnessPercentForPicture" lib/Epub/Epub/blocks/ImageBlock.cpp
+          ! grep -q "longDownScreenshot" src/main.cpp
+          ! grep -q "batteryIndicator" src/components/themes/BaseTheme.cpp
 
       - name: Run Hungarian dictionary regressions
         run: |
