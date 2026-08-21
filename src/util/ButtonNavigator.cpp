@@ -1,13 +1,23 @@
 #include "ButtonNavigator.h"
 
+#include "HungarianEditionFeatures.h"
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {
+  if (HungarianEditionFeatures::longDownScreenshot()) {
+    onNextRelease(callback);
+    return;
+  }
   onNextPress(callback);
   onNextContinuous(callback);
 }
 
 void ButtonNavigator::onPrevious(const Callback& callback) {
+  if (HungarianEditionFeatures::longDownScreenshot()) {
+    onPreviousRelease(callback);
+    return;
+  }
   onPreviousPress(callback);
   onPreviousContinuous(callback);
 }
@@ -76,21 +86,18 @@ bool ButtonNavigator::shouldNavigateContinuously() const {
 int ButtonNavigator::nextIndex(const int currentIndex, const int totalItems) {
   if (totalItems <= 0) return 0;
 
-  // Calculate the next index with wrap-around
   return (currentIndex + 1) % totalItems;
 }
 
 int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems) {
   if (totalItems <= 0) return 0;
 
-  // Calculate the previous index with wrap-around
   return (currentIndex + totalItems - 1) % totalItems;
 }
 
 int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
   if (totalItems <= 0 || itemsPerPage <= 0) return 0;
 
-  // When items fit on one page, use index navigation instead
   if (totalItems <= itemsPerPage) {
     return nextIndex(currentIndex, totalItems);
   }
@@ -108,7 +115,6 @@ int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems,
 int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
   if (totalItems <= 0 || itemsPerPage <= 0) return 0;
 
-  // When items fit on one page, use index navigation instead
   if (totalItems <= itemsPerPage) {
     return previousIndex(currentIndex, totalItems);
   }
