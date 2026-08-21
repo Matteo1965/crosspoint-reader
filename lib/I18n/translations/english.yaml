@@ -462,3 +462,7 @@ STR_DICTIONARY_LICENSE_NOTICE: "Dictionary files are not distributed with this r
 STR_HYPHENATION_LANGUAGES: "Hyphenation languages"
 STR_HYPHENATION_LANGUAGES_NOTICE: "This CrossPoint fork includes hyphenation only for English and Hungarian."
 STR_HYPHENATION_OTHER_LANGUAGES_NOTICE: "It does not include hyphenation patterns or a separate hyphenation algorithm for other languages."
+STR_PICTURE_FILTER: "Picture filter"
+STR_BRIGHTER_10: "10% Brighter"
+STR_BRIGHTER_20: "20% Brighter"
+STR_LONG_DOWN_SCREENSHOT: "Long lower button: Screenshot"

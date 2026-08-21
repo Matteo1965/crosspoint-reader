@@ -25,6 +25,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "HungarianEditionFeatures.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -625,6 +626,38 @@ void loop() {
     }
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
+  }
+
+  static unsigned long longDownScreenshotStartedAt = 0;
+  static bool longDownScreenshotCaptured = false;
+  static bool longDownScreenshotConsumeRelease = false;
+  constexpr unsigned long LONG_DOWN_SCREENSHOT_MS = 600;
+
+  if (HungarianEditionFeatures::longDownScreenshot() && !gpio.isPressed(HalGPIO::BTN_POWER)) {
+    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      if (longDownScreenshotStartedAt == 0) longDownScreenshotStartedAt = millis();
+      if (!longDownScreenshotCaptured && millis() - longDownScreenshotStartedAt >= LONG_DOWN_SCREENSHOT_MS) {
+        {
+          RenderLock lock;
+          ScreenshotUtil::takeScreenshot(renderer);
+        }
+        longDownScreenshotCaptured = true;
+        longDownScreenshotConsumeRelease = true;
+      }
+      if (longDownScreenshotCaptured) return;
+    } else {
+      longDownScreenshotStartedAt = 0;
+      longDownScreenshotCaptured = false;
+      if (longDownScreenshotConsumeRelease && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
+        longDownScreenshotConsumeRelease = false;
+        return;
+      }
+      longDownScreenshotConsumeRelease = false;
+    }
+  } else if (!gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    longDownScreenshotStartedAt = 0;
+    longDownScreenshotCaptured = false;
+    longDownScreenshotConsumeRelease = false;
   }
 
   // Consume the second X4 Pro power-button release so it does not also run a

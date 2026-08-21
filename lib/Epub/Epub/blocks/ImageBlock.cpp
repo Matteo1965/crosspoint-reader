@@ -11,6 +11,8 @@
 #include <new>
 
 #include "Epub/converters/DirectPixelWriter.h"
+#include <HungarianEditionFeatures.h>
+#include <HungarianImageBrightness.h>
 #include "Epub/converters/ImageDecoderFactory.h"
 
 // Cache file format:
@@ -357,6 +359,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
+    HungarianImageBrightness::apply(renderer, x, y, width, height,
+                                     HungarianEditionFeatures::brightnessPercentForPicture());
     renderer.preserveImagePolarity(x, y, width, height);
     return;  // Successfully rendered from cache
   }
@@ -420,6 +424,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
+  HungarianImageBrightness::apply(renderer, x, y, width, height,
+                                   HungarianEditionFeatures::brightnessPercentForPicture());
   renderer.preserveImagePolarity(x, y, width, height);
   LOG_DBG("IMG", "Decode successful");
 }

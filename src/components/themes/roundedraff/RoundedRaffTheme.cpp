@@ -1,5 +1,8 @@
 #include "RoundedRaffTheme.h"
 
+#include "HungarianEditionFeatures.h"
+#include "HungarianImageBrightness.h"
+
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
@@ -49,8 +52,12 @@ int coverWidth = 0;
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                                   const char* subtitle) const {
-  // Home screen header is custom-rendered in drawRecentBookCover.
-  if (title == nullptr) {
+  if (title == nullptr) return;
+  if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {
+    const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;
+    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);
+    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),
+                      true, EpdFontFamily::BOLD);
     return;
   }
   BaseTheme::drawHeader(renderer, rect, title, subtitle);
@@ -131,8 +138,11 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             coverWidth = bitmap.getWidth();
-            renderer.drawBitmap(bitmap, tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
-                                RoundedRaffMetrics::values.homeCoverHeight);
+            const int coverX = tileX + (tileWidth - coverWidth) / 2;
+            renderer.drawBitmap(bitmap, coverX, imgY, coverWidth, RoundedRaffMetrics::values.homeCoverHeight);
+            HungarianImageBrightness::apply(renderer, coverX, imgY, coverWidth,
+                                             RoundedRaffMetrics::values.homeCoverHeight,
+                                             HungarianEditionFeatures::brightnessPercentForCover());
             renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                    RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                    Color::LightGray);

@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 
+#include <algorithm>
+
 #include <cstdint>
 
 namespace HungarianImageBrightness {

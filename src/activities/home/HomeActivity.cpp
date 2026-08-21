@@ -132,6 +132,12 @@ void HomeActivity::onExit() {
 }
 
 bool HomeActivity::storeCoverBuffer() {
+  if (static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) ==
+          CrossPointSettings::UI_THEME::ROUNDEDRAFF &&
+      !recentsLoaded) {
+    return false;
+  }
+
   // render() must have already set the cover rect; without it we'd be back to
   // cloning the whole framebuffer.
   if (coverRectW <= 0 || coverRectH <= 0) return false;
