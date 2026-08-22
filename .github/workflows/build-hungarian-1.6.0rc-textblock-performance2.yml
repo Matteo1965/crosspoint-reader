@@ -1,0 +1,185 @@
+name: Build Hungarian 1.6.0rc TextBlock performance 2
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-textblock-performance2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out stable integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply TextBlock bidi cache and simple fast path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          h = Path('lib/Epub/Epub/blocks/TextBlock.h')
+          s = h.read_text()
+          s = s.replace(
+              '  uint8_t  styles[wordCount]\n  uint8_t  focusBoundary[wordCount]  present only when focusPresent\n',
+              '  uint8_t  styles[wordCount]\n  uint8_t  bidiDir[wordCount]        cached BidiBaseDir for render()\n  uint8_t  focusBoundary[wordCount]  present only when focusPresent\n')
+          s = s.replace(
+              '  bool focusPresent = false;\n  bool isValid = true;\n',
+              '  bool focusPresent = false;\n  bool simpleRender = false;\n  bool isValid = true;\n')
+          s = s.replace(
+              '  const uint8_t* stylesArr = nullptr;\n  const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent\n',
+              '  const uint8_t* stylesArr = nullptr;\n  const uint8_t* bidiDirArr = nullptr;\n  const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent\n')
+          s = s.replace(
+              '  static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);\n  void bindArenaPointers();\n',
+              '  static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);\n  void bindArenaPointers();\n  void refreshRenderFlags();\n')
+          s = s.replace(
+              '  EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }\n',
+              '  EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }\n  uint8_t wordBidiDir(const uint16_t i) const { return bidiDirArr[i]; }\n')
+          h.write_text(s)
+
+          p = Path('lib/Epub/Epub/blocks/TextBlock.cpp')
+          s = p.read_text()
+          old = '''  size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));\n'''
+          new = '''  size_t size =\n      static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t) + sizeof(uint8_t));\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  stylesArr = base + off;\n  off += wc;\n  if (focusPresent) {\n    focusBoundaryArr = base + off;\n'''
+          new = '''  stylesArr = base + off;\n  off += wc;\n  bidiDirArr = base + off;\n  off += wc;\n  if (focusPresent) {\n    focusBoundaryArr = base + off;\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          marker = '''TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,\n'''
+          helper = '''void TextBlock::refreshRenderFlags() {\n  simpleRender = !focusPresent && rubyTexts.empty();\n  if (!simpleRender) return;\n  constexpr uint8_t complexMask = static_cast<uint8_t>(EpdFontFamily::UNDERLINE | EpdFontFamily::STRIKETHROUGH |\n                                                        EpdFontFamily::SUP | EpdFontFamily::SUB |\n                                                        EpdFontFamily::RUBY_CONTINUE);\n  for (uint16_t i = 0; i < numWords; ++i) {\n    if ((stylesArr[i] & complexMask) != 0) {\n      simpleRender = false;\n      return;\n    }\n  }\n}\n\n'''
+          assert marker in s and 'void TextBlock::refreshRenderFlags()' not in s
+          s = s.replace(marker, helper + marker, 1)
+
+          old = '''  auto* styles = const_cast<uint8_t*>(stylesArr);\n  auto* text = const_cast<char*>(textArr);\n'''
+          new = '''  auto* styles = const_cast<uint8_t*>(stylesArr);\n  auto* bidiDir = const_cast<uint8_t*>(bidiDirArr);\n  auto* text = const_cast<char*>(textArr);\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    styles[i] = static_cast<uint8_t>(wordStyles[i]);\n    memcpy(text + off, words[i].data(), words[i].size());\n'''
+          new = '''    styles[i] = static_cast<uint8_t>(wordStyles[i]);\n    bidiDir[i] = static_cast<uint8_t>(BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));\n    memcpy(text + off, words[i].data(), words[i].size());\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  if (focusPresent) {\n    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);\n'''
+          new = '''  if (focusPresent) {\n    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);\n'''
+          # keep marker only; append refresh after focus block
+          focus_end = '''      boundary[i] = focusBoundary[i];\n    }\n  }\n}\n\nbool TextBlock::hasRuby() const {'''
+          repl = '''      boundary[i] = focusBoundary[i];\n    }\n  }\n  refreshRenderFlags();\n}\n\nbool TextBlock::hasRuby() const {'''
+          assert focus_end in s
+          s = s.replace(focus_end, repl, 1)
+
+          old = '''  const bool blockHasRuby = hasRuby();\n  std::vector<RubyDrawInfo> rubies;\n'''
+          new = '''  const bool blockHasRuby = hasRuby();\n\n  if (simpleRender) {\n    for (uint16_t i = 0; i < numWords; ++i) {\n      const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));\n      renderer.drawText(fontId, xposArr[i] + x, y, wordText(i), true, wordStyle(i), baseDir);\n    }\n    return;\n  }\n\n  std::vector<RubyDrawInfo> rubies;\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    const auto baseDir =\n        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));\n'''
+          new = '''    const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  serialization::readPod(file, blockStyle.directionDefined);\n\n  return block;\n}'''
+          new = '''  serialization::readPod(file, blockStyle.directionDefined);\n  block->refreshRenderFlags();\n\n  return block;\n}'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text()
+          assert 'constexpr uint8_t SECTION_FILE_VERSION = 42;' in s
+          s = s.replace(
+              '// v39: Image top margin is clamped so a full-viewport-height image cannot\n//      overflow the page bottom; older caches can hold placements that panels\n//      with no bottom inset refuse to draw.\nconstexpr uint8_t SECTION_FILE_VERSION = 42;',
+              '// v39: Image top margin is clamped so a full-viewport-height image cannot\n//      overflow the page bottom; older caches can hold placements that panels\n//      with no bottom inset refuse to draw.\n// v43: TextBlock arena stores one cached BidiBaseDir byte per word. This avoids\n//      repeating Unicode direction detection on every page redraw.\nconstexpr uint8_t SECTION_FILE_VERSION = 43;')
+          sec.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Verify performance patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'bidiDirArr' lib/Epub/Epub/blocks/TextBlock.h
+          grep -q 'wordBidiDir' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'if (simpleRender)' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'SECTION_FILE_VERSION = 43' lib/Epub/Epub/Section.cpp
+          if grep -n 'detectParagraphLevel(word,' lib/Epub/Epub/blocks/TextBlock.cpp; then
+            echo 'Per-render Bidi detection still present.' >&2
+            exit 1
+          fi
+          grep -q 'PreviewKey' src/activities/settings/TextSettingsPreview.cpp
+          grep -q 'cachedHangingPunctuationAdvance' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
+
+      - name: Format and persist optimization
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format -i lib/Epub/Epub/blocks/TextBlock.h lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/Section.cpp
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/blocks/TextBlock.h lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/Section.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Cache TextBlock bidi direction and add simple render fast path'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-textblock-performance2
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
