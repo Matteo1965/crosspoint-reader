@@ -30,6 +30,29 @@ jobs:
           grep -q 'void drawBatteryRight' src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -q 'void drawBatteryRight' src/components/themes/roundedraff/RoundedRaffBatteryCompat.cpp
 
+      - name: Fix RoundedRaff RoundedMod coverWidth collision
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp'),
+              Path('src/components/themes/roundedmod/RoundedModTheme.cpp'),
+          ]
+          for p in files:
+              s = p.read_text()
+              old = '}  // namespace\nint coverWidth = 0;\n'
+              new = 'int coverWidth = 0;\n\n}  // namespace\n'
+              if new in s:
+                  continue
+              if old not in s:
+                  raise SystemExit(f'coverWidth marker not found in {p}')
+              p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+
       - name: Install clang-format 21
         shell: bash
         run: |
