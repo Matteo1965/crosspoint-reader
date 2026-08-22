@@ -39,6 +39,12 @@ class Hyphenator {
   //      word from overflowing the page width.
   static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);
 
+  // Uses an explicit language without changing the publication-level language
+  // selected for the reader. Intended for auxiliary text such as dictionary
+  // definitions whose language is known independently of the open book.
+  static std::vector<BreakInfo> breakOffsetsForLanguage(const std::string& word, bool includeFallback,
+                                                        const std::string& language);
+
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
   static void setHungarianExtended(bool enabled);
