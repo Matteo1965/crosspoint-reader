@@ -1,0 +1,146 @@
+name: Build Hungarian 1.6.0rc pre-RoundedMod + performance
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-pre-roundedmod-performance.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Restore theme state from before RoundedMod split
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          split_commit="$(git log --all --grep='Split RoundedMod theme' -1 --format='%H')"
+          if [ -z "$split_commit" ]; then
+            echo 'Could not locate the original RoundedMod split commit.' >&2
+            exit 1
+          fi
+          source_commit="${split_commit}^"
+          echo "Restoring pre-RoundedMod theme state from: $source_commit"
+
+          # Restore exactly the theme-related source files from immediately
+          # before RoundedMod was introduced. Performance files are NOT reverted.
+          git checkout "$source_commit" -- \
+            src/CrossPointSettings.h \
+            src/SettingsListBase.h \
+            src/components/UITheme.cpp \
+            src/components/themes/roundedraff/RoundedRaffTheme.h \
+            src/components/themes/roundedraff/RoundedRaffTheme.cpp
+
+          # Remove all files introduced only for RoundedMod / RoundedRaff compatibility.
+          rm -rf src/components/themes/roundedmod
+          rm -f src/components/themes/roundedraff/RoundedRaffBatteryCompat.cpp
+
+          echo 'Theme files restored.'
+
+      - name: Verify original modified RoundedRaff only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -d src/components/themes/roundedmod
+          ! grep -R "ROUNDEDMOD\|RoundedMod" -n \
+              src/CrossPointSettings.h src/SettingsListBase.h src/components/UITheme.cpp \
+              src/components/themes/roundedraff
+          grep -q 'ROUNDEDRAFF' src/CrossPointSettings.h
+          grep -q 'RoundedRaffTheme' src/components/UITheme.cpp
+          echo 'RoundedMod removed; modified RoundedRaff is the only Rounded theme.'
+
+      - name: Verify performance optimizations remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'PreviewKey' src/activities/settings/TextSettingsPreview.cpp
+          grep -q 'cachedHangingPunctuationAdvance' lib/Epub/Epub/ParsedText.cpp
+          echo 'Preview cache and hanging-punctuation advance cache are present.'
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
+
+      - name: Normalize formatting and persist rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A \
+            src/CrossPointSettings.h \
+            src/SettingsListBase.h \
+            src/components/UITheme.cpp \
+            src/components/themes/roundedraff \
+            src/components/themes/roundedmod
+          if ! git diff --cached --quiet; then
+            git commit -m 'Revert to modified RoundedRaff before theme split'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-roundedraff-performance
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
