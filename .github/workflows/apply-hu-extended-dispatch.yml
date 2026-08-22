@@ -1,0 +1,48 @@
+name: Apply extended Hungarian hyphenation merge
+
+on:
+  push:
+    branches:
+      - hungarian-hyphenation
+    paths:
+      - .hu-extended-dispatch-trigger
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 1.6.0rc branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+      - name: Apply safe source merge
+        run: python3 .github/scripts/apply_hu_extended.py
+      - name: Format changed C++ files
+        run: |
+          if [ -x bin/clang-format-fix ]; then
+            bin/clang-format-fix
+          fi
+      - name: Commit merged source
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/ParsedText.cpp \
+                  lib/Epub/Epub/ReaderRenderSpec.h \
+                  lib/Epub/Epub/Section.cpp \
+                  lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+                  lib/Epub/Epub/hyphenation/Hyphenator.h \
+                  src/CrossPointSettings.cpp \
+                  src/CrossPointSettings.h \
+                  src/SettingsListBase.h \
+                  src/activities/settings/TextSettingsActivity.cpp \
+                  src/activities/settings/TextSettingsActivity.h
+          if git diff --cached --quiet; then
+            echo "No source changes needed"
+            exit 0
+          fi
+          git commit -m "Add extended Hungarian hyphenation mode"
+          git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
