@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -8,11 +9,14 @@ class LanguageHyphenator;
 
 class Hyphenator {
  public:
+  enum class Replacement : uint8_t { None = 0, AppendY, AppendZ, AppendS, AppendZS };
+
   struct BreakInfo {
     size_t byteOffset;            // Byte position inside the UTF-8 word where a break may occur.
     bool requiresInsertedHyphen;  // true = a visible '-' must be rendered at the break (pattern/fallback breaks).
                                   // false = break occurs at an existing visible separator boundary
                                   //         (explicit '-' or eligible apostrophe contraction boundary).
+    Replacement replacement = Replacement::None;  // Hungarian compact doubled digraph/trigraph expansion.
   };
 
   // Returns byte offsets where the word may be hyphenated.
@@ -35,15 +39,12 @@ class Hyphenator {
   //      word from overflowing the page width.
   static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);
 
-  // Uses an explicit language without changing the publication-level language
-  // selected for the reader. Intended for auxiliary text such as dictionary
-  // definitions whose language is known independently of the open book.
-  static std::vector<BreakInfo> breakOffsetsForLanguage(const std::string& word, bool includeFallback,
-                                                        const std::string& language);
-
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
+  static void setHungarianExtended(bool enabled);
 
  private:
   static const LanguageHyphenator* cachedHyphenator_;
+  static bool preferredLanguageIsHungarian_;
+  static bool hungarianExtended_;
 };
