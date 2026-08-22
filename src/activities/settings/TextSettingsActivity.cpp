@@ -374,7 +374,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
   switch (static_cast<LayoutRow>(row)) {
     case LayoutRow::ParaSpacing: {
       std::vector<std::string> options = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};
-      const int cur = SETTINGS.extraParagraphSpacing == 0 ? 0 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25, 1, 4);
+      const int cur =
+          SETTINGS.extraParagraphSpacing == 0 ? 0 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25, 1, 4);
       optionPopup_.show(StrId::STR_EXTRA_SPACING, options, cur, [](int idx) {
         SETTINGS.extraParagraphSpacing = static_cast<uint8_t>(idx * 25);
         SETTINGS.saveToFile();

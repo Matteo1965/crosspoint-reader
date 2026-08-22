@@ -183,8 +183,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
         spec.hyphenationEnabled != fileHyphenationEnabled ||
         spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
-        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||
-        spec.embeddedStyle != fileEmbeddedStyle ||
+        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");

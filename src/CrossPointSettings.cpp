@@ -285,9 +285,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.
   // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
   const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
-  spec.hangingPunctuationLimitPx = hangingPunctuation
-                                       ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits)
-                                       : 0;
+  spec.hangingPunctuationLimitPx =
+      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits) : 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
