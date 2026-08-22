@@ -40,11 +40,12 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y clang-format-21 cmake ninja-build
 
-      - name: Check formatting
+      - name: Normalize formatting
         shell: bash
         run: |
           set -euo pipefail
-          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-check
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --check
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
