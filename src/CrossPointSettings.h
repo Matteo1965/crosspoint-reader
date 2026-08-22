@@ -215,7 +215,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
-  uint8_t extraParagraphSpacing = 1;
+  // Extra paragraph spacing percentage: 0, 25, 50, 75 or 100.
+  uint8_t extraParagraphSpacing = 100;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;

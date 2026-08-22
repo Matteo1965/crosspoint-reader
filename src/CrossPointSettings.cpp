@@ -173,6 +173,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  if (extraParagraphSpacing == 1) {
+    // Legacy toggle: ON meant the old lineHeight/2 spacing, now defined as 100%.
+    extraParagraphSpacing = 100;
+    needsResave = true;
+  } else if (extraParagraphSpacing != 0 && extraParagraphSpacing != 25 && extraParagraphSpacing != 50 &&
+             extraParagraphSpacing != 75 && extraParagraphSpacing != 100) {
+    extraParagraphSpacing = 100;
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
@@ -266,17 +276,18 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
-  spec.extraParagraphSpacing = extraParagraphSpacing != 0;
+  spec.extraParagraphSpacing = extraParagraphSpacing;
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
-  // Pack percentage step (high nibble: 1=25% .. 4=100%) and pixel cap (low nibble).
-  // At 5 px margin keep one physical pixel untouched; from 10 px upward allow up to 8 px.
-  const uint8_t hangingPixelLimit = screenMargin >= 10 ? 8 : static_cast<uint8_t>(std::max<int>(0, screenMargin - 1));
-  spec.hangingPunctuationLimitPx =
-      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingPixelLimit) : 0;
+  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.
+  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
+  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
+  spec.hangingPunctuationLimitPx = hangingPunctuation
+                                       ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits)
+                                       : 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;

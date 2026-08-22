@@ -251,8 +251,8 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      // Paragraph spacing toggles; optical margin cycles through selectable percentages.
-      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+      // Layout rows use pickers except no remaining toggle-only row here.
+      return tr(STR_SELECT);
     case Tab::Style:
       return tr(STR_TOGGLE);
     default:
@@ -372,11 +372,16 @@ void TextSettingsActivity::applySize(int listIndex) {
 
 void TextSettingsActivity::confirmLayoutRow(int row) {
   switch (static_cast<LayoutRow>(row)) {
-    case LayoutRow::ParaSpacing:
-      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
-      SETTINGS.saveToFile();
+    case LayoutRow::ParaSpacing: {
+      std::vector<std::string> options = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};
+      const int cur = SETTINGS.extraParagraphSpacing == 0 ? 0 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25, 1, 4);
+      optionPopup_.show(StrId::STR_EXTRA_SPACING, options, cur, [](int idx) {
+        SETTINGS.extraParagraphSpacing = static_cast<uint8_t>(idx * 25);
+        SETTINGS.saveToFile();
+      });
       requestUpdate();
       break;
+    }
     case LayoutRow::LineSpacing:
       optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
                         SETTINGS.lineSpacing, [](int idx) {
@@ -393,27 +398,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
                         });
       requestUpdate();
       break;
-    case LayoutRow::HangingPunctuation:
-      switch (SETTINGS.hangingPunctuation) {
-        case 0:
-          SETTINGS.hangingPunctuation = 25;
-          break;
-        case 25:
-          SETTINGS.hangingPunctuation = 50;
-          break;
-        case 50:
-          SETTINGS.hangingPunctuation = 75;
-          break;
-        case 75:
-          SETTINGS.hangingPunctuation = 100;
-          break;
-        default:
-          SETTINGS.hangingPunctuation = 0;
-          break;
-      }
-      SETTINGS.saveToFile();
+    case LayoutRow::HangingPunctuation: {
+      const char* options[] = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};
+      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 25, 1, 4);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation", options, 5, cur,
+                        [](int idx) {
+                          SETTINGS.hangingPunctuation = static_cast<uint8_t>(idx * 25);
+                          SETTINGS.saveToFile();
+                        });
       requestUpdate();
       break;
+    }
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
       options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
@@ -439,7 +434,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
     }
     case LayoutRow::ParaSpacing:
-      return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.extraParagraphSpacing ? std::to_string(SETTINGS.extraParagraphSpacing) + "%" : tr(STR_STATE_OFF);
     case LayoutRow::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
       return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);

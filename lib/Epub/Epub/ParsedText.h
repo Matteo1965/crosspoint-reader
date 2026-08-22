@@ -49,7 +49,7 @@ class ParsedText {
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
-  bool extraParagraphSpacing;
+  uint8_t extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
   uint8_t hangingPunctuationLimitPx;
@@ -88,7 +88,7 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
-  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
+  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,
                       const BlockStyle& blockStyle = BlockStyle())
       : blockStyle(blockStyle),

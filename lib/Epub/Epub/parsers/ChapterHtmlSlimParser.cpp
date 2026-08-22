@@ -1757,8 +1757,9 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY += blockStyle.paddingBottom;
   }
 
-  // Extra paragraph spacing if enabled (default behavior)
+  // Extra paragraph spacing: 100% equals the legacy lineHeight/2 behavior.
   if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+    const int extraBase = lineHeight / 2;
+    currentPageNextY += (extraBase * extraParagraphSpacing + 50) / 100;
   }
 }
