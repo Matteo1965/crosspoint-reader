@@ -245,6 +245,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
+  uint8_t hungarianHyphenationExtended = 0;
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;

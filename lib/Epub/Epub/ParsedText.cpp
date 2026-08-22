@@ -1140,6 +1140,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   size_t chosenOffset = 0;
   int chosenWidth = -1;
   bool chosenNeedsHyphen = true;
+  Hyphenator::Replacement chosenReplacement = Hyphenator::Replacement::None;
 
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
@@ -1149,7 +1150,25 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureFocusWordWidth(renderer, fontId, word.substr(0, offset), style,
+    std::string candidatePrefix = word.substr(0, offset);
+    const bool replacementUppercase = offset > 0 && word[offset - 1] >= 'A' && word[offset - 1] <= 'Z';
+    switch (info.replacement) {
+      case Hyphenator::Replacement::AppendY:
+        candidatePrefix.push_back(replacementUppercase ? 'Y' : 'y');
+        break;
+      case Hyphenator::Replacement::AppendZ:
+        candidatePrefix.push_back(replacementUppercase ? 'Z' : 'z');
+        break;
+      case Hyphenator::Replacement::AppendS:
+        candidatePrefix.push_back(replacementUppercase ? 'S' : 's');
+        break;
+      case Hyphenator::Replacement::AppendZS:
+        candidatePrefix += replacementUppercase ? "ZS" : "zs";
+        break;
+      default:
+        break;
+    }
+    const int prefixWidth = measureFocusWordWidth(renderer, fontId, candidatePrefix, style,
                                                   focusBoundaryBefore(focusBoundary, offset), needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
@@ -1158,6 +1177,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     chosenWidth = prefixWidth;
     chosenOffset = offset;
     chosenNeedsHyphen = needsHyphen;
+    chosenReplacement = info.replacement;
   }
 
   if (chosenWidth < 0) {
@@ -1176,6 +1196,24 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Split the word at the selected breakpoint and append a hyphen if required.
   std::string remainder = word.substr(chosenOffset);
   words[wordIndex].resize(chosenOffset);
+  const bool replacementUppercase =
+      chosenOffset > 0 && word[chosenOffset - 1] >= 'A' && word[chosenOffset - 1] <= 'Z';
+  switch (chosenReplacement) {
+    case Hyphenator::Replacement::AppendY:
+      words[wordIndex].push_back(replacementUppercase ? 'Y' : 'y');
+      break;
+    case Hyphenator::Replacement::AppendZ:
+      words[wordIndex].push_back(replacementUppercase ? 'Z' : 'z');
+      break;
+    case Hyphenator::Replacement::AppendS:
+      words[wordIndex].push_back(replacementUppercase ? 'S' : 's');
+      break;
+    case Hyphenator::Replacement::AppendZS:
+      words[wordIndex] += replacementUppercase ? "ZS" : "zs";
+      break;
+    default:
+      break;
+  }
   if (chosenNeedsHyphen) {
     words[wordIndex].push_back('-');
   }

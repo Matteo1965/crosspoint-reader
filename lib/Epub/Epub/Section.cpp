@@ -40,7 +40,7 @@ namespace {
 // v39: Image top margin is clamped so a full-viewport-height image cannot
 //      overflow the page bottom; older caches can hold placements that panels
 //      with no bottom inset refuse to draw.
-constexpr uint8_t SECTION_FILE_VERSION = 39;
+constexpr uint8_t SECTION_FILE_VERSION = 40;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -60,7 +60,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
 
@@ -107,7 +107,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
                                    sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphAlignment) +
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
-                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
+                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
+                                   sizeof(spec.embeddedStyle) +
                                    sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(uint32_t) +
                                    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
@@ -121,6 +122,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
   serialization::writePod(file, spec.hyphenationEnabled);
+  serialization::writePod(file, spec.hungarianHyphenationExtended);
   serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
@@ -157,6 +159,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileExtraParagraphSpacing;
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
+    bool fileHungarianHyphenationExtended;
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
@@ -167,6 +170,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileViewportWidth);
     serialization::readPod(file, fileViewportHeight);
     serialization::readPod(file, fileHyphenationEnabled);
+    serialization::readPod(file, fileHungarianHyphenationExtended);
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
@@ -174,7 +178,9 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     if (spec.fontId != fileFontId || spec.lineCompression != fileLineCompression ||
         spec.extraParagraphSpacing != fileExtraParagraphSpacing || spec.paragraphAlignment != fileParagraphAlignment ||
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
-        spec.hyphenationEnabled != fileHyphenationEnabled || spec.embeddedStyle != fileEmbeddedStyle ||
+        spec.hyphenationEnabled != fileHyphenationEnabled ||
+        spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
+        spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
@@ -414,6 +420,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   }
 
   Hyphenator::setPreferredLanguage(epub->getLanguage());
+  Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {
