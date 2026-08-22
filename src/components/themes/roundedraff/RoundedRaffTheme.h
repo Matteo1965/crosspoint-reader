@@ -72,6 +72,11 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldLineEndOffset = -1};
 }
 
+// Compatibility helper for the legacy RoundedRaff header layout.
+// The current BaseTheme no longer exposes drawBatteryRight(), but the restored
+// CrossPoint 1.5.0 RoundedRaff implementation still uses that layout.
+void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true);
+
 class RoundedRaffTheme : public BaseTheme {
  public:
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
