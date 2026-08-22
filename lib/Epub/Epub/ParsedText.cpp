@@ -1342,6 +1342,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                ? computeJustifyExtra(spareSpace, actualGapCount)
                                : 0;
+  // Integer division can leave a few pixels undistributed. Spread those remainder
+  // pixels one-by-one across the first gaps so a justified line reaches the right
+  // edge exactly instead of ending up to gapCount-1 pixels short.
+  const int justifyRemainder =
+      (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)
+          ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)
+          : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
   visualOrderScratch.clear();
@@ -1398,6 +1405,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     int reorderedWordWidthSum = 0;
     size_t reorderedGapCount = 0;
     int reorderedNaturalGaps = 0;
+    size_t reorderedJustifyGapIndex = 0;
     for (size_t wordIdx = 0; wordIdx < reorderedWidthsScratch.size(); wordIdx++) {
       reorderedWordWidthSum += reorderedWidthsScratch[wordIdx];
       if (wordIdx > 0 && reorderedNoSpaceBeforeScratch[wordIdx]) {
@@ -1424,9 +1432,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     const int reorderedJustifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                           ? computeJustifyExtra(reorderedSpare, reorderedGapCount)
                                           : 0;
+    const int reorderedJustifyRemainder =
+        (effectiveAlignment == CssTextAlign::Justify && !isLastLine && reorderedGapCount > 0)
+            ? reorderedSpare - reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
+            : 0;
 
     const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)
+                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount) +
+                                              reorderedJustifyRemainder
                                         : 0;
     const int contentWidth = reorderedWordWidthSum + reorderedNaturalGaps + justifyContribution;
 
@@ -1461,7 +1474,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         // gap and the last word is pushed past the right margin (issue #2185).
         if (wordIdx > 0 && reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&
             effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-          advance += reorderedJustifyExtra;
+          advance += reorderedJustifyExtra +
+                     (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);
+          reorderedJustifyGapIndex++;
         }
         xpos += advance;
       } else if (wordIdx + 1 < reorderedWidthsScratch.size()) {
@@ -1471,7 +1486,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                                          firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
                                                          reorderedStylesScratch[wordIdx]);
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-          gap += reorderedJustifyExtra;
+          gap += reorderedJustifyExtra +
+                 (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);
+          reorderedJustifyGapIndex++;
         }
         xpos += gap;
       }
@@ -1492,6 +1509,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
       // For Right and Justify, start from right edge (xpos = effectivePageWidth)
 
+      size_t justifyGapIndex = 0;
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
         xpos -= wordWidths[lastBreakAt + wordIdx];
         lineXPos.push_back(static_cast<int16_t>(xpos));
@@ -1504,7 +1522,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           // wordIdx > 0: see the LTR branch — a leading no-break space is not a justifiable gap.
           if (wordIdx > 0 && lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
               effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-            advance += justifyExtra;
+            advance += justifyExtra +
+                       (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
+            justifyGapIndex++;
           }
           xpos -= advance;
         } else {
@@ -1518,7 +1538,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                                  firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-            gap += justifyExtra;
+            gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
+            justifyGapIndex++;
           }
           xpos -= gap;
         }
@@ -1532,6 +1553,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         xpos = (effectivePageWidth - lineWordWidthSum - totalNaturalGaps) / 2;
       }
 
+      size_t justifyGapIndex = 0;
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
         lineXPos.push_back(static_cast<int16_t>(xpos));
 
@@ -1545,7 +1567,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           // gap and the last word is pushed past the right margin (issue #2185).
           if (wordIdx > 0 && lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
               effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-            advance += justifyExtra;
+            advance += justifyExtra +
+                       (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
+            justifyGapIndex++;
           }
           xpos += advance;
         } else {
@@ -1559,7 +1583,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                                  firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
-            gap += justifyExtra;
+            gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
+            justifyGapIndex++;
           }
           xpos += wordWidths[lastBreakAt + wordIdx] + gap;
         }
