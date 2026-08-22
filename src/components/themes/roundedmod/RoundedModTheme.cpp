@@ -1,8 +1,8 @@
 #include "RoundedModTheme.h"
 
-
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -49,20 +49,51 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
 int coverWidth = 0;
 
 void RoundedModTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                                  const char* subtitle) const {
-  if (title == nullptr) return;
-  if (rect.height == RoundedModMetrics::values.homeTopPadding - RoundedModMetrics::values.topPadding) {
-    const int maxWidth = rect.width - 2 * RoundedModMetrics::values.headerSidePadding;
-    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);
-    renderer.drawText(kTitleFontId, rect.x + RoundedModMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),
-                      true, EpdFontFamily::BOLD);
+                                 const char* subtitle) const {
+  (void)subtitle;
+  // Home screen header is custom-rendered in drawRecentBookCover.
+  if (title == nullptr) {
     return;
   }
-  BaseTheme::drawHeader(renderer, rect, title, subtitle);
+  const int sidePadding = RoundedModMetrics::values.contentSidePadding;
+  const int titleX = rect.x + sidePadding;
+  const int titleY = rect.y + 14;
+
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+  const int batteryIconX = rect.x + rect.width - sidePadding - RoundedModMetrics::values.batteryWidth;
+  const Rect batteryRect{batteryIconX, rect.y + 14, RoundedModMetrics::values.batteryWidth,
+                         RoundedModMetrics::values.batteryHeight};
+
+  // Reserve space for the widest possible percentage text to avoid title/battery overlap
+  int batteryGroupLeftX = batteryIconX;
+  if (showBatteryPercentage) {
+    // Clear a fixed-width area for the battery percentage to avoid ghosting when digit count changes (e.g. 100% -> 99%)
+    const int maxTextWidth = renderer.getTextWidth(SMALL_FONT_ID, "100%");
+    batteryGroupLeftX -= maxTextWidth + batteryPercentSpacing;
+
+    const int clearW = maxTextWidth + batteryPercentSpacing + RoundedModMetrics::values.batteryWidth;
+    const int clearH = std::max(renderer.getTextHeight(SMALL_FONT_ID), RoundedModMetrics::values.batteryHeight + 8);
+    renderer.fillRect(batteryIconX - maxTextWidth - batteryPercentSpacing, rect.y + 14, clearW, clearH, false);
+  }
+
+  const int maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
+  auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
+  renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
+
+  const uint16_t batteryPercentage = powerManager.getBatteryPercentage();
+  drawBatteryOutline(renderer, batteryRect.x, batteryRect.y, batteryRect.width, batteryRect.height);
+  fillBatteryIcon(renderer, batteryRect, batteryPercentage);
+  if (showBatteryPercentage) {
+    const std::string percentageText = std::to_string(batteryPercentage) + "%";
+    const int percentageWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, batteryRect.x - batteryPercentSpacing - percentageWidth, batteryRect.y,
+                      percentageText.c_str());
+  }
 }
 
 void RoundedModTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                                  bool selected) const {
+                                 bool selected) const {
   if (tabs.empty()) {
     return;
   }
@@ -92,7 +123,7 @@ void RoundedModTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const s
 }
 
 bool RoundedModTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
-                                         const int x, const int y, int& index) const {
+                                        const int x, const int y, int& index) const {
   (void)renderer;
   if (tabs.empty() || y < rect.y || y >= rect.y + rect.height || x < rect.x || x >= rect.x + rect.width) {
     return false;
@@ -104,8 +135,8 @@ bool RoundedModTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect 
 }
 
 void RoundedModTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
-                                           const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                           bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+                                          const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
+                                          bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const int tileWidth = rect.width - 2 * RoundedModMetrics::values.contentSidePadding;
   const int tileHeight = rect.height;
   const int tileY = rect.y;
@@ -136,8 +167,8 @@ void RoundedModTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, cons
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             coverWidth = bitmap.getWidth();
-            const int coverX = tileX + (tileWidth - coverWidth) / 2;
-            renderer.drawBitmap(bitmap, coverX, imgY, coverWidth, RoundedModMetrics::values.homeCoverHeight);
+            renderer.drawBitmap(bitmap, tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
+                                RoundedModMetrics::values.homeCoverHeight);
             renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                    RoundedModMetrics::values.homeCoverHeight, kCoverRadius,
                                                    Color::LightGray);
@@ -173,8 +204,8 @@ void RoundedModTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, cons
     renderer.fillRectDither(tileX + (tileWidth + coverWidth) / 2, imgY, (tileWidth - coverWidth) / 2,
                             RoundedModMetrics::values.homeCoverHeight, Color::LightGray);
     renderer.fillRoundedRect(tileX, imgY + RoundedModMetrics::values.homeCoverHeight, tileWidth,
-                             tileHeight - (imgY - tileY + RoundedModMetrics::values.homeCoverHeight), kRowRadius,
-                             false, false, true, true, Color::LightGray);
+                             tileHeight - (imgY - tileY + RoundedModMetrics::values.homeCoverHeight), kRowRadius, false,
+                             false, true, true, Color::LightGray);
   } else {
     renderer.fillRoundedRect(tileX, tileY, tileWidth, tileHeight, kRowRadius, Color::LightGray);
     renderer.drawCenteredText(kTitleFontId, rect.y + rect.height / 2 - renderer.getLineHeight(kTitleFontId) / 2,
@@ -182,17 +213,13 @@ void RoundedModTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, cons
   }
 }
 
-int RoundedModTheme::getMenuRowHeight(const GfxRenderer& renderer) const {
-  return renderer.getLineHeight(kTitleFontId) + 20;  // 10px top + 10px bottom
-}
-
 void RoundedModTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                                      const std::function<std::string(int index)>& buttonLabel,
-                                      const std::function<UIIcon(int index)>& rowIcon) const {
+                                     const std::function<std::string(int index)>& buttonLabel,
+                                     const std::function<UIIcon(int index)>& rowIcon) const {
   (void)rowIcon;
   const int sidePadding = RoundedModMetrics::values.contentSidePadding;
   const int rowX = rect.x + sidePadding;
-  const int rowHeight = getMenuRowHeight(renderer);  // shared with HomeActivity's touch grid
+  const int rowHeight = renderer.getLineHeight(kTitleFontId) + 20;  // 10px top + 10px bottom
   const int rowGap = kSelectableRowGap;
   const int rowStep = rowHeight + rowGap;
   const int pageItems = std::max(1, rect.height / rowStep);
@@ -226,7 +253,7 @@ void RoundedModTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butto
 }
 
 void RoundedModTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
-                                     int contentStartX, int contentWidth) const {
+                                    int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int lineY = rect.y + rect.height + lineHeight + metrics.verticalSpacing;
@@ -254,11 +281,11 @@ int RoundedModTheme::getListPageItems(int contentHeight, bool hasSubtitle) const
 }
 
 void RoundedModTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                                const std::function<std::string(int index)>& rowTitle,
-                                const std::function<std::string(int index)>& rowSubtitle,
-                                const std::function<UIIcon(int index)>& rowIcon,
-                                const std::function<std::string(int index)>& rowValue, bool highlightValue,
-                                const std::function<bool(int index)>& rowDimmed) const {
+                               const std::function<std::string(int index)>& rowTitle,
+                               const std::function<std::string(int index)>& rowSubtitle,
+                               const std::function<UIIcon(int index)>& rowIcon,
+                               const std::function<std::string(int index)>& rowValue, bool highlightValue,
+                               const std::function<bool(int index)>& rowDimmed) const {
   (void)rowIcon;
   (void)highlightValue;
   (void)rowDimmed;
@@ -334,7 +361,7 @@ void RoundedModTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemC
 }
 
 void RoundedModTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                                       const char* btn4) const {
+                                      const char* btn4) const {
   if (gpio.hasTouch()) {
     return;
   }

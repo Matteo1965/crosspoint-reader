@@ -2,7 +2,6 @@
 
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
-#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -62,8 +61,6 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const int batteryIconX = rect.x + rect.width - sidePadding - RoundedRaffMetrics::values.batteryWidth;
-  const Rect batteryRect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
-                         RoundedRaffMetrics::values.batteryHeight};
 
   // Reserve space for the widest possible percentage text to avoid title/battery overlap
   int batteryGroupLeftX = batteryIconX;
@@ -80,16 +77,10 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   const int maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
   auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
   renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
-
-  const uint16_t batteryPercentage = powerManager.getBatteryPercentage();
-  drawBatteryOutline(renderer, batteryRect.x, batteryRect.y, batteryRect.width, batteryRect.height);
-  fillBatteryIcon(renderer, batteryRect, batteryPercentage);
-  if (showBatteryPercentage) {
-    const std::string percentageText = std::to_string(batteryPercentage) + "%";
-    const int percentageWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    renderer.drawText(SMALL_FONT_ID, batteryRect.x - batteryPercentSpacing - percentageWidth, batteryRect.y,
-                      percentageText.c_str());
-  }
+  drawBatteryRight(renderer,
+                   Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
+                        RoundedRaffMetrics::values.batteryHeight},
+                   showBatteryPercentage);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
