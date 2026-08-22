@@ -27,28 +27,30 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('lib/Epub/Epub/Section.cpp')
           s = p.read_text()
-          old = '''                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
-                                   sizeof(spec.embeddedStyle) +'''
-          new = '''                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
-                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle) +'''
+          wanted = 'sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle)'
 
-          if new in s:
+          if wanted in s:
               print('Section header static_assert is already fixed.')
           else:
-              if old not in s:
-                  raise SystemExit('Expected Section.cpp marker not found; refusing unsafe edit.')
-              s = s.replace(old, new, 1)
+              pattern = r'(sizeof\(spec\.hungarianHyphenationExtended\) \+\s*\n\s*)(sizeof\(spec\.embeddedStyle\) \+)'
+              replacement = r'\1sizeof(spec.hangingPunctuationLimitPx) + \2'
+              s2, count = re.subn(pattern, replacement, s, count=1)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one Section.cpp static_assert match, found {count}; refusing unsafe edit.')
+              s = s2
               p.write_text(s)
               print('Inserted hangingPunctuationLimitPx into Section header static_assert.')
 
-          # Verify writer/reader and HEADER_SIZE already carry the byte too.
+          # Verify writer, reader, HEADER_SIZE and static_assert all carry the optical-margin byte.
           required = [
               'serialization::writePod(file, spec.hangingPunctuationLimitPx);',
               'serialization::readPod(file, fileHangingPunctuationLimitPx);',
               'sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t)',
+              wanted,
           ]
           for marker in required:
               if marker not in s:
@@ -107,4 +109,4 @@ jobs:
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
 
-# trigger: repair Section header assertion
+# trigger: whitespace-safe Section header repair
