@@ -1,0 +1,230 @@
+name: Build Hungarian 1.6.0rc layout tuning
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-layout-tuning.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply layout tuning
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              s = p.read_text()
+              if new in s:
+                  return
+              assert old in s, f'marker missing in {path}: {old[:120]!r}'
+              p.write_text(s.replace(old, new, 1))
+
+          # Extra paragraph spacing becomes a percentage. 100% is byte-for-byte
+          # equivalent in visual intent to the old lineHeight/2 behavior.
+          replace('src/CrossPointSettings.h',
+                  '  uint8_t extraParagraphSpacing = 1;\n',
+                  '  // Extra paragraph spacing percentage: 0, 25, 50, 75 or 100.\n  uint8_t extraParagraphSpacing = 100;\n')
+
+          replace('src/SettingsListBase.h',
+                  '''        SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,\n                            "extraParagraphSpacing", StrId::STR_CAT_READER)\n            .withTextSettings(),''',
+                  '''        SettingInfo::Value(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing, {0, 100, 25},\n                           "extraParagraphSpacing", StrId::STR_CAT_READER)\n            .withTextSettings(),''')
+
+          # Keep percentage in the render spec/cache so every level has its own layout cache.
+          replace('lib/Epub/Epub/ReaderRenderSpec.h',
+                  '  bool extraParagraphSpacing = false;\n',
+                  '  uint8_t extraParagraphSpacing = 0;\n')
+          replace('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h',
+                  '  bool extraParagraphSpacing;\n',
+                  '  uint8_t extraParagraphSpacing;\n')
+          replace('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h',
+                  '      const float lineCompression, const bool extraParagraphSpacing, const uint8_t paragraphAlignment,\n',
+                  '      const float lineCompression, const uint8_t extraParagraphSpacing, const uint8_t paragraphAlignment,\n')
+          replace('lib/Epub/Epub/ParsedText.h',
+                  '  bool extraParagraphSpacing;\n',
+                  '  uint8_t extraParagraphSpacing;\n')
+          replace('lib/Epub/Epub/ParsedText.h',
+                  '  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,\n',
+                  '  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n')
+
+          # Cache semantic changed from boolean to percentage. Same byte width, new format version.
+          replace('lib/Epub/Epub/Section.cpp',
+                  'constexpr uint8_t SECTION_FILE_VERSION = 41;\n',
+                  'constexpr uint8_t SECTION_FILE_VERSION = 42;\n')
+          replace('lib/Epub/Epub/Section.cpp',
+                  '    bool fileExtraParagraphSpacing;\n',
+                  '    uint8_t fileExtraParagraphSpacing;\n')
+
+          # Migrate old true=1 to 100%, validate only the five supported values.
+          p = Path('src/CrossPointSettings.cpp')
+          s = p.read_text()
+          marker = '''  if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {'''
+          migration = '''  if (extraParagraphSpacing == 1) {\n    // Legacy toggle: ON meant the old lineHeight/2 spacing, now defined as 100%.\n    extraParagraphSpacing = 100;\n    needsResave = true;\n  } else if (extraParagraphSpacing != 0 && extraParagraphSpacing != 25 && extraParagraphSpacing != 50 &&\n             extraParagraphSpacing != 75 && extraParagraphSpacing != 100) {\n    extraParagraphSpacing = 100;\n    needsResave = true;\n  }\n\n'''
+          if migration not in s:
+              assert marker in s
+              s = s.replace(marker, migration + marker, 1)
+          old = '  spec.extraParagraphSpacing = extraParagraphSpacing != 0;\n'
+          new = '  spec.extraParagraphSpacing = extraParagraphSpacing;\n'
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+
+          # Optical-margin cap = 80% of selected physical margin. Store cap in
+          # 4-pixel units in the low nibble so 4..32 px fits beside percent step.
+          old = '''  // Pack percentage step (high nibble: 1=25% .. 4=100%) and pixel cap (low nibble).\n  // At 5 px margin keep one physical pixel untouched; from 10 px upward allow up to 8 px.\n  const uint8_t hangingPixelLimit = screenMargin >= 10 ? 8 : static_cast<uint8_t>(std::max<int>(0, screenMargin - 1));\n  spec.hangingPunctuationLimitPx =\n      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingPixelLimit) : 0;\n'''
+          new = '''  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.\n  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.\n  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);\n  spec.hangingPunctuationLimitPx = hangingPunctuation\n                                       ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits)\n                                       : 0;\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Preserve exactly the old 100% paragraph gap: integer lineHeight/2 first,
+          # then scale that base by the selected percentage.
+          replace('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp',
+                  '''  // Extra paragraph spacing if enabled (default behavior)\n  if (extraParagraphSpacing) {\n    currentPageNextY += lineHeight / 2;\n  }\n''',
+                  '''  // Extra paragraph spacing: 100% equals the legacy lineHeight/2 behavior.\n  if (extraParagraphSpacing) {\n    const int extraBase = lineHeight / 2;\n    currentPageNextY += (extraBase * extraParagraphSpacing + 50) / 100;\n  }\n''')
+
+          # Faster hanging punctuation: no substring allocation and no second full-word
+          # measurement. Measure only the final punctuation glyph/run.
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          old = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t packedSetting) {\n  const uint8_t percentStep = packedSetting >> 4;\n  const uint8_t pixelLimit = packedSetting & 0x0F;\n  if (percentStep == 0 || pixelLimit == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;\n  size_t lastStart = word.size() - 1;\n  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;\n  const int fullAdvance = renderer.getTextAdvanceX(fontId, word.c_str(), style);\n  const std::string prefix = word.substr(0, lastStart);\n  const int prefixAdvance = prefix.empty() ? 0 : renderer.getTextAdvanceX(fontId, prefix.c_str(), style);\n  const int punctuationAdvance = std::max(0, fullAdvance - prefixAdvance);\n  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 4) + 3) / 4;\n  return std::min<int>(pixelLimit, proportionalAdvance);\n}\n'''
+          new = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t packedSetting) {\n  const uint8_t percentStep = packedSetting >> 4;\n  const uint8_t pixelLimit = static_cast<uint8_t>((packedSetting & 0x0F) * 4);\n  if (percentStep == 0 || pixelLimit == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;\n  size_t lastStart = word.size() - 1;\n  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;\n  const int punctuationAdvance = std::max(0, renderer.getTextAdvanceX(fontId, word.c_str() + lastStart, style));\n  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 4) + 3) / 4;\n  return std::min<int>(pixelLimit, proportionalAdvance);\n}\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # Both Layout percentage settings use the standard floating OptionPopup.
+          p = Path('src/activities/settings/TextSettingsActivity.cpp')
+          s = p.read_text()
+          old = '''    case LayoutRow::ParaSpacing:\n      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;\n      SETTINGS.saveToFile();\n      requestUpdate();\n      break;\n'''
+          new = '''    case LayoutRow::ParaSpacing: {\n      std::vector<std::string> options = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};\n      const int cur = SETTINGS.extraParagraphSpacing == 0 ? 0 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25, 1, 4);\n      optionPopup_.show(StrId::STR_EXTRA_SPACING, options, cur, [](int idx) {\n        SETTINGS.extraParagraphSpacing = static_cast<uint8_t>(idx * 25);\n        SETTINGS.saveToFile();\n      });\n      requestUpdate();\n      break;\n    }\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+
+          old = '''    case LayoutRow::HangingPunctuation:\n      switch (SETTINGS.hangingPunctuation) {\n        case 0:\n          SETTINGS.hangingPunctuation = 25;\n          break;\n        case 25:\n          SETTINGS.hangingPunctuation = 50;\n          break;\n        case 50:\n          SETTINGS.hangingPunctuation = 75;\n          break;\n        case 75:\n          SETTINGS.hangingPunctuation = 100;\n          break;\n        default:\n          SETTINGS.hangingPunctuation = 0;\n          break;\n      }\n      SETTINGS.saveToFile();\n      requestUpdate();\n      break;\n'''
+          new = '''    case LayoutRow::HangingPunctuation: {\n      std::vector<std::string> options = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};\n      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 25, 1, 4);\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation",\n                        options.data() ? nullptr : nullptr, 0, 0, nullptr);\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation",\n                        nullptr, 0, 0, nullptr);\n      requestUpdate();\n      break;\n    }\n'''
+          # Use the const-char* overload with a stable local C-string array; replace
+          # the placeholder above immediately with the final implementation.
+          final = '''    case LayoutRow::HangingPunctuation: {\n      const char* options[] = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};\n      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 25, 1, 4);\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation", options, 5, cur,\n                        [](int idx) {\n                          SETTINGS.hangingPunctuation = static_cast<uint8_t>(idx * 25);\n                          SETTINGS.saveToFile();\n                        });\n      requestUpdate();\n      break;\n    }\n'''
+          if final not in s:
+              assert old in s
+              s = s.replace(old, final, 1)
+
+          old = '''    case LayoutRow::ParaSpacing:\n      return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);\n'''
+          new = '''    case LayoutRow::ParaSpacing:\n      return SETTINGS.extraParagraphSpacing ? std::to_string(SETTINGS.extraParagraphSpacing) + "%" : tr(STR_STATE_OFF);\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+
+          # Both are pickers, only ParaSpacing used to be a toggle in the button hint.
+          old = '''      // Paragraph spacing toggles; optical margin cycles through selectable percentages.\n      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);\n'''
+          new = '''      // Layout rows use pickers except no remaining toggle-only row here.\n      return tr(STR_SELECT);\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          grep -q 'SECTION_FILE_VERSION = 42' lib/Epub/Epub/Section.cpp
+          grep -q 'uint8_t extraParagraphSpacing' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'hangingLimitUnits' src/CrossPointSettings.cpp
+          grep -q 'extraBase \* extraParagraphSpacing' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'word.c_str() + lastStart' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Optikai margó' src/activities/settings/TextSettingsActivity.cpp
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp src/SettingsListBase.h \
+                  lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp lib/Epub/Epub/ParsedText.h \
+                  lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h \
+                  lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp src/activities/settings/TextSettingsActivity.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Tune paragraph spacing and optical margin layout'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
+
+      - name: Normalize formatting and commit
+        run: |
+          ./bin/clang-format-fix
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp src/SettingsListBase.h \
+                  lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp lib/Epub/Epub/ParsedText.h \
+                  lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h \
+                  lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp src/activities/settings/TextSettingsActivity.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Format layout tuning changes'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists(): raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-layout-tuning
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
