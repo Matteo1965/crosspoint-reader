@@ -275,9 +275,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   // Pack percentage step (high nibble: 1=25% .. 4=100%) and pixel cap (low nibble).
   // At 5 px margin keep one physical pixel untouched; from 10 px upward allow up to 8 px.
   const uint8_t hangingPixelLimit = screenMargin >= 10 ? 8 : static_cast<uint8_t>(std::max<int>(0, screenMargin - 1));
-  spec.hangingPunctuationLimitPx = hangingPunctuation
-                                       ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingPixelLimit)
-                                       : 0;
+  spec.hangingPunctuationLimitPx =
+      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingPixelLimit) : 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;

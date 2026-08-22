@@ -502,8 +502,8 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::HungarianHyphenation ||
-         row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
+  return row == StyleRow::Hyphenation || row == StyleRow::HungarianHyphenation || row == StyleRow::EmbeddedStyle ||
+         row == StyleRow::AntiAliasing;
 }
 
 void TextSettingsActivity::switchTab(const int direction) {
