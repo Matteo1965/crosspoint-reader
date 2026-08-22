@@ -1,0 +1,108 @@
+name: Fix Section header and build Hungarian 1.6.0rc
+
+on:
+  push:
+    branches:
+      - agent/hungarian-integrated-v1.6.0rc
+    paths:
+      - .github/workflows/fix-section-header-and-build.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out Hungarian 1.6.0rc branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Fix Section header static_assert
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/Epub/Epub/Section.cpp')
+          s = p.read_text()
+          old = '''                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
+                                   sizeof(spec.embeddedStyle) +'''
+          new = '''                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
+                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle) +'''
+
+          if new in s:
+              print('Section header static_assert is already fixed.')
+          else:
+              if old not in s:
+                  raise SystemExit('Expected Section.cpp marker not found; refusing unsafe edit.')
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+              print('Inserted hangingPunctuationLimitPx into Section header static_assert.')
+
+          # Verify writer/reader and HEADER_SIZE already carry the byte too.
+          required = [
+              'serialization::writePod(file, spec.hangingPunctuationLimitPx);',
+              'serialization::readPod(file, fileHangingPunctuationLimitPx);',
+              'sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t)',
+          ]
+          for marker in required:
+              if marker not in s:
+                  raise SystemExit(f'Required header marker missing: {marker}')
+          PY
+
+          git diff --check
+          grep -q 'sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle)' lib/Epub/Epub/Section.cpp
+
+      - name: Commit Section header fix
+        run: |
+          if git diff --quiet -- lib/Epub/Epub/Section.cpp; then
+            echo "No Section.cpp change to commit"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add lib/Epub/Epub/Section.cpp
+            git commit -m "Fix Section header size assertion for optical margin"
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload fixed Hungarian X4 firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-section-header-fixed
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
