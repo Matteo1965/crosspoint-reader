@@ -1,0 +1,175 @@
+name: Build Hungarian 1.6.0rc RoundedMod restore
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-roundedmod-restore.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Restore pre-split custom theme as RoundedMod
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Find the commit where RoundedMod was first split out. Its parent is
+          # the last integrated source that still contained the user's modified
+          # RoundedRaff theme under its original name.
+          split_commit="$(git log --all --grep='Split RoundedMod theme' -1 --format='%H')"
+          if [ -z "$split_commit" ]; then
+            echo 'Could not locate the original RoundedMod split commit.' >&2
+            exit 1
+          fi
+          source_commit="${split_commit}^"
+          echo "Restoring custom theme from: $source_commit"
+
+          mkdir -p src/components/themes/roundedmod
+          git show "$source_commit:src/components/themes/roundedraff/RoundedRaffTheme.h" > /tmp/RoundedModTheme.h
+          git show "$source_commit:src/components/themes/roundedraff/RoundedRaffTheme.cpp" > /tmp/RoundedModTheme.cpp
+
+          sed -i 's/RoundedRaff/RoundedMod/g' /tmp/RoundedModTheme.h /tmp/RoundedModTheme.cpp
+          mv /tmp/RoundedModTheme.h src/components/themes/roundedmod/RoundedModTheme.h
+          mv /tmp/RoundedModTheme.cpp src/components/themes/roundedmod/RoundedModTheme.cpp
+
+          # Adapt only the battery rendering to the current BaseTheme API.
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/components/themes/roundedmod/RoundedModTheme.cpp')
+          s = p.read_text()
+          if '#include <HalPowerManager.h>' not in s:
+              s = s.replace('#include <HalGPIO.h>\n', '#include <HalGPIO.h>\n#include <HalPowerManager.h>\n', 1)
+
+          old = '''  drawBatteryRight(renderer,\n                   Rect{batteryIconX, rect.y + 14, RoundedModMetrics::values.batteryWidth,\n                        RoundedModMetrics::values.batteryHeight},\n                   showBatteryPercentage);'''
+          new = '''  const Rect batteryRect{batteryIconX, rect.y + 14, RoundedModMetrics::values.batteryWidth,\n                         RoundedModMetrics::values.batteryHeight};\n  const uint16_t batteryPercentage = powerManager.getBatteryPercentage();\n  drawBatteryOutline(renderer, batteryRect.x, batteryRect.y, batteryRect.width, batteryRect.height);\n  fillBatteryIcon(renderer, batteryRect, batteryPercentage);\n  if (showBatteryPercentage) {\n    const std::string percentageText = std::to_string(batteryPercentage) + "%";\n    const int percentageWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());\n    renderer.drawText(SMALL_FONT_ID, batteryRect.x - batteryPercentSpacing - percentageWidth, batteryRect.y,\n                      percentageText.c_str());\n  }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          elif 'drawBatteryRight(' in s:
+              raise SystemExit('Unexpected drawBatteryRight form in restored RoundedMod')
+          p.write_text(s)
+
+          # Ensure coverWidth is file-local in both themes to avoid linker collisions.
+          for path in [
+              Path('src/components/themes/roundedmod/RoundedModTheme.cpp'),
+              Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp'),
+          ]:
+              text = path.read_text()
+              if '\nint coverWidth = 0;\n\n}  // namespace\n' not in text:
+                  text = text.replace('\n}  // namespace\nint coverWidth = 0;\n', '\nint coverWidth = 0;\n\n}  // namespace\n', 1)
+              path.write_text(text)
+          PY
+
+      - name: Fix theme picker names
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/SettingsListBase.h')
+          s = p.read_text()
+
+          # Keep enum IDs stable, but force distinct visible names for slots 3/4.
+          if 'buildUiThemeSetting()' in s:
+              start = s.index('inline SettingInfo buildUiThemeSetting()')
+              end = s.index('inline std::vector<StrId> buildLongPressMenuValues()', start)
+              helper = '''inline SettingInfo buildUiThemeSetting() {\n  SettingInfo s = SettingInfo::Enum(\n      StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,\n      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,\n       StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_ROUNDEDRAFF},\n      "uiTheme", StrId::STR_CAT_DISPLAY);\n  s.enumStringValues = {I18N.get(StrId::STR_THEME_CLASSIC), I18N.get(StrId::STR_THEME_LYRA),\n                        I18N.get(StrId::STR_THEME_LYRA_EXTENDED), "RoundedMod", "RoundedRaff"};\n  return s;\n}\n\n'''
+              s = s[:start] + helper + s[end:]
+          else:
+              marker = 'inline std::vector<StrId> buildLongPressMenuValues() {'
+              helper = '''inline SettingInfo buildUiThemeSetting() {\n  SettingInfo s = SettingInfo::Enum(\n      StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,\n      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,\n       StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_ROUNDEDRAFF},\n      "uiTheme", StrId::STR_CAT_DISPLAY);\n  s.enumStringValues = {I18N.get(StrId::STR_THEME_CLASSIC), I18N.get(StrId::STR_THEME_LYRA),\n                        I18N.get(StrId::STR_THEME_LYRA_EXTENDED), "RoundedMod", "RoundedRaff"};\n  return s;\n}\n\n'''
+              if marker not in s:
+                  raise SystemExit('Theme settings insertion marker not found')
+              s = s.replace(marker, helper + marker, 1)
+          p.write_text(s)
+          PY
+
+      - name: Verify theme separation
+        run: |
+          set -euo pipefail
+          grep -q 'class RoundedModTheme' src/components/themes/roundedmod/RoundedModTheme.h
+          grep -q 'class RoundedRaffTheme' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q '"RoundedMod", "RoundedRaff"' src/SettingsListBase.h
+          grep -q 'UI_THEME::ROUNDEDMOD' src/components/UITheme.cpp
+          echo 'RoundedMod and RoundedRaff are distinct and wired separately.'
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
+
+      - name: Normalize formatting and persist fix
+        run: |
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/themes/roundedmod src/components/themes/roundedraff/RoundedRaffTheme.cpp src/SettingsListBase.h
+          if ! git diff --cached --quiet; then
+            git commit -m 'Restore custom RoundedMod and keep original RoundedRaff'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-roundedmod-restored
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
