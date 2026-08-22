@@ -35,7 +35,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
 
   ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
-                    SETTINGS.focusReadingEnabled != 0, style);
+                    SETTINGS.focusReadingEnabled != 0, 0, style);
 
   // Feed one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting
   const char* text = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
@@ -79,47 +79,17 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
-  const int textLeft = left + SETTINGS.screenMargin;
-  const int textWidth = width - 2 * SETTINGS.screenMargin;
-  if (textWidth <= 0) return;
+  const int textTop = top + previewPadding;
+  const int textBottom = top + height - labelReserved;
+  if (textBottom <= textTop) return;
 
-  const float compression = SETTINGS.getReaderLineCompression();
-  const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
-  const int paragraphGap = SETTINGS.extraParagraphSpacing ? lineAdvance / 2 : 0;
+  relayout(layout, renderer, fontId, width);
 
-  // Re-lay-out (and re-prewarm glyphs) only when a layout-affecting setting or the
-  // geometry changed; else reuse the cache. The prewarm inputs are (fontId, constant
-  // sample text, styleMask<-focusReading), all of which are key fields, so a matching
-  // key means an identical prewarm call. This relies on nothing else evicting the SD
-  // glyph cache while this activity is up — true today: the only evictor is
-  // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
-  const PreviewKey key{.fontId = fontId,
-                       .fontPointSize = SETTINGS.fontPointSize,
-                       .screenMargin = SETTINGS.screenMargin,
-                       .textWidth = textWidth,
-                       .lineCompression = compression,
-                       .alignment = SETTINGS.paragraphAlignment,
-                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
-                       .focusReading = SETTINGS.focusReadingEnabled != 0,
-                       .hyphenation = SETTINGS.hyphenationEnabled != 0};
-  if (key != layout.key) {
-    if (auto* fcm = renderer.getFontCacheManager()) {
-      fcm->prewarmCache(fontId, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
-    }
-    relayout(layout, renderer, fontId, textWidth);
-    layout.key = key;
-  }
-
-  // Draw the sample twice so the paragraph gap is visible
-  int y = top + previewPadding;
-  const int textBottomLimit = top + height - labelReserved;
-  for (int paragraph = 0; paragraph < 2; paragraph++) {
-    for (const auto& line : layout.lines) {
-      if (y + lineH > textBottomLimit) return;
-      line->render(renderer, fontId, textLeft, y);
-      y += lineAdvance;
-    }
-    y += paragraphGap;
+  int y = textTop;
+  for (const auto& line : layout.lines) {
+    if (!line || y + lineH > textBottom) break;
+    line->render(renderer, fontId, left, y);
+    y += lineH;
   }
 }
 
