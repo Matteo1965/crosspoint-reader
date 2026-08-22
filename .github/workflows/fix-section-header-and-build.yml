@@ -106,3 +106,5 @@ jobs:
           name: crosspoint-hungarian-1.6.0rc-x4-section-header-fixed
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
+
+# trigger: repair Section header assertion
