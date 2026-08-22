@@ -75,9 +75,6 @@ jobs:
           assert old in s
           s = s.replace(old, new, 1)
 
-          old = '''  if (focusPresent) {\n    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);\n'''
-          new = '''  if (focusPresent) {\n    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);\n'''
-          # keep marker only; append refresh after focus block
           focus_end = '''      boundary[i] = focusBoundary[i];\n    }\n  }\n}\n\nbool TextBlock::hasRuby() const {'''
           repl = '''      boundary[i] = focusBoundary[i];\n    }\n  }\n  refreshRenderFlags();\n}\n\nbool TextBlock::hasRuby() const {'''
           assert focus_end in s
@@ -133,13 +130,12 @@ jobs:
           echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
           sudo apt-get update -qq
           sudo apt-get install -y clang-format-21
-          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
 
       - name: Format and persist optimization
         shell: bash
         run: |
           set -euo pipefail
-          clang-format -i lib/Epub/Epub/blocks/TextBlock.h lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/Section.cpp
+          /usr/bin/clang-format-21 -i lib/Epub/Epub/blocks/TextBlock.h lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/Section.cpp
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
