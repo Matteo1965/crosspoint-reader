@@ -1,0 +1,181 @@
+name: Build Hungarian 1.6.0rc RoundedMod + performance
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-v1.6.0rc-roundedmod-performance.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian branch
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Restore original RoundedRaff and create RoundedMod
+        run: |
+          set -euo pipefail
+          mkdir -p src/components/themes/roundedmod
+          cp src/components/themes/roundedraff/RoundedRaffTheme.h /tmp/RoundedModTheme.h
+          cp src/components/themes/roundedraff/RoundedRaffTheme.cpp /tmp/RoundedModTheme.cpp
+          sed -i 's/RoundedRaff/RoundedMod/g' /tmp/RoundedModTheme.h /tmp/RoundedModTheme.cpp
+          mv /tmp/RoundedModTheme.h src/components/themes/roundedmod/RoundedModTheme.h
+          mv /tmp/RoundedModTheme.cpp src/components/themes/roundedmod/RoundedModTheme.cpp
+
+          curl -fsSL https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/66abde5/src/components/themes/roundedraff/RoundedRaffTheme.h \
+            -o src/components/themes/roundedraff/RoundedRaffTheme.h
+          curl -fsSL https://raw.githubusercontent.com/crosspoint-reader/crosspoint-reader/66abde5/src/components/themes/roundedraff/RoundedRaffTheme.cpp \
+            -o src/components/themes/roundedraff/RoundedRaffTheme.cpp
+
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              s = p.read_text()
+              if new in s:
+                  return
+              assert old in s, f'marker missing in {path}: {old[:120]!r}'
+              p.write_text(s.replace(old, new, count))
+
+          replace('src/CrossPointSettings.h',
+                  '  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };',
+                  '  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDMOD = 3, ROUNDEDRAFF = 4 };')
+
+          p = Path('src/components/UITheme.cpp')
+          s = p.read_text()
+          inc = '#include "components/themes/roundedmod/RoundedModTheme.h"\n'
+          if inc not in s:
+              marker = '#include "components/themes/roundedraff/RoundedRaffTheme.h"\n'
+              assert marker in s
+              s = s.replace(marker, marker + inc, 1)
+          old = '''    case CrossPointSettings::UI_THEME::ROUNDEDRAFF:\n      LOG_DBG("UI", "Using RoundedRaff theme");\n      currentTheme = std::make_unique<RoundedRaffTheme>();\n      currentMetrics = &RoundedRaffMetrics::values;\n      break;\n'''
+          new = '''    case CrossPointSettings::UI_THEME::ROUNDEDMOD:\n      LOG_DBG("UI", "Using RoundedMod theme");\n      currentTheme = std::make_unique<RoundedModTheme>();\n      currentMetrics = &RoundedModMetrics::values;\n      break;\n    case CrossPointSettings::UI_THEME::ROUNDEDRAFF:\n      LOG_DBG("UI", "Using original RoundedRaff theme");\n      currentTheme = std::make_unique<RoundedRaffTheme>();\n      currentMetrics = &RoundedRaffMetrics::values;\n      break;\n'''
+          if 'UI_THEME::ROUNDEDMOD' not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('src/SettingsListBase.h')
+          s = p.read_text()
+          helper = '''inline SettingInfo buildUiThemeSetting() {\n  SettingInfo s = SettingInfo::Enum(\n      StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,\n      {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,\n       StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_ROUNDEDRAFF},\n      "uiTheme", StrId::STR_CAT_DISPLAY);\n  s.enumStringValues = {I18N.get(StrId::STR_THEME_CLASSIC), I18N.get(StrId::STR_THEME_LYRA),\n                        I18N.get(StrId::STR_THEME_LYRA_EXTENDED), "RoundedMod", "RoundedRaff"};\n  return s;\n}\n\n'''
+          marker = 'inline std::vector<StrId> buildLongPressMenuValues() {'
+          if 'buildUiThemeSetting()' not in s:
+              assert marker in s
+              s = s.replace(marker, helper + marker, 1)
+          old = '''        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,\n                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,\n                           StrId::STR_THEME_ROUNDEDRAFF},\n                          "uiTheme", StrId::STR_CAT_DISPLAY),\n'''
+          if old in s:
+              s = s.replace(old, '        buildUiThemeSetting(),\n', 1)
+          p.write_text(s)
+          PY
+
+      - name: Apply preview and hanging-punctuation performance optimizations
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/activities/settings/TextSettingsPreview.cpp')
+          s = p.read_text()
+          old = '  relayout(layout, renderer, fontId, width);\n\n  int y = textTop;'
+          new = '''  const PreviewKey key{.fontId = fontId,\n                       .fontPointSize = SETTINGS.fontPointSize,\n                       .screenMargin = SETTINGS.screenMargin,\n                       .textWidth = width,\n                       .lineCompression = SETTINGS.getReaderLineCompression(),\n                       .alignment = SETTINGS.paragraphAlignment,\n                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,\n                       .focusReading = SETTINGS.focusReadingEnabled != 0,\n                       .hyphenation = SETTINGS.hyphenationEnabled != 0};\n  if (!(layout.key == key)) {\n    relayout(layout, renderer, fontId, width);\n    layout.key = key;\n  }\n\n  int y = textTop;'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          if '#include <array>\n' not in s:
+              s = s.replace('#include <algorithm>\n', '#include <algorithm>\n#include <array>\n', 1)
+          marker = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t packedSetting) {\n'''
+          helper = '''struct HangingAdvanceCacheEntry {\n  int fontId = -1;\n  uint8_t style = 0;\n  uint32_t codepoint = 0;\n  uint16_t advance = 0;\n};\n\nint cachedHangingPunctuationAdvance(const GfxRenderer& renderer, const int fontId,\n                                    const EpdFontFamily::Style style, const uint32_t codepoint,\n                                    const char* glyphText) {\n  static std::array<HangingAdvanceCacheEntry, 16> cache{};\n  static uint8_t nextSlot = 0;\n  const uint8_t styleKey = static_cast<uint8_t>(style);\n  for (const auto& entry : cache) {\n    if (entry.fontId == fontId && entry.style == styleKey && entry.codepoint == codepoint) return entry.advance;\n  }\n  const uint16_t advance = static_cast<uint16_t>(std::max(0, renderer.getTextAdvanceX(fontId, glyphText, style)));\n  cache[nextSlot] = {fontId, styleKey, codepoint, advance};\n  nextSlot = static_cast<uint8_t>((nextSlot + 1) % cache.size());\n  return advance;\n}\n\n'''
+          if 'cachedHangingPunctuationAdvance' not in s:
+              assert marker in s
+              s = s.replace(marker, helper + marker, 1)
+          old = '''  const uint8_t percentStep = packedSetting >> 4;\n  const uint8_t pixelLimit = static_cast<uint8_t>((packedSetting & 0x0F) * 4);\n  if (percentStep == 0 || pixelLimit == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;\n  size_t lastStart = word.size() - 1;\n  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;\n  const int punctuationAdvance = std::max(0, renderer.getTextAdvanceX(fontId, word.c_str() + lastStart, style));\n'''
+          new = '''  const uint8_t percentStep = packedSetting >> 4;\n  const uint8_t pixelLimit = static_cast<uint8_t>((packedSetting & 0x0F) * 4);\n  if (percentStep == 0 || pixelLimit == 0 || word.empty()) return 0;\n  const uint32_t punctuation = lastCodepoint(word);\n  if (!isHangingPunctuation(punctuation)) return 0;\n  size_t lastStart = word.size() - 1;\n  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;\n  const int punctuationAdvance =\n      cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, word.c_str() + lastStart);\n'''
+          if new not in s:
+              assert old in s
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+          sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-21 100
+
+      - name: Normalize formatting and commit
+        run: |
+          ./bin/clang-format-fix
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.h src/SettingsListBase.h src/components/UITheme.cpp \
+                  src/components/themes/roundedraff src/components/themes/roundedmod \
+                  src/activities/settings/TextSettingsPreview.cpp lib/Epub/Epub/ParsedText.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Split RoundedMod theme and optimize reader settings performance'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists(): raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-roundedmod-performance
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
