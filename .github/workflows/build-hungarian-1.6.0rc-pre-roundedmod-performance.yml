@@ -27,40 +27,41 @@ jobs:
         run: |
           set -euo pipefail
 
-          split_commit="$(git log --all --grep='Split RoundedMod theme' -1 --format='%H')"
-          if [ -z "$split_commit" ]; then
-            echo 'Could not locate the original RoundedMod split commit.' >&2
-            exit 1
-          fi
-          source_commit="${split_commit}^"
-          echo "Restoring pre-RoundedMod theme state from: $source_commit"
+          # Exact parent of the first commit that introduced RoundedMod.
+          # Performance files are intentionally NOT restored from this commit.
+          pre_theme_commit='2ae590c7d9c855b38aea16d487568cfe32c979bb'
+          echo "Restoring pre-RoundedMod theme state from: $pre_theme_commit"
 
-          # Restore exactly the theme-related source files from immediately
-          # before RoundedMod was introduced. Performance files are NOT reverted.
-          git checkout "$source_commit" -- \
+          git checkout "$pre_theme_commit" -- \
             src/CrossPointSettings.h \
             src/SettingsListBase.h \
             src/components/UITheme.cpp \
             src/components/themes/roundedraff/RoundedRaffTheme.h \
             src/components/themes/roundedraff/RoundedRaffTheme.cpp
 
-          # Remove all files introduced only for RoundedMod / RoundedRaff compatibility.
           rm -rf src/components/themes/roundedmod
           rm -f src/components/themes/roundedraff/RoundedRaffBatteryCompat.cpp
 
           echo 'Theme files restored.'
 
-      - name: Verify original modified RoundedRaff only
+      - name: Verify modified RoundedRaff only
         shell: bash
         run: |
           set -euo pipefail
           test ! -d src/components/themes/roundedmod
-          ! grep -R "ROUNDEDMOD\|RoundedMod" -n \
+          if grep -R -n -E 'ROUNDEDMOD|RoundedMod' \
               src/CrossPointSettings.h src/SettingsListBase.h src/components/UITheme.cpp \
-              src/components/themes/roundedraff
+              src/components/themes/roundedraff; then
+            echo 'ERROR: RoundedMod reference remains after rollback.' >&2
+            exit 1
+          fi
           grep -q 'ROUNDEDRAFF' src/CrossPointSettings.h
           grep -q 'RoundedRaffTheme' src/components/UITheme.cpp
-          echo 'RoundedMod removed; modified RoundedRaff is the only Rounded theme.'
+          if grep -q 'HalPowerManager\|drawBatteryOutline\|fillBatteryIcon' src/components/themes/roundedraff/RoundedRaffTheme.cpp; then
+            echo 'ERROR: battery-icon restoration code is still present in RoundedRaff.' >&2
+            exit 1
+          fi
+          echo 'RoundedMod removed; pre-split modified RoundedRaff restored.'
 
       - name: Verify performance optimizations remain
         shell: bash
@@ -84,11 +85,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          clang-format-21 -i \
+            src/CrossPointSettings.h \
+            src/SettingsListBase.h \
+            src/components/UITheme.cpp \
+            src/components/themes/roundedraff/RoundedRaffTheme.h \
+            src/components/themes/roundedraff/RoundedRaffTheme.cpp
           git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A \
+          git add -A -- \
             src/CrossPointSettings.h \
             src/SettingsListBase.h \
             src/components/UITheme.cpp \
@@ -98,6 +104,20 @@ jobs:
             git commit -m 'Revert to modified RoundedRaff before theme split'
             git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
           fi
+
+      - name: Re-verify persisted source state
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -d src/components/themes/roundedmod
+          if grep -R -n -E 'ROUNDEDMOD|RoundedMod' \
+              src/CrossPointSettings.h src/SettingsListBase.h src/components/UITheme.cpp \
+              src/components/themes/roundedraff; then
+            echo 'ERROR: RoundedMod reference remains in persisted source.' >&2
+            exit 1
+          fi
+          grep -q 'PreviewKey' src/activities/settings/TextSettingsPreview.cpp
+          grep -q 'cachedHangingPunctuationAdvance' lib/Epub/Epub/ParsedText.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
