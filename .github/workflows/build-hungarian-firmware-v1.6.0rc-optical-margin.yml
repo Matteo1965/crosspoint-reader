@@ -1,0 +1,276 @@
+name: Build Hungarian firmware 1.6.0rc + Optical margin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-optical-margin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+
+      - name: Add hanging punctuation feature
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def patch(path, old, new, count=1):
+              p = Path(path)
+              s = p.read_text()
+              if new in s:
+                  return
+              assert old in s, f"marker missing in {path}: {old[:80]!r}"
+              p.write_text(s.replace(old, new, count))
+
+          # Persisted reader setting (default OFF).
+          patch('src/CrossPointSettings.h',
+                '  uint8_t paragraphAlignment = JUSTIFIED;\n',
+                '  uint8_t paragraphAlignment = JUSTIFIED;\n  // Optical margin / hanging punctuation (0 = off, 1 = on).\n  uint8_t hangingPunctuation = 0;\n')
+
+          patch('src/CrossPointSettings.cpp',
+                '  doc["fontSize"] = fontPointSize;\n',
+                '  doc["fontSize"] = fontPointSize;\n  doc["hangingPunctuation"] = hangingPunctuation;\n')
+          patch('src/CrossPointSettings.cpp',
+                '  fontPointSize = storedFontSize;\n',
+                '  fontPointSize = storedFontSize;\n  hangingPunctuation = clamp(doc["hangingPunctuation"] | (uint8_t)0, (uint8_t)2, (uint8_t)0);\n')
+          patch('src/CrossPointSettings.cpp',
+                '  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;\n',
+                '  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;\n  // Keep at least one physical margin pixel untouched; cap optical overhang at 6 px.\n  spec.hangingPunctuationLimitPx = hangingPunctuation\n                                       ? static_cast<uint8_t>(std::min<int>(6, std::max<int>(0, screenMargin - 1)))\n                                       : 0;\n')
+
+          patch('lib/Epub/Epub/ReaderRenderSpec.h',
+                '  bool hungarianHyphenationExtended = false;\n',
+                '  bool hungarianHyphenationExtended = false;\n  // 0 disables hanging punctuation; otherwise maximum overhang into the physical margin.\n  uint8_t hangingPunctuationLimitPx = 0;\n')
+
+          # Carry the value through the section cache/header; bump cache format.
+          p = Path('lib/Epub/Epub/Section.cpp')
+          s = p.read_text()
+          if 'SECTION_FILE_VERSION = 41' not in s:
+              s = s.replace('constexpr uint8_t SECTION_FILE_VERSION = 40;', 'constexpr uint8_t SECTION_FILE_VERSION = 41;')
+              s = s.replace('sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +\n                                 sizeof(spec.embeddedStyle)',
+                            'sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +\n                                 sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle)', 1)
+              s = s.replace('  serialization::writePod(file, spec.hungarianHyphenationExtended);\n  serialization::writePod(file, spec.embeddedStyle);',
+                            '  serialization::writePod(file, spec.hungarianHyphenationExtended);\n  serialization::writePod(file, spec.hangingPunctuationLimitPx);\n  serialization::writePod(file, spec.embeddedStyle);', 1)
+              s = s.replace('    bool fileHungarianHyphenationExtended;\n    bool fileEmbeddedStyle;',
+                            '    bool fileHungarianHyphenationExtended;\n    uint8_t fileHangingPunctuationLimitPx;\n    bool fileEmbeddedStyle;', 1)
+              s = s.replace('    serialization::readPod(file, fileHungarianHyphenationExtended);\n    serialization::readPod(file, fileEmbeddedStyle);',
+                            '    serialization::readPod(file, fileHungarianHyphenationExtended);\n    serialization::readPod(file, fileHangingPunctuationLimitPx);\n    serialization::readPod(file, fileEmbeddedStyle);', 1)
+              s = s.replace('        spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||\n        spec.embeddedStyle != fileEmbeddedStyle',
+                            '        spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||\n        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||\n        spec.embeddedStyle != fileEmbeddedStyle', 1)
+              s = s.replace('      spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,\n      spec.focusReadingEnabled,',
+                            '      spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,\n      spec.focusReadingEnabled, spec.hangingPunctuationLimitPx,', 1)
+              # HEADER_SIZE contains one bool slot per cached setting. Add one uint8_t for optical margin.
+              old = 'sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +\n                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);'
+              new = 'sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t) +\n                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);'
+              assert old in s
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+
+          # Parser -> ParsedText propagation.
+          patch('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h',
+                '  bool focusReadingEnabled;\n',
+                '  bool focusReadingEnabled;\n  uint8_t hangingPunctuationLimitPx;\n')
+          patch('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h',
+                '      const bool focusReadingEnabled,\n      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,',
+                '      const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx,\n      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,')
+          patch('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h',
+                '        focusReadingEnabled(focusReadingEnabled),\n        completePageFn(completePageFn),',
+                '        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        completePageFn(completePageFn),')
+          patch('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp',
+                '  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));',
+                '  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,\n                                        hangingPunctuationLimitPx, blockStyle));')
+
+          patch('lib/Epub/Epub/ParsedText.h',
+                '  bool focusReadingEnabled;\n',
+                '  bool focusReadingEnabled;\n  uint8_t hangingPunctuationLimitPx;\n')
+          patch('lib/Epub/Epub/ParsedText.h',
+                '  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle())\n',
+                '  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,\n                      const BlockStyle& blockStyle = BlockStyle())\n')
+          patch('lib/Epub/Epub/ParsedText.h',
+                '        focusReadingEnabled(focusReadingEnabled),\n        isNaturalAlign(false),',
+                '        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        isNaturalAlign(false),')
+
+          # 50% optical overhang for supported punctuation. The allowance is added only
+          # to justified LTR, non-final lines, so the normal line-break choice is unchanged.
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          if 'hangingPunctuationAllowance' not in s:
+              marker = '''int computeJustifyExtra(const int spareSpace, const size_t gapCount) {\n  if (gapCount < MIN_JUSTIFY_GAPS || spareSpace <= 0) return 0;'''
+              helper = '''bool isHangingPunctuation(const uint32_t cp) {\n  switch (cp) {\n    case '.':\n    case ',':\n    case ';':\n    case ':':\n    case '!':\n    case '?':\n    case '-':\n    case 0x2019:  // ’\n    case 0x201D:  // ”\n    case 0x00BB:  // »\n      return true;\n    default:\n      return false;\n  }\n}\n\nint hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t limitPx) {\n  if (limitPx == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;\n  size_t lastStart = word.size() - 1;\n  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;\n  const int fullAdvance = renderer.getTextAdvanceX(fontId, word.c_str(), style);\n  const std::string prefix = word.substr(0, lastStart);\n  const int prefixAdvance = prefix.empty() ? 0 : renderer.getTextAdvanceX(fontId, prefix.c_str(), style);\n  const int punctuationAdvance = std::max(0, fullAdvance - prefixAdvance);\n  const int halfAdvance = (punctuationAdvance + 1) / 2;\n  return std::min<int>(limitPx, halfAdvance);\n}\n\n'''
+              assert marker in s
+              s = s.replace(marker, helper + marker, 1)
+
+              old = '  const int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;'
+              new = '''  const int hangingAllowance =\n      (hangingPunctuationLimitPx > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&\n       !blockStyle.isRtl && !lineWords.empty())\n          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(),\n                                        hangingPunctuationLimitPx)\n          : 0;\n  const int spareSpace = effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset -\n                         lineWordWidthSum - totalNaturalGaps;'''
+              assert old in s
+              s = s.replace(old, new, 1)
+
+              old = '''    const int reorderedSpare =\n        effectivePageWidth - extraStartOffset - extraEndOffset - reorderedWordWidthSum - reorderedNaturalGaps;'''
+              new = '''    const int reorderedHangingAllowance =\n        (hangingPunctuationLimitPx > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&\n         !blockStyle.isRtl && !reorderedWordsScratch.empty())\n            ? hangingPunctuationAllowance(renderer, fontId, reorderedWordsScratch.back(), reorderedStylesScratch.back(),\n                                          hangingPunctuationLimitPx)\n            : 0;\n    const int reorderedSpare = effectivePageWidth + reorderedHangingAllowance - extraStartOffset - extraEndOffset -\n                               reorderedWordWidthSum - reorderedNaturalGaps;'''
+              assert old in s
+              s = s.replace(old, new, 1)
+              p.write_text(s)
+
+          # Layout menu: fifth row, toggle, localized HU/EN label without adding global i18n keys.
+          patch('src/activities/settings/TextSettingsActivity.h',
+                '  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, Count };',
+                '  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, HangingPunctuation, Count };')
+
+          p = Path('src/activities/settings/TextSettingsActivity.cpp')
+          s = p.read_text()
+          if 'LayoutRow::HangingPunctuation' not in s:
+              s = s.replace('''      case Tab::Layout:\n        item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);\n        break;''',
+                            '''      case Tab::Layout:\n        item.label = i == static_cast<int>(LayoutRow::HangingPunctuation)\n                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation")\n                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);\n        break;''', 1)
+              s = s.replace('''      // Extra Paragraph Spacing toggles; the rest open a picker\n      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);''',
+                            '''      // Paragraph spacing and optical margin toggle; the rest open a picker.\n      return (ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ||\n              ringPos() - 1 == static_cast<int>(LayoutRow::HangingPunctuation))\n                 ? tr(STR_TOGGLE)\n                 : tr(STR_SELECT);''', 1)
+              s = s.replace('''    case LayoutRow::ScreenMargin: {''',
+                            '''    case LayoutRow::HangingPunctuation:\n      SETTINGS.hangingPunctuation = !SETTINGS.hangingPunctuation;\n      SETTINGS.saveToFile();\n      requestUpdate();\n      break;\n    case LayoutRow::ScreenMargin: {''', 1)
+              s = s.replace('''    case LayoutRow::ScreenMargin:\n      return std::to_string(SETTINGS.screenMargin);''',
+                            '''    case LayoutRow::ScreenMargin:\n      return std::to_string(SETTINGS.screenMargin);\n    case LayoutRow::HangingPunctuation:\n      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);''', 1)
+              p.write_text(s)
+
+          # Version screen additions: short HU/EN feature lines.
+          p = Path('src/activities/settings/CrossPointVersionActivity.cpp')
+          s = p.read_text()
+          if 'Improved justified text layout' not in s:
+              anchor = '''    for (const StrId feature : features) {\n      const char* featureText = feature == StrId::STR_FEATURE_HUNGARIAN_STEMMING\n                                    ? "Magyar szótövezés: 357 új szóalak"\n                                    : I18N.get(feature);\n      const std::string line = std::string("- ") + featureText;\n      drawWrapped(UI_12_FONT_ID, line.c_str());\n    }'''
+              replacement = anchor + '''\n    const bool hu = I18N.getLanguage() == Language::HU;\n    const char* extraFeatures[] = {\n        hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",\n        hu ? "Javított sorkizárt szedés" : "Improved justified text layout",\n        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n    };\n    for (const char* featureText : extraFeatures) {\n      const std::string line = std::string("- ") + featureText;\n      drawWrapped(UI_12_FONT_ID, line.c_str());\n    }'''
+              assert anchor in s
+              s = s.replace(anchor, replacement, 1)
+              p.write_text(s)
+
+          PY
+
+          git diff --check
+          grep -q 'hangingPunctuationLimitPx' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'Optikai margó' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Improved justified text layout' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'hangingPunctuationAllowance' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Commit optical-margin feature
+        run: |
+          if git diff --quiet; then
+            echo "Optical-margin feature already present"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp \
+                  lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp \
+                  lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp \
+                  lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h \
+                  lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp \
+                  src/activities/settings/TextSettingsActivity.h \
+                  src/activities/settings/TextSettingsActivity.cpp \
+                  src/activities/settings/CrossPointVersionActivity.cpp
+          git commit -m "Add optional 50 percent hanging punctuation optical margin"
+          git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+
+  validate:
+    needs: patch-optical-margin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Verify Hungarian edition markers
+        run: |
+          grep -q 'STR_LAYOUT: "Rendez."' lib/I18n/translations/hungarian.yaml
+          grep -q 'appendHungarianExtendedBreaks' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'const int justifyRemainder =' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hangingPunctuationAllowance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Optikai margó' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Kiterjesztett magyar elválasztás' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Javított sorkizárt szedés' src/activities/settings/CrossPointVersionActivity.cpp
+
+      - name: Run Hungarian dictionary regressions
+        run: |
+          python scripts/run_hungarian_stemming_regression_v2.py
+          python scripts/run_hungarian_cpp_regression_v2.py
+          python scripts/run_hungarian_cpp_false_positive_regression.py
+
+      - name: Install clang-format 21
+        run: |
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get update
+          sudo apt-get install -y clang-format-21
+
+      - name: Normalize C++ formatting
+        run: PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+
+      - name: Install unit-test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload Hungarian X4 firmware artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-optical-margin
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
