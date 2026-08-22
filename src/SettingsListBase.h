@@ -178,6 +178,16 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
+inline SettingInfo buildUiThemeSetting() {
+  SettingInfo s = SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
+                                    {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_ROUNDEDRAFF},
+                                    "uiTheme", StrId::STR_CAT_DISPLAY);
+  s.enumStringValues = {I18N.get(StrId::STR_THEME_CLASSIC), I18N.get(StrId::STR_THEME_LYRA),
+                        I18N.get(StrId::STR_THEME_LYRA_EXTENDED), "RoundedMod", "RoundedRaff"};
+  return s;
+}
+
 inline std::vector<StrId> buildLongPressMenuValues() {
   static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
                                      StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
@@ -234,10 +244,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
             {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
             "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+        buildUiThemeSetting(),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_FRONTLIGHT

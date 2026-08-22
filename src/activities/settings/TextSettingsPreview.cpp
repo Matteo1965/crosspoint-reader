@@ -83,7 +83,19 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   const int textBottom = top + height - labelReserved;
   if (textBottom <= textTop) return;
 
-  relayout(layout, renderer, fontId, width);
+  const PreviewKey key{.fontId = fontId,
+                       .fontPointSize = SETTINGS.fontPointSize,
+                       .screenMargin = SETTINGS.screenMargin,
+                       .textWidth = width,
+                       .lineCompression = SETTINGS.getReaderLineCompression(),
+                       .alignment = SETTINGS.paragraphAlignment,
+                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
+                       .focusReading = SETTINGS.focusReadingEnabled != 0,
+                       .hyphenation = SETTINGS.hyphenationEnabled != 0};
+  if (!(layout.key == key)) {
+    relayout(layout, renderer, fontId, width);
+    layout.key = key;
+  }
 
   int y = textTop;
   for (const auto& line : layout.lines) {
