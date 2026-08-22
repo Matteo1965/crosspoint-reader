@@ -190,6 +190,37 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   return allowedOffsets;
 }
 
+bool isHangingPunctuation(const uint32_t cp) {
+  switch (cp) {
+    case '.':
+    case ',':
+    case ';':
+    case ':':
+    case '!':
+    case '?':
+    case '-':
+    case 0x2019:  // ’
+    case 0x201D:  // ”
+    case 0x00BB:  // »
+      return true;
+    default:
+      return false;
+  }
+}
+
+int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                                const EpdFontFamily::Style style, const uint8_t limitPx) {
+  if (limitPx == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;
+  size_t lastStart = word.size() - 1;
+  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
+  const int fullAdvance = renderer.getTextAdvanceX(fontId, word.c_str(), style);
+  const std::string prefix = word.substr(0, lastStart);
+  const int prefixAdvance = prefix.empty() ? 0 : renderer.getTextAdvanceX(fontId, prefix.c_str(), style);
+  const int punctuationAdvance = std::max(0, fullAdvance - prefixAdvance);
+  const int halfAdvance = (punctuationAdvance + 1) / 2;
+  return std::min<int>(limitPx, halfAdvance);
+}
+
 int computeJustifyExtra(const int spareSpace, const size_t gapCount) {
   if (gapCount < MIN_JUSTIFY_GAPS || spareSpace <= 0) return 0;
   // Distribute the spare space evenly across gaps. Do NOT bail out to 0 when the
@@ -1338,7 +1369,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // For justified text, compute per-gap extra to distribute remaining space evenly.
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
-  const int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+  const int hangingAllowance =
+      (hangingPunctuationLimitPx > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+       !blockStyle.isRtl && !lineWords.empty())
+          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(),
+                                        hangingPunctuationLimitPx)
+          : 0;
+  const int spareSpace = effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset -
+                         lineWordWidthSum - totalNaturalGaps;
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                ? computeJustifyExtra(spareSpace, actualGapCount)
                                : 0;
@@ -1427,8 +1465,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
     }
 
-    const int reorderedSpare =
-        effectivePageWidth - extraStartOffset - extraEndOffset - reorderedWordWidthSum - reorderedNaturalGaps;
+    const int reorderedHangingAllowance =
+        (hangingPunctuationLimitPx > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+         !blockStyle.isRtl && !reorderedWordsScratch.empty())
+            ? hangingPunctuationAllowance(renderer, fontId, reorderedWordsScratch.back(), reorderedStylesScratch.back(),
+                                          hangingPunctuationLimitPx)
+            : 0;
+    const int reorderedSpare = effectivePageWidth + reorderedHangingAllowance - extraStartOffset - extraEndOffset -
+                               reorderedWordWidthSum - reorderedNaturalGaps;
     const int reorderedJustifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                           ? computeJustifyExtra(reorderedSpare, reorderedGapCount)
                                           : 0;

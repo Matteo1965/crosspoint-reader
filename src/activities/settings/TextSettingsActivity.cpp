@@ -108,7 +108,9 @@ void TextSettingsActivity::rebuildRowItems() {
         item.label = sizes_[i].name.c_str();
         break;
       case Tab::Layout:
-        item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        item.label = i == static_cast<int>(LayoutRow::HangingPunctuation)
+                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation")
+                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
         item.label = i == static_cast<int>(StyleRow::HungarianHyphenation) ? "Magyar elválasztás"
@@ -249,8 +251,11 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      // Extra Paragraph Spacing toggles; the rest open a picker
-      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+      // Paragraph spacing and optical margin toggle; the rest open a picker.
+      return (ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ||
+              ringPos() - 1 == static_cast<int>(LayoutRow::HangingPunctuation))
+                 ? tr(STR_TOGGLE)
+                 : tr(STR_SELECT);
     case Tab::Style:
       return tr(STR_TOGGLE);
     default:
@@ -391,6 +396,11 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
                         });
       requestUpdate();
       break;
+    case LayoutRow::HangingPunctuation:
+      SETTINGS.hangingPunctuation = !SETTINGS.hangingPunctuation;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
       options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
@@ -423,6 +433,8 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     }
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
+    case LayoutRow::HangingPunctuation:
+      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
 
     default:
       return "";

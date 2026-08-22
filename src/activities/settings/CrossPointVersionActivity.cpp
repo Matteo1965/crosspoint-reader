@@ -137,6 +137,16 @@ void CrossPointVersionActivity::render(RenderLock&&) {
       const std::string line = std::string("- ") + featureText;
       drawWrapped(UI_12_FONT_ID, line.c_str());
     }
+    const bool hu = I18N.getLanguage() == Language::HU;
+    const char* extraFeatures[] = {
+        hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
+        hu ? "Javított sorkizárt szedés" : "Improved justified text layout",
+        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
+    };
+    for (const char* featureText : extraFeatures) {
+      const std::string line = std::string("- ") + featureText;
+      drawWrapped(UI_12_FONT_ID, line.c_str());
+    }
   } else if (currentPage == 1) {
     drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);
     drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
