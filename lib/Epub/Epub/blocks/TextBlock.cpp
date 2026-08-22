@@ -12,7 +12,8 @@
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
-  size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
+  size_t size =
+      static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
   }
@@ -31,11 +32,27 @@ void TextBlock::bindArenaPointers() {
   }
   stylesArr = base + off;
   off += wc;
+  bidiDirArr = base + off;
+  off += wc;
   if (focusPresent) {
     focusBoundaryArr = base + off;
     off += wc;
   }
   textArr = reinterpret_cast<const char*>(base + off);
+}
+
+void TextBlock::refreshRenderFlags() {
+  simpleRender = !focusPresent && rubyTexts.empty();
+  if (!simpleRender) return;
+  constexpr uint8_t complexMask =
+      static_cast<uint8_t>(EpdFontFamily::UNDERLINE | EpdFontFamily::STRIKETHROUGH | EpdFontFamily::SUP |
+                           EpdFontFamily::SUB | EpdFontFamily::RUBY_CONTINUE);
+  for (uint16_t i = 0; i < numWords; ++i) {
+    if ((stylesArr[i] & complexMask) != 0) {
+      simpleRender = false;
+      return;
+    }
+  }
 }
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
@@ -99,12 +116,14 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   auto* textOff = const_cast<uint16_t*>(textOffArr);
   auto* xpos = const_cast<int16_t*>(xposArr);
   auto* styles = const_cast<uint8_t*>(stylesArr);
+  auto* bidiDir = const_cast<uint8_t*>(bidiDirArr);
   auto* text = const_cast<char*>(textArr);
   uint16_t off = 0;
   for (uint16_t i = 0; i < numWords; i++) {
     textOff[i] = off;
     xpos[i] = wordXpos[i];
     styles[i] = static_cast<uint8_t>(wordStyles[i]);
+    bidiDir[i] = static_cast<uint8_t>(BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
     memcpy(text + off, words[i].data(), words[i].size());
     off += static_cast<uint16_t>(words[i].size());
     text[off++] = '\0';
@@ -117,6 +136,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
       boundary[i] = focusBoundary[i];
     }
   }
+  refreshRenderFlags();
 }
 
 bool TextBlock::hasRuby() const {
@@ -143,6 +163,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     BidiUtils::BidiBaseDir baseDir;
   };
   const bool blockHasRuby = hasRuby();
+
+  if (simpleRender) {
+    for (uint16_t i = 0; i < numWords; ++i) {
+      const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
+      renderer.drawText(fontId, xposArr[i] + x, y, wordText(i), true, wordStyle(i), baseDir);
+    }
+    return;
+  }
+
   std::vector<RubyDrawInfo> rubies;
   if (blockHasRuby) {
     rubies.resize(numWords);
@@ -206,8 +235,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     const char* word = wordText(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
-    const auto baseDir =
-        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));
+    const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
     const uint8_t boundary = focusBoundary(i);
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
@@ -436,6 +464,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  block->refreshRenderFlags();
 
   return block;
 }
