@@ -198,7 +198,18 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
   fontPointSize = storedFontSize;
-  hangingPunctuation = clamp(doc["hangingPunctuation"] | (uint8_t)0, (uint8_t)2, (uint8_t)0);
+  const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;
+  if (storedHangingPunctuation == 1) {
+    // Migrate the previous On/Off implementation: On meant 50%.
+    hangingPunctuation = 50;
+    needsResave = true;
+  } else if (storedHangingPunctuation == 0 || storedHangingPunctuation == 25 || storedHangingPunctuation == 50 ||
+             storedHangingPunctuation == 75 || storedHangingPunctuation == 100) {
+    hangingPunctuation = storedHangingPunctuation;
+  } else {
+    hangingPunctuation = 75;
+    needsResave = true;
+  }
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
@@ -261,9 +272,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
-  // Keep at least one physical margin pixel untouched; cap optical overhang at 6 px.
+  // Pack percentage step (high nibble: 1=25% .. 4=100%) and pixel cap (low nibble).
+  // At 5 px margin keep one physical pixel untouched; from 10 px upward allow up to 8 px.
+  const uint8_t hangingPixelLimit = screenMargin >= 10 ? 8 : static_cast<uint8_t>(std::max<int>(0, screenMargin - 1));
   spec.hangingPunctuationLimitPx = hangingPunctuation
-                                       ? static_cast<uint8_t>(std::min<int>(6, std::max<int>(0, screenMargin - 1)))
+                                       ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingPixelLimit)
                                        : 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;

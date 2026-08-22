@@ -209,16 +209,18 @@ bool isHangingPunctuation(const uint32_t cp) {
 }
 
 int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                                const EpdFontFamily::Style style, const uint8_t limitPx) {
-  if (limitPx == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;
+                                const EpdFontFamily::Style style, const uint8_t packedSetting) {
+  const uint8_t percentStep = packedSetting >> 4;
+  const uint8_t pixelLimit = packedSetting & 0x0F;
+  if (percentStep == 0 || pixelLimit == 0 || word.empty() || !isHangingPunctuation(lastCodepoint(word))) return 0;
   size_t lastStart = word.size() - 1;
   while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
   const int fullAdvance = renderer.getTextAdvanceX(fontId, word.c_str(), style);
   const std::string prefix = word.substr(0, lastStart);
   const int prefixAdvance = prefix.empty() ? 0 : renderer.getTextAdvanceX(fontId, prefix.c_str(), style);
   const int punctuationAdvance = std::max(0, fullAdvance - prefixAdvance);
-  const int halfAdvance = (punctuationAdvance + 1) / 2;
-  return std::min<int>(limitPx, halfAdvance);
+  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 4) + 3) / 4;
+  return std::min<int>(pixelLimit, proportionalAdvance);
 }
 
 int computeJustifyExtra(const int spareSpace, const size_t gapCount) {

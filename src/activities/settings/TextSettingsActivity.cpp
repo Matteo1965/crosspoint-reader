@@ -251,11 +251,8 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      // Paragraph spacing and optical margin toggle; the rest open a picker.
-      return (ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ||
-              ringPos() - 1 == static_cast<int>(LayoutRow::HangingPunctuation))
-                 ? tr(STR_TOGGLE)
-                 : tr(STR_SELECT);
+      // Paragraph spacing toggles; optical margin cycles through selectable percentages.
+      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
     case Tab::Style:
       return tr(STR_TOGGLE);
     default:
@@ -397,7 +394,23 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::HangingPunctuation:
-      SETTINGS.hangingPunctuation = !SETTINGS.hangingPunctuation;
+      switch (SETTINGS.hangingPunctuation) {
+        case 0:
+          SETTINGS.hangingPunctuation = 25;
+          break;
+        case 25:
+          SETTINGS.hangingPunctuation = 50;
+          break;
+        case 50:
+          SETTINGS.hangingPunctuation = 75;
+          break;
+        case 75:
+          SETTINGS.hangingPunctuation = 100;
+          break;
+        default:
+          SETTINGS.hangingPunctuation = 0;
+          break;
+      }
       SETTINGS.saveToFile();
       requestUpdate();
       break;
@@ -434,7 +447,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
-      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);
 
     default:
       return "";
