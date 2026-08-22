@@ -204,11 +204,12 @@ uint32_t asciiLower(const uint32_t cp) {
   return (cp >= 'A' && cp <= 'Z') ? cp + ('a' - 'A') : cp;
 }
 
-// Extended Hungarian handling never creates a new break. It only upgrades an
-// already legal language-pattern break with the character replacement needed
-// for doubled multi-letter consonants (e.g. asszony -> asz-szony).
-void applyHungarianExtendedReplacements(const std::vector<CodepointInfo>& cps,
-                                        std::vector<Hyphenator::BreakInfo>& outBreaks) {
+// Extended Hungarian replacement hyphenation may add a special break only
+// when the compact doubled multi-letter consonant is directly surrounded by
+// Hungarian vowels. This keeps real cases such as asszony -> asz-szony while
+// rejecting compound-boundary false positives such as rosszfiúi -> rosz-szfiúi.
+void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
+                                   std::vector<Hyphenator::BreakInfo>& outBreaks) {
   struct Rule {
     const char* compact;
     size_t length;
@@ -234,18 +235,17 @@ void applyHungarianExtendedReplacements(const std::vector<CodepointInfo>& cps,
       }
       if (!matches) continue;
 
+      // The doubled consonant must be directly between vowels. This excludes
+      // rosszfiúi (ssz followed by f) and gally (lly at the end), while allowing
+      // asszony, asszonnyal, hosszú, mennyi, meccsen and gallyak.
+      if (i == 0 || i + rule.length >= cps.size()) continue;
+      if (!isHungarianVowel(cps[i - 1].value) || !isHungarianVowel(cps[i + rule.length].value)) continue;
+
       const size_t split = i + 1;
       if (split == 0 || split >= cps.size()) continue;
-      // Readability guard: do not create a rendered split if either word part
-      // would contain no Hungarian vowel (e.g. gally -> galy-ly).
+      // Secondary readability guard: both rendered word parts must contain a vowel.
       if (!hasHungarianVowel(cps, 0, split) || !hasHungarianVowel(cps, split, cps.size())) continue;
-
-      const size_t splitOffset = byteOffsetForIndex(cps, split);
-      for (auto& breakInfo : outBreaks) {
-        if (breakInfo.byteOffset == splitOffset && breakInfo.requiresInsertedHyphen) {
-          breakInfo.replacement = rule.replacement;
-        }
-      }
+      outBreaks.push_back({byteOffsetForIndex(cps, split), true, rule.replacement});
     }
   }
 }
@@ -313,9 +313,8 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     if (hasApostropheLikeSeparator) {
       appendApostropheContractionBreaks(cps, explicitBreakInfos);
     }
-    // Only legal pattern breaks can receive Hungarian replacement behavior.
     if (useHungarianExtended) {
-      applyHungarianExtendedReplacements(cps, explicitBreakInfos);
+      appendHungarianExtendedBreaks(cps, explicitBreakInfos);
     }
     sortAndDedupeBreakInfos(explicitBreakInfos);
     return explicitBreakInfos;
@@ -328,13 +327,11 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   if (hasApostropheLikeSeparator) {
     std::vector<BreakInfo> segmentedBreaks;
     if (hyphenator) {
-      // In extended Hungarian mode fallback points must not enable replacement
-      // hyphenation, so only real language-pattern breaks are used here.
-      appendSegmentPatternBreaks(cps, *hyphenator, includeFallback && !useHungarianExtended, segmentedBreaks);
+      appendSegmentPatternBreaks(cps, *hyphenator, includeFallback, segmentedBreaks);
     }
     appendApostropheContractionBreaks(cps, segmentedBreaks);
     if (useHungarianExtended) {
-      applyHungarianExtendedReplacements(cps, segmentedBreaks);
+      appendHungarianExtendedBreaks(cps, segmentedBreaks);
     }
     sortAndDedupeBreakInfos(segmentedBreaks);
     return segmentedBreaks;
@@ -346,10 +343,8 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     indexes = hyphenator->breakIndexes(cps);
   }
 
-  // Only add fallback breaks if needed. Extended Hungarian deliberately does
-  // not use fallback points because replacements must be backed by a real
-  // Liang/hyph-hu pattern match.
-  if (includeFallback && indexes.empty() && !useHungarianExtended) {
+  // Only add fallback breaks if needed.
+  if (includeFallback && indexes.empty()) {
     const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
     const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
     for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
@@ -357,12 +352,16 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     }
   }
 
-  if (indexes.empty()) {
+  std::vector<Hyphenator::BreakInfo> breaks;
+  if (useHungarianExtended) {
+    appendHungarianExtendedBreaks(cps, breaks);
+  }
+
+  if (indexes.empty() && breaks.empty()) {
     return {};
   }
 
-  std::vector<Hyphenator::BreakInfo> breaks;
-  breaks.reserve(indexes.size());
+  breaks.reserve(breaks.size() + indexes.size());
   for (const size_t idx : indexes) {
     // CJK characters can break without inserting a visible hyphen.
     // Check the codepoint at the break position: if it's a CJK character,
@@ -374,10 +373,6 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
       needsHyphen = false;
     }
     breaks.push_back({byteOffsetForIndex(cps, idx), needsHyphen});
-  }
-
-  if (useHungarianExtended) {
-    applyHungarianExtendedReplacements(cps, breaks);
   }
 
   sortAndDedupeBreakInfos(breaks);
