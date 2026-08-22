@@ -4,10 +4,107 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
+  patch-justification:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out CrossPoint
+        uses: actions/checkout@v6
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+
+      - name: Apply exact justification remainder distribution
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("lib/Epub/Epub/ParsedText.cpp")
+          s = p.read_text()
+          marker = "const int justifyRemainder ="
+          if marker in s:
+              print("Justification remainder fix already present")
+              raise SystemExit(0)
+
+          old = '''  const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                               ? computeJustifyExtra(spareSpace, actualGapCount)\n                               : 0;'''
+          new = '''  const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                               ? computeJustifyExtra(spareSpace, actualGapCount)\n                               : 0;\n  // Integer division can leave a few pixels undistributed. Spread those remainder\n  // pixels one-by-one across the first gaps so a justified line reaches the right\n  // edge exactly instead of ending up to gapCount-1 pixels short.\n  const int justifyRemainder =\n      (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)\n          ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)\n          : 0;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    const int reorderedJustifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                                          ? computeJustifyExtra(reorderedSpare, reorderedGapCount)\n                                          : 0;\n\n    const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount)\n                                        : 0;'''
+          new = '''    const int reorderedJustifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                                          ? computeJustifyExtra(reorderedSpare, reorderedGapCount)\n                                          : 0;\n    const int reorderedJustifyRemainder =\n        (effectiveAlignment == CssTextAlign::Justify && !isLastLine && reorderedGapCount > 0)\n            ? reorderedSpare - reorderedJustifyExtra * static_cast<int>(reorderedGapCount)\n            : 0;\n\n    const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                                        ? reorderedJustifyExtra * static_cast<int>(reorderedGapCount) +\n                                              reorderedJustifyRemainder\n                                        : 0;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          # Reordered positioning: distribute remainder pixels over actual justification gaps.
+          old = '''    for (size_t wordIdx = 0; wordIdx < reorderedWidthsScratch.size(); wordIdx++) {'''
+          new = '''    size_t reorderedJustifyGapIndex = 0;\n    for (size_t wordIdx = 0; wordIdx < reorderedWidthsScratch.size(); wordIdx++) {'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''          advance += reorderedJustifyExtra;'''
+          new = '''          advance += reorderedJustifyExtra +\n                     (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);\n          reorderedJustifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''          gap += reorderedJustifyExtra;'''
+          new = '''          gap += reorderedJustifyExtra +\n                 (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);\n          reorderedJustifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          # Standard RTL positioning.
+          old = '''      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {\n        xpos -= wordWidths[lastBreakAt + wordIdx];'''
+          new = '''      size_t justifyGapIndex = 0;\n      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {\n        xpos -= wordWidths[lastBreakAt + wordIdx];'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            advance += justifyExtra;'''
+          new = '''            advance += justifyExtra +\n                       (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);\n            justifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            gap += justifyExtra;'''
+          new = '''            gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);\n            justifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          # Standard LTR positioning has its own gap index.
+          old = '''      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {\n        lineXPos.push_back(static_cast<int16_t>(xpos));'''
+          new = '''      size_t justifyGapIndex = 0;\n      for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {\n        lineXPos.push_back(static_cast<int16_t>(xpos));'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            advance += justifyExtra;'''
+          new = '''            advance += justifyExtra +\n                       (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);\n            justifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            gap += justifyExtra;'''
+          new = '''            gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);\n            justifyGapIndex++;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Commit justification fix
+        run: |
+          if git diff --quiet; then
+            echo "No source changes needed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/ParsedText.cpp
+          git commit -m "Fix justified text remainder pixel distribution"
+          git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+
   validate:
+    needs: patch-justification
     runs-on: ubuntu-latest
     steps:
       - name: Check out CrossPoint
@@ -55,6 +152,9 @@ jobs:
           ! grep -q "batteryIndicator" src/components/themes/BaseTheme.cpp
           ! grep -q "HungarianImageBrightness::" src/activities/boot_sleep/SleepActivity.cpp
           ! grep -q "brightnessPercentForCover" src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'STR_LAYOUT: "Rendez."' lib/I18n/translations/hungarian.yaml
+          grep -q "appendHungarianExtendedBreaks" lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q "const int justifyRemainder =" lib/Epub/Epub/ParsedText.cpp
 
       - name: Run Hungarian dictionary regressions
         run: |
