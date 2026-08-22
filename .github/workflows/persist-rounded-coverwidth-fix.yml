@@ -1,0 +1,101 @@
+name: Persist Rounded theme coverWidth fix
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - hungarian-hyphenation
+    paths:
+      - .github/workflows/persist-rounded-coverwidth-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  persist-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Make coverWidth file-local
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          for path in [
+              Path('src/components/themes/roundedraff/RoundedRaffTheme.cpp'),
+              Path('src/components/themes/roundedmod/RoundedModTheme.cpp'),
+          ]:
+              s = path.read_text()
+              old = '}  // namespace\nint coverWidth = 0;\n'
+              new = 'int coverWidth = 0;\n\n}  // namespace\n'
+              if new not in s:
+                  if old not in s:
+                      raise SystemExit(f'coverWidth marker not found in {path}')
+                  s = s.replace(old, new, 1)
+                  path.write_text(s)
+          PY
+          git diff --check
+
+      - name: Install clang-format 21
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 21
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21 cmake ninja-build
+
+      - name: Format and persist source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/themes/roundedraff/RoundedRaffTheme.cpp src/components/themes/roundedmod/RoundedModTheme.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Make Rounded theme coverWidth state file-local'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+
+      - name: Build X4 release-candidate firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-rounded-themes-persisted
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
