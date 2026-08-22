@@ -1,0 +1,43 @@
+name: Apply Hungarian extended hyphenation
+
+on:
+  push:
+    branches:
+      - agent/hungarian-integrated-v1.6.0rc
+    paths:
+      - .github/scripts/apply_hu_extended.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+      - name: Apply source changes
+        run: python3 .github/scripts/apply_hu_extended.py
+      - name: Commit source changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/ParsedText.cpp \
+                  lib/Epub/Epub/ReaderRenderSpec.h \
+                  lib/Epub/Epub/Section.cpp \
+                  lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+                  lib/Epub/Epub/hyphenation/Hyphenator.h \
+                  src/CrossPointSettings.cpp \
+                  src/CrossPointSettings.h \
+                  src/SettingsListBase.h \
+                  src/activities/settings/TextSettingsActivity.cpp \
+                  src/activities/settings/TextSettingsActivity.h
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Add extended Hungarian hyphenation mode"
+          git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
