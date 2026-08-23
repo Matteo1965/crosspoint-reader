@@ -10,6 +10,7 @@ name: Build Hungarian 1.6.0rc Hyphen hanging
 permissions:
   contents: read
 
+# Rebuild against the safe balanced-parenthesis space-tuning patch.
 jobs:
   validate-build:
     runs-on: ubuntu-latest
