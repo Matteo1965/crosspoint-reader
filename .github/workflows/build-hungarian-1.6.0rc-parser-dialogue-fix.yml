@@ -101,6 +101,16 @@ jobs:
 
           section = 'lib/Epub/Epub/Section.cpp'
           replace_once(section, 'SECTION_FILE_VERSION = 44', 'SECTION_FILE_VERSION = 46')
+
+          # Current renderer API requires font style as the fourth getSpaceAdvance argument.
+          parsed = 'lib/Epub/Epub/ParsedText.cpp'
+          p = Path(parsed)
+          text = p.read_text(encoding='utf-8')
+          text = text.replace('gfxRenderer.getSpaceAdvance(fontId, leftCp, rightCp)',
+                              'gfxRenderer.getSpaceAdvance(fontId, leftCp, rightCp, style)')
+          text = text.replace('gfxRenderer.getSpaceAdvance(fontId, words[i - 1].codepoint, words[i].codepoint)',
+                              'gfxRenderer.getSpaceAdvance(fontId, words[i - 1].codepoint, words[i].codepoint, words[i].fontStyle)')
+          p.write_text(text, encoding='utf-8')
           PY
 
       - name: Verify parser-level fixes
@@ -117,6 +127,7 @@ jobs:
           grep -q 'SETTINGS.fixedDialogueSpacing != 0' src/util/DictHtmlPages.cpp
           grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
           grep -q 'simpleRender' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -q 'getSpaceAdvance(fontId, leftCp, rightCp)' lib/Epub/Epub/ParsedText.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -137,27 +148,21 @@ jobs:
         run: |
           uv venv .venv
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
-          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
-            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
-            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
-            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build X4 release-candidate firmware
-        run: pio run -e gh_release_rc
+      - name: Build X4 firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          .venv/bin/pio run -e gh_release_rc
 
       - name: Check firmware size
+        shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          fw = Path('.pio/build/gh_release_rc/firmware.bin')
-          if not fw.exists():
-              raise SystemExit('firmware.bin not found')
-          size = fw.stat().st_size
-          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
-          PY
+          set -euo pipefail
+          stat -c '%n %s bytes' .pio/build/gh_release_rc/firmware.bin
 
-      - name: Upload firmware artifact
+      - name: Upload parser dialogue firmware
         uses: actions/upload-artifact@v4
         with:
           name: crosspoint-hungarian-1.6.0rc-x4-parser-dialogue-correction
