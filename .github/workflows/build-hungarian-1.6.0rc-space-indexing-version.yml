@@ -42,7 +42,7 @@ jobs:
               exec(compile(code, f'<space-v2-block-{i}>', 'exec'))
           PY
 
-      - name: Add always-visible indexing feedback and version-page notes
+      - name: Add visible indexing feedback, fast menu return and version notes
         shell: bash
         run: |
           set -euo pipefail
@@ -58,15 +58,25 @@ jobs:
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
           reader = 'src/activities/reader/EpubReaderActivity.cpp'
+
+          # Flush the popup to the physical e-ink display before starting a potentially long rebuild.
           replace_once(
               reader,
               '''          if (showPopup) {\n            GUI.drawPopup(renderer, tr(STR_INDEXING));\n            pagesUntilFullRefresh = 1;\n          }\n          buildPopupPending = !showPopup;\n          const unsigned long buildStartMs = millis();\n''',
-              '''          // Always show explicit feedback when a section is about to be indexed/rebuilt.\n          GUI.drawPopup(renderer, tr(STR_INDEXING));\n          pagesUntilFullRefresh = 1;\n          showPopup = true;\n          buildPopupPending = false;\n          const unsigned long buildStartMs = millis();\n''')
+              '''          // Always show explicit feedback when a section is about to be indexed/rebuilt.\n          GUI.drawPopup(renderer, tr(STR_INDEXING));\n          renderer.displayBuffer();\n          pagesUntilFullRefresh = 1;\n          showPopup = true;\n          buildPopupPending = false;\n          const unsigned long buildStartMs = millis();\n''')
 
+          # Deferred extension also needs a real display flush before the work begins.
           replace_once(
               reader,
               '''    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''',
-              '''    GUI.drawPopup(renderer, tr(STR_INDEXING));\n    pagesUntilFullRefresh = 1;\n    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''')
+              '''    GUI.drawPopup(renderer, tr(STR_INDEXING));\n    renderer.displayBuffer();\n    pagesUntilFullRefresh = 1;\n    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''')
+
+          # Do not throw away the active section merely because Text Settings was opened.
+          # Only layout-affecting changes require a section rebuild.
+          replace_once(
+              reader,
+              '''    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {\n      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),\n                                                                    TextSettingsActivity::Tab::Family),\n                             [this](const ActivityResult&) {\n                               {\n                                 RenderLock lock;\n                                 if (section) {\n                                   rememberCurrentContentOffset();\n                                   cachedSpineIndex = currentSpineIndex;\n                                   cachedChapterTotalPageCount = section->pageCount;\n                                   nextPageNumber = section->currentPage;\n                                 }\n                                 section.reset();\n                               }\n                               openReaderMenu();\n                             });\n      break;\n    }\n''',
+              '''    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {\n      const ReaderRenderSpec beforeSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);\n      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),\n                                                                    TextSettingsActivity::Tab::Family),\n                             [this, beforeSpec](const ActivityResult&) {\n                               const ReaderRenderSpec afterSpec =\n                                   SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);\n                               const bool layoutChanged =\n                                   beforeSpec.fontId != afterSpec.fontId ||\n                                   beforeSpec.lineCompression != afterSpec.lineCompression ||\n                                   beforeSpec.extraParagraphSpacing != afterSpec.extraParagraphSpacing ||\n                                   beforeSpec.paragraphAlignment != afterSpec.paragraphAlignment ||\n                                   beforeSpec.viewportWidth != afterSpec.viewportWidth ||\n                                   beforeSpec.viewportHeight != afterSpec.viewportHeight ||\n                                   beforeSpec.hyphenationEnabled != afterSpec.hyphenationEnabled ||\n                                   beforeSpec.hungarianHyphenationExtended != afterSpec.hungarianHyphenationExtended ||\n                                   beforeSpec.hangingPunctuationLimitPx != afterSpec.hangingPunctuationLimitPx ||\n                                   beforeSpec.minimumSpacePercent != afterSpec.minimumSpacePercent ||\n                                   beforeSpec.fixedDialogueSpacing != afterSpec.fixedDialogueSpacing ||\n                                   beforeSpec.embeddedStyle != afterSpec.embeddedStyle ||\n                                   beforeSpec.imageRendering != afterSpec.imageRendering ||\n                                   beforeSpec.focusReadingEnabled != afterSpec.focusReadingEnabled;\n                               if (layoutChanged) {\n                                 RenderLock lock;\n                                 if (section) {\n                                   rememberCurrentContentOffset();\n                                   cachedSpineIndex = currentSpineIndex;\n                                   cachedChapterTotalPageCount = section->pageCount;\n                                   nextPageNumber = section->currentPage;\n                                 }\n                                 section.reset();\n                               }\n                               openReaderMenu();\n                             });\n      break;\n    }\n''')
 
           version = 'src/activities/settings/CrossPointVersionActivity.cpp'
           replace_once(
@@ -87,7 +97,8 @@ jobs:
           grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
           grep -q 'spec.fixedDialogueSpacing != fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
           grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'Always show explicit feedback' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'renderer.displayBuffer();' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'beforeSpec.minimumSpacePercent != afterSpec.minimumSpacePercent' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Min. szóköz: 50–100%' src/activities/settings/CrossPointVersionActivity.cpp
           grep -q 'Indexelés visszajelzés újratördeléskor' src/activities/settings/CrossPointVersionActivity.cpp
           grep -q 'isClosingQuoteBeforeHyphen' lib/Epub/Epub/hyphenation/Hyphenator.cpp
