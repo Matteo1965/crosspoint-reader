@@ -115,16 +115,47 @@ jobs:
               raise SystemExit('ParsedText.cpp: justify helper marker not found')
           t = t.replace(marker, helper + marker, 1)
 
-          # Wrap every normal getSpaceAdvance call in this file. All occur in ParsedText member layout/render paths,
-          # where blockStyle is available. This avoids brittle assumptions about how many calls are line-wrapped.
-          pat = re.compile(r'renderer\.getSpaceAdvance\((.*?)\)', re.S)
-          matches = list(pat.finditer(t))
-          if len(matches) < 3:
-              raise SystemExit(f'ParsedText.cpp: unexpectedly few getSpaceAdvance calls: {len(matches)}')
-          def repl(m):
-              return ('scaledNormalSpaceAdvance(renderer.getSpaceAdvance(' + m.group(1) + '), '
-                      '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100))')
-          t = pat.sub(repl, t)
+          # Wrap every complete getSpaceAdvance call while preserving nested calls such as
+          # lastCodepoint(...) and firstCodepoint(...). A regex cannot match balanced C++ parentheses safely.
+          needle = 'renderer.getSpaceAdvance('
+          call_starts = []
+          pos = 0
+          while True:
+              start = t.find(needle, pos)
+              if start < 0:
+                  break
+              call_starts.append(start)
+              pos = start + len(needle)
+          if len(call_starts) < 3:
+              raise SystemExit(f'ParsedText.cpp: unexpectedly few getSpaceAdvance calls: {len(call_starts)}')
+
+          out = []
+          pos = 0
+          wrapped = 0
+          while True:
+              start = t.find(needle, pos)
+              if start < 0:
+                  out.append(t[pos:])
+                  break
+              out.append(t[pos:start])
+              i = start + len(needle)
+              depth = 1
+              while i < len(t) and depth:
+                  if t[i] == '(':
+                      depth += 1
+                  elif t[i] == ')':
+                      depth -= 1
+                  i += 1
+              if depth != 0:
+                  raise SystemExit('ParsedText.cpp: unbalanced getSpaceAdvance call')
+              call = t[start:i]
+              out.append('scaledNormalSpaceAdvance(' + call + ', '
+                         '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100))')
+              wrapped += 1
+              pos = i
+          if wrapped != len(call_starts):
+              raise SystemExit(f'ParsedText.cpp: wrapped {wrapped} of {len(call_starts)} getSpaceAdvance calls')
+          t = ''.join(out)
 
           # A real one-space dialogue token must not receive justifyExtra. Detect the preceding normalized en dash.
           t = t.replace('lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&\n              effectiveAlignment == CssTextAlign::Justify && !isLastLine',
