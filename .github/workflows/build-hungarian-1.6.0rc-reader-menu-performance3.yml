@@ -1,0 +1,116 @@
+name: Build Hungarian 1.6.0rc Reader menu performance 3
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-reader-menu-performance3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out stable integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply reader-menu performance and Hungarian label patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          hu = Path('lib/I18n/translations/hungarian.yaml')
+          s = hu.read_text()
+          old = 'STR_TOGGLE_BOOKMARK: "Könyvjelző váltása"'
+          new = 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"'
+          assert old in s or new in s
+          s = s.replace(old, new)
+          hu.write_text(s)
+
+          p = Path('src/activities/reader/EpubReaderMenuActivity.cpp')
+          s = p.read_text()
+          old = '''  drawFooter();\n  renderer.displayBuffer();\n}'''
+          new = '''  drawFooter();\n  // Reader menu is transient UI. A FAST refresh substantially reduces the\n  // perceived menu-open latency; returning to the reader redraws the page\n  // through its normal refresh cycle, so page quality is unchanged.\n  renderer.displayBuffer(HalDisplay::FAST_REFRESH);\n}'''
+          assert old in s or new in s
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+
+      - name: Verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
+          grep -q 'renderer.displayBuffer(HalDisplay::FAST_REFRESH);' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'SECTION_FILE_VERSION = 43' lib/Epub/Epub/Section.cpp
+          grep -q 'if (simpleRender)' lib/Epub/Epub/blocks/TextBlock.cpp
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+
+      - name: Format and persist patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/clang-format-21 -i src/activities/reader/EpubReaderMenuActivity.cpp
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/I18n/translations/hungarian.yaml src/activities/reader/EpubReaderMenuActivity.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'Speed up reader menu refresh and update bookmark label'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-reader-menu-performance3
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
