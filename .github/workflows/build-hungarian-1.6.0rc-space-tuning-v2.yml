@@ -1,0 +1,232 @@
+name: Build Hungarian 1.6.0rc Space tuning v2
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out current integrated Hungarian source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply proven parser and quoted-compound fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-parser-dialogue-fix.yml > /tmp/base-workflow.yml
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+          s = Path('/tmp/base-workflow.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          a = s.index(marker) + len(marker)
+          b = s.index("\n          PY", a)
+          code = textwrap.dedent(s[a:b])
+          exec(compile(code, '<base-parser-patch>', 'exec'))
+          PY
+
+      - name: Apply minimum spacing, cache key and real fixed-space fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def ro(path, old, new):
+              p = Path(path)
+              t = p.read_text(encoding='utf-8')
+              n = t.count(old)
+              if n != 1:
+                  raise SystemExit(f'{path}: expected 1 match, got {n}: {old[:100]!r}')
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+
+          # Settings persistence and render spec.
+          ro('src/CrossPointSettings.h',
+             '  uint8_t fixedDialogueSpacing = 0;\n',
+             '  uint8_t fixedDialogueSpacing = 0;\n  // Minimum normal gap in justified text: 50, 60, 70, 80, 90 or 100 percent.\n  uint8_t minimumSpacePercent = 100;\n')
+          ro('src/CrossPointSettings.cpp',
+             '  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;\n',
+             '  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;\n  doc["minimumSpacePercent"] = minimumSpacePercent;\n')
+          ro('src/CrossPointSettings.cpp',
+             '  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n',
+             '  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;\n  if (minimumSpacePercent < 50 || minimumSpacePercent > 100 || minimumSpacePercent % 10 != 0) {\n    minimumSpacePercent = 100;\n    needsResave = true;\n  }\n')
+          ro('src/CrossPointSettings.cpp',
+             '  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n',
+             '  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n  spec.minimumSpacePercent = minimumSpacePercent;\n')
+          ro('lib/Epub/Epub/ReaderRenderSpec.h',
+             '  bool fixedDialogueSpacing = false;\n',
+             '  bool fixedDialogueSpacing = false;\n  uint8_t minimumSpacePercent = 100;\n')
+
+          # Section cache: v46 comes from the proven parser patch. Both settings become cache keys.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          s = s.replace('constexpr uint8_t SECTION_FILE_VERSION = 46;', 'constexpr uint8_t SECTION_FILE_VERSION = 47;', 1)
+          # Add one byte to the serialized header size without depending on the fragile line wrapping.
+          m = re.search(r'(constexpr uint32_t HEADER_SIZE\s*=.*?)(;\n}\s*// namespace)', s, re.S)
+          if not m:
+              raise SystemExit('Section.cpp: HEADER_SIZE expression not found')
+          expr = m.group(1)
+          if 'minimumSpacePercent' not in expr and '+ sizeof(uint8_t)' not in expr[-40:]:
+              expr += ' + sizeof(uint8_t)'
+          s = s[:m.start(1)] + expr + s[m.end(1):]
+          s = s.replace('                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +\n                                   sizeof(spec.embeddedStyle)',
+                        '                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +\n                                   sizeof(spec.minimumSpacePercent) + sizeof(spec.embeddedStyle)', 1)
+          s = s.replace('  serialization::writePod(file, spec.fixedDialogueSpacing);\n  serialization::writePod(file, spec.embeddedStyle);',
+                        '  serialization::writePod(file, spec.fixedDialogueSpacing);\n  serialization::writePod(file, spec.minimumSpacePercent);\n  serialization::writePod(file, spec.embeddedStyle);', 1)
+          s = s.replace('    bool fileFixedDialogueSpacing;\n    bool fileEmbeddedStyle;',
+                        '    bool fileFixedDialogueSpacing;\n    uint8_t fileMinimumSpacePercent;\n    bool fileEmbeddedStyle;', 1)
+          s = s.replace('    serialization::readPod(file, fileFixedDialogueSpacing);\n    serialization::readPod(file, fileEmbeddedStyle);',
+                        '    serialization::readPod(file, fileFixedDialogueSpacing);\n    serialization::readPod(file, fileMinimumSpacePercent);\n    serialization::readPod(file, fileEmbeddedStyle);', 1)
+          old_cmp = '        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.embeddedStyle != fileEmbeddedStyle ||'
+          new_cmp = '        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||\n        spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||\n        spec.embeddedStyle != fileEmbeddedStyle ||'
+          if old_cmp not in s:
+              raise SystemExit('Section.cpp: cache comparison marker not found')
+          s = s.replace(old_cmp, new_cmp, 1)
+          s = s.replace('  Hyphenator::setPreferredLanguage(epub->getLanguage());',
+                        '  ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);\n  Hyphenator::setPreferredLanguage(epub->getLanguage());', 1)
+          sec.write_text(s, encoding='utf-8')
+
+          # ParsedText: selected minimum affects normal spaces only in justified paragraphs.
+          ro('lib/Epub/Epub/ParsedText.h', 'class ParsedText {\n', 'class ParsedText {\n  static uint8_t minimumSpacePercent_;\n')
+          ro('lib/Epub/Epub/ParsedText.h', ' public:\n  explicit ParsedText(',
+             ' public:\n  static void setMinimumSpacePercent(uint8_t percent) { minimumSpacePercent_ = percent; }\n  explicit ParsedText(')
+          pc = Path('lib/Epub/Epub/ParsedText.cpp')
+          t = pc.read_text(encoding='utf-8')
+          t = t.replace('constexpr int MAX_COST = std::numeric_limits<int>::max();\n',
+                        'constexpr int MAX_COST = std::numeric_limits<int>::max();\nuint8_t ParsedText::minimumSpacePercent_ = 100;\n', 1)
+          marker = 'int computeJustifyExtra(const int spareSpace, const size_t gapCount) {'
+          helper = '''int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {\n  return std::max(1, (natural * std::clamp<int>(percent, 50, 100) + 99) / 100);\n}\n\n'''
+          if marker not in t:
+              raise SystemExit('ParsedText.cpp: justify helper marker not found')
+          t = t.replace(marker, helper + marker, 1)
+
+          # Wrap every normal getSpaceAdvance call in this file. All occur in ParsedText member layout/render paths,
+          # where blockStyle is available. This avoids brittle assumptions about how many calls are line-wrapped.
+          pat = re.compile(r'renderer\.getSpaceAdvance\((.*?)\)', re.S)
+          matches = list(pat.finditer(t))
+          if len(matches) < 3:
+              raise SystemExit(f'ParsedText.cpp: unexpectedly few getSpaceAdvance calls: {len(matches)}')
+          def repl(m):
+              return ('scaledNormalSpaceAdvance(renderer.getSpaceAdvance(' + m.group(1) + '), '
+                      '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100))')
+          t = pat.sub(repl, t)
+
+          # A real one-space dialogue token must not receive justifyExtra. Detect the preceding normalized en dash.
+          t = t.replace('lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&\n              effectiveAlignment == CssTextAlign::Justify && !isLastLine',
+                        'lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&\n              !(fixedDialogueSpacing && wordIdx > 0 && firstCodepoint(lineWords[wordIdx - 1]) == 0x2013 &&\n                lastCodepoint(lineWords[wordIdx - 1]) == 0x2013) &&\n              effectiveAlignment == CssTextAlign::Justify && !isLastLine')
+          t = t.replace('reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&\n            effectiveAlignment == CssTextAlign::Justify && !isLastLine',
+                        'reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&\n            !(fixedDialogueSpacing && wordIdx > 0 && firstCodepoint(reorderedWordsScratch[wordIdx - 1]) == 0x2013 &&\n              lastCodepoint(reorderedWordsScratch[wordIdx - 1]) == 0x2013) &&\n            effectiveAlignment == CssTextAlign::Justify && !isLastLine')
+          pc.write_text(t, encoding='utf-8')
+
+          # Parser: materialize exactly ONE ASCII-space token between the normalized dash and first word.
+          pp = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp')
+          p = pp.read_text(encoding='utf-8')
+          old = '''      if (openingDialogueGap) {\n        // Do not materialize the source whitespace as a separate token. The next real\n        // word attaches to the normalized en dash with a normal-width gap that is\n        // neither breakable nor stretchable by justification.\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n'''
+          new = '''      if (openingDialogueGap) {\n        // Materialize one real natural-width space. Both boundaries remain continuations,\n        // so the dash-space-word group is unbreakable; ParsedText excludes this token from justification.\n        self->partWordBuffer[0] = ' ';\n        self->partWordBuffer[1] = '\\0';\n        self->partWordBufferIndex = 1;\n        self->partWordVisibleOffset = codepointOffset;\n        self->nextWordContinues = true;\n        self->flushPartWordBuffer();\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n'''
+          if old not in p:
+              raise SystemExit('Parser normal-space dialogue marker not found')
+          p = p.replace(old, new, 1)
+
+          old_nb = '''      if (openingDialogueGap || self->dialogueGapPending) {\n        if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n        i++;\n        continue;\n      }\n'''
+          new_nb = '''      if (openingDialogueGap || self->dialogueGapPending) {\n        if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();\n        if (openingDialogueGap) {\n          self->partWordBuffer[0] = ' '; self->partWordBuffer[1] = '\\0'; self->partWordBufferIndex = 1;\n          self->partWordVisibleOffset = codepointOffset; self->nextWordContinues = true; self->flushPartWordBuffer();\n        }\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n        i++;\n        continue;\n      }\n'''
+          if old_nb not in p:
+              raise SystemExit('Parser NBSP dialogue marker not found')
+          p = p.replace(old_nb, new_nb, 1)
+
+          old_nnb = '''      if (openingDialogueGap || self->dialogueGapPending) {\n        if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n        i += 2;\n        continue;\n      }\n'''
+          new_nnb = '''      if (openingDialogueGap || self->dialogueGapPending) {\n        if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();\n        if (openingDialogueGap) {\n          self->partWordBuffer[0] = ' '; self->partWordBuffer[1] = '\\0'; self->partWordBufferIndex = 1;\n          self->partWordVisibleOffset = codepointOffset; self->nextWordContinues = true; self->flushPartWordBuffer();\n        }\n        self->dialogueGapPending = true;\n        self->nextWordContinues = true;\n        i += 2;\n        continue;\n      }\n'''
+          if old_nnb not in p:
+              raise SystemExit('Parser NNBSP dialogue marker not found')
+          p = p.replace(old_nnb, new_nnb, 1)
+          pp.write_text(p, encoding='utf-8')
+
+          # Text settings menu.
+          ro('src/activities/settings/TextSettingsActivity.h',
+             '    HangingPunctuation,\n    FixedDialogueSpacing,\n',
+             '    HangingPunctuation,\n    MinimumSpace,\n    FixedDialogueSpacing,\n')
+          ta = Path('src/activities/settings/TextSettingsActivity.cpp')
+          u = ta.read_text(encoding='utf-8')
+          label_marker = '        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Párbeszéd javítása" : "Dialogue correction";'
+          if label_marker not in u:
+              raise SystemExit('TextSettingsActivity.cpp: dialogue label marker not found')
+          u = u.replace(label_marker,
+                        '        } else if (i == static_cast<int>(LayoutRow::MinimumSpace)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";\n' + label_marker, 1)
+          toggle_marker = '    case LayoutRow::FixedDialogueSpacing:\n      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;'
+          if toggle_marker not in u:
+              raise SystemExit('TextSettingsActivity.cpp: dialogue toggle marker not found')
+          picker = '''    case LayoutRow::MinimumSpace: {\n      const char* options[] = {"50%", "60%", "70%", "80%", "90%", "100%"};\n      const int cur = std::clamp<int>((SETTINGS.minimumSpacePercent - 50) / 10, 0, 5);\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing", options, 6, cur,\n                        [](int idx) {\n                          SETTINGS.minimumSpacePercent = static_cast<uint8_t>(50 + idx * 10);\n                          SETTINGS.saveToFile();\n                        });\n      requestUpdate();\n      break;\n    }\n'''
+          u = u.replace(toggle_marker, picker + toggle_marker, 1)
+          value_marker = '    case LayoutRow::FixedDialogueSpacing:\n      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);'
+          if value_marker not in u:
+              raise SystemExit('TextSettingsActivity.cpp: dialogue value marker not found')
+          u = u.replace(value_marker,
+                        '    case LayoutRow::MinimumSpace:\n      return std::to_string(SETTINGS.minimumSpacePercent) + "%";\n' + value_marker, 1)
+          ta.write_text(u, encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify new wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
+          grep -q 'minimumSpacePercent' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
+          grep -q 'spec.fixedDialogueSpacing != fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
+          grep -q 'SECTION_FILE_VERSION = 47' lib/Epub/Epub/Section.cpp
+          grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'partWordBuffer\[0\] = . .' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'isClosingQuoteBeforeHyphen' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 release-candidate firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          test -f .pio/build/gh_release_rc/firmware.bin
+          ls -lh .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-space-tuning-v2
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
