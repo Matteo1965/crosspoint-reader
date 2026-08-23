@@ -1,0 +1,131 @@
+name: Build Hungarian 1.6.0rc Space + indexing + version
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out current integrated Hungarian source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reuse proven parser and space-tuning patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml > /tmp/space-v2.yml
+          python - <<'PY'
+          from pathlib import Path
+          import re, textwrap
+
+          s = Path('/tmp/space-v2.yml').read_text(encoding='utf-8')
+          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", s, re.S)
+          if len(blocks) < 2:
+              raise SystemExit(f'Expected >=2 Python patch blocks, found {len(blocks)}')
+          for i, block in enumerate(blocks[:2], 1):
+              code = textwrap.dedent(block)
+              exec(compile(code, f'<space-v2-block-{i}>', 'exec'))
+          PY
+
+      - name: Add always-visible indexing feedback and version-page notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # Whenever an incremental section build is actually started, show Indexing immediately.
+          reader = 'src/activities/reader/EpubReaderActivity.cpp'
+          replace_once(
+              reader,
+              '''          if (showPopup) {\n            GUI.drawPopup(renderer, tr(STR_INDEXING));\n            pagesUntilFullRefresh = 1;\n          }\n          buildPopupPending = !showPopup;\n          const unsigned long buildStartMs = millis();\n''',
+              '''          // Always show explicit feedback when a section is about to be indexed/rebuilt.\n          GUI.drawPopup(renderer, tr(STR_INDEXING));\n          pagesUntilFullRefresh = 1;\n          showPopup = true;\n          buildPopupPending = false;\n          const unsigned long buildStartMs = millis();\n''')
+
+          # Also show feedback when a deferred partial-cache extension starts later in the reader loop.
+          replace_once(
+              reader,
+              '''    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''',
+              '''    GUI.drawPopup(renderer, tr(STR_INDEXING));\n    pagesUntilFullRefresh = 1;\n    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''')
+
+          # Compact first-page feature notes in CrossPoint Version.
+          version = 'src/activities/settings/CrossPointVersionActivity.cpp'
+          replace_once(
+              version,
+              '''        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n    };\n''',
+              '''        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Párbeszéd javítása + fix köz" : "Dialogue correction + fixed gap",\n        hu ? "Indexelés visszajelzés újratördeléskor" : "Indexing feedback on reflow",\n    };\n''')
+          PY
+
+          git diff --check
+
+      - name: Verify new wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
+          grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '50%' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
+          grep -q 'spec.fixedDialogueSpacing != fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
+          grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Always show explicit feedback' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Min. szóköz: 50–100%' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Indexelés visszajelzés újratördeléskor' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'isClosingQuoteBeforeHyphen' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 release-candidate firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          test -f .pio/build/gh_release_rc/firmware.bin
+          ls -lh .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-space-indexing-version
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
