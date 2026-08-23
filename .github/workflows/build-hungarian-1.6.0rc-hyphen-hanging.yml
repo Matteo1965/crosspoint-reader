@@ -1,0 +1,132 @@
+name: Build Hungarian 1.6.0rc Hyphen hanging
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-hyphen-hanging.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reuse current RC patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
+          python - <<'PY'
+          from pathlib import Path
+          import re, textwrap
+
+          s = Path('/tmp/current-rc.yml').read_text(encoding='utf-8')
+          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", s, re.S)
+          if len(blocks) < 2:
+              raise SystemExit(f'Expected >=2 Python patch blocks, found {len(blocks)}')
+          for i, block in enumerate(blocks[:2], 1):
+              exec(compile(textwrap.dedent(block), f'<current-rc-block-{i}>', 'exec'))
+          PY
+
+      - name: Apply hanging allowance to inserted hyphen candidates only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          text = p.read_text(encoding='utf-8')
+          old = '''    const int prefixWidth = measureFocusWordWidth(renderer, fontId, candidatePrefix, style,
+                                                  focusBoundaryBefore(focusBoundary, offset), needsHyphen);
+    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
+      continue;  // Skip if too wide or not an improvement
+    }
+'''
+          new = '''    const uint8_t candidateFocusBoundary = focusBoundaryBefore(focusBoundary, offset);
+    const int prefixWidth =
+        measureFocusWordWidth(renderer, fontId, candidatePrefix, style, candidateFocusBoundary, needsHyphen);
+
+    // Optical margin applies to hyphenation only when this candidate actually inserts a visible '-'.
+    // Do not widen the line or ordinary words: only let the inserted hyphen consume the same
+    // hanging-punctuation allowance it will receive when rendered at the line end.
+    int hyphenHangingAllowance = 0;
+    if (needsHyphen && hangingPunctuationLimitPx != 0) {
+      static const std::string hangingHyphen("-");
+      const auto hyphenStyle =
+          candidateFocusBoundary >= candidatePrefix.size()
+              ? static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD)
+              : style;
+      hyphenHangingAllowance =
+          hangingPunctuationAllowance(renderer, fontId, hangingHyphen, hyphenStyle, hangingPunctuationLimitPx);
+    }
+    if (prefixWidth > availableWidth + hyphenHangingAllowance || prefixWidth <= chosenWidth) {
+      continue;  // Skip if too wide even with hyphen hanging, or not an improvement
+    }
+'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'ParsedText.cpp: expected one hyphen candidate width block, found {count}')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify targeted hanging behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'needsHyphen && hangingPunctuationLimitPx != 0' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'availableWidth + hyphenHangingAllowance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hangingPunctuationAllowance(renderer, fontId, hangingHyphen' lib/Epub/Epub/ParsedText.cpp
+          grep -q "case '-':" lib/Epub/Epub/ParsedText.cpp
+          grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
+          grep -q 'renderer.displayBuffer();' src/activities/reader/EpubReaderActivity.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 release-candidate firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          test -f .pio/build/gh_release_rc/firmware.bin
+          ls -lh .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-hyphen-hanging
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
