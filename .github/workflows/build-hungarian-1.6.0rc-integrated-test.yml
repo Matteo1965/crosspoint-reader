@@ -1,17 +1,19 @@
-name: Build Hungarian 1.6.0rc Integrated typography test
+name: Build Hungarian 1.6.0rc Integrated Typography Test
 
-'on':
+on:
   workflow_dispatch:
   push:
-    branches: [hungarian-hyphenation]
+    branches:
+      - hungarian-hyphenation
     paths:
-      - '.github/workflows/build-hungarian-1.6.0rc-integrated-test.yml'
+      - .github/workflows/build-hungarian-1.6.0rc-integrated-test.yml
 
 permissions:
   contents: read
 
 jobs:
   validate-build:
+    name: validate-build
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -22,36 +24,36 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Reuse stable space and indexing RC patches
+      - name: Apply stable space and indexing patches
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin hungarian-hyphenation
           git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
-          python - <<'PY'
+          python3 - <<'PY'
           from pathlib import Path
-          import re, textwrap
+          import re
+          import textwrap
 
-          s = Path('/tmp/current-rc.yml').read_text(encoding='utf-8')
-          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", s, re.S)
+          workflow = Path('/tmp/current-rc.yml').read_text(encoding='utf-8')
+          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", workflow, re.S)
           if len(blocks) < 2:
-              raise SystemExit(f'Expected >=2 Python patch blocks, found {len(blocks)}')
-          for i, block in enumerate(blocks[:2], 1):
-              exec(compile(textwrap.dedent(block), f'<current-rc-block-{i}>', 'exec'))
+              raise SystemExit(f'Expected at least 2 Python patch blocks, found {len(blocks)}')
+          for index, block in enumerate(blocks[:2], 1):
+              code = textwrap.dedent(block)
+              exec(compile(code, f'<stable-rc-block-{index}>', 'exec'))
           PY
 
-      - name: Apply line-level minimum spacing and hyphen hanging integration
+      - name: Apply integrated typography patch
         shell: bash
         run: |
           set -euo pipefail
-          python - <<'PY'
+          cat > /tmp/integrated_typography_patch.py <<'PY'
           from pathlib import Path
 
-          p = Path('lib/Epub/Epub/ParsedText.cpp')
-          text = p.read_text(encoding='utf-8')
+          path = Path('lib/Epub/Epub/ParsedText.cpp')
+          text = path.read_text(encoding='utf-8')
 
-          # 1) Hyphenation candidates may use optical-margin allowance only when the
-          # candidate really inserts a visible hyphen at the line end.
           old_hyphen = '''    const int prefixWidth = measureFocusWordWidth(renderer, fontId, candidatePrefix, style,
                                                   focusBoundaryBefore(focusBoundary, offset), needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
@@ -78,13 +80,11 @@ jobs:
       continue;  // Too wide even with a hanging inserted hyphen, or not an improvement.
     }
 '''
-          if text.count(old_hyphen) != 1:
-              raise SystemExit(f'ParsedText.cpp: expected one hyphen candidate block, found {text.count(old_hyphen)}')
+          count = text.count(old_hyphen)
+          if count != 1:
+              raise SystemExit(f'ParsedText.cpp: expected one hyphen candidate block, found {count}')
           text = text.replace(old_hyphen, new_hyphen, 1)
 
-          # 2) The minimum-space percentage is a property of a *justified line*, not
-          # the whole paragraph. Move line-state calculation before natural-gap accounting
-          # so the last line and left/right/center lines can use natural 100% spacing.
           marker = '''  // Calculate total word width for this line, count actual word gaps,
   // and accumulate total natural gap widths (including space kerning adjustments).
   int lineWordWidthSum = 0;
@@ -102,11 +102,12 @@ jobs:
   // and accumulate total natural gap widths (including space kerning adjustments).
   int lineWordWidthSum = 0;
 '''
-          if text.count(marker) != 1:
-              raise SystemExit('ParsedText.cpp: line gap-accounting marker not found exactly once')
+          count = text.count(marker)
+          if count != 1:
+              raise SystemExit(f'ParsedText.cpp: line accounting marker count is {count}')
           text = text.replace(marker, line_state, 1)
 
-          duplicate_state = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+          duplicated = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
   // For RTL, implicit/default Left alignment becomes Right alignment.
   // Explicit text-align:left must remain left for CSS correctness.
@@ -116,31 +117,26 @@ jobs:
           : blockStyle.alignment;
 
 '''
-          # Remove the later original copy, leaving the newly inserted early copy.
-          first = text.find(duplicate_state)
-          second = text.find(duplicate_state, first + len(duplicate_state)) if first >= 0 else -1
+          first = text.find(duplicated)
+          second = text.find(duplicated, first + len(duplicated)) if first >= 0 else -1
           if first < 0 or second < 0:
-              raise SystemExit('ParsedText.cpp: expected two line-state blocks after insertion')
-          text = text[:second] + text[second + len(duplicate_state):]
+              raise SystemExit('ParsedText.cpp: expected duplicated line state after insertion')
+          text = text[:second] + text[second + len(duplicated):]
 
-          extract_pos = text.find('void ParsedText::extractLine(')
-          if extract_pos < 0:
+          extract_start = text.find('void ParsedText::extractLine(')
+          if extract_start < 0:
               raise SystemExit('ParsedText.cpp: extractLine not found')
-          before = text[:extract_pos]
-          extract = text[extract_pos:]
+          before_extract = text[:extract_start]
+          extract = text[extract_start:]
           paragraph_gate = '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)'
           line_gate = '(effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100)'
-          replaced = extract.count(paragraph_gate)
-          if replaced < 3:
-              raise SystemExit(f'ParsedText.cpp: expected >=3 scaled spacing gates in extractLine, found {replaced}')
+          gate_count = extract.count(paragraph_gate)
+          if gate_count < 3:
+              raise SystemExit(f'ParsedText.cpp: expected at least 3 paragraph-level gates, found {gate_count}')
           extract = extract.replace(paragraph_gate, line_gate)
-          text = before + extract
+          text = before_extract + extract
 
-          # 3) Line breaking may use the selected minimum spacing for justified lines,
-          # but the paragraph's final line must still fit using natural 100% spaces.
-          # If the provisional final line only fits because spaces were compressed,
-          # insert the earliest legal extra break whose suffix fits naturally.
-          linebreak_marker = '''  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
+          line_count_marker = '''  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 '''
           correction = '''  if (blockStyle.alignment == CssTextAlign::Justify && minimumSpacePercent_ < 100 &&
       !lineBreakIndices.empty()) {
@@ -185,13 +181,14 @@ jobs:
 
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 '''
-          if text.count(linebreak_marker) != 1:
-              raise SystemExit('ParsedText.cpp: lineCount marker not found exactly once')
-          text = text.replace(linebreak_marker, correction, 1)
+          count = text.count(line_count_marker)
+          if count != 1:
+              raise SystemExit(f'ParsedText.cpp: lineCount marker count is {count}')
+          text = text.replace(line_count_marker, correction, 1)
 
-          p.write_text(text, encoding='utf-8')
+          path.write_text(text, encoding='utf-8')
           PY
-
+          python3 /tmp/integrated_typography_patch.py
           git diff --check
 
       - name: Verify integrated typography behavior
