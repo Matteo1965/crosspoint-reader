@@ -1,0 +1,243 @@
+name: Build Hungarian 1.6.0rc Integrated typography test
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-integrated-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated Hungarian source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reuse stable space and indexing RC patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
+          python - <<'PY'
+          from pathlib import Path
+          import re, textwrap
+
+          s = Path('/tmp/current-rc.yml').read_text(encoding='utf-8')
+          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", s, re.S)
+          if len(blocks) < 2:
+              raise SystemExit(f'Expected >=2 Python patch blocks, found {len(blocks)}')
+          for i, block in enumerate(blocks[:2], 1):
+              exec(compile(textwrap.dedent(block), f'<current-rc-block-{i}>', 'exec'))
+          PY
+
+      - name: Apply line-level minimum spacing and hyphen hanging integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          text = p.read_text(encoding='utf-8')
+
+          # 1) Hyphenation candidates may use optical-margin allowance only when the
+          # candidate really inserts a visible hyphen at the line end.
+          old_hyphen = '''    const int prefixWidth = measureFocusWordWidth(renderer, fontId, candidatePrefix, style,
+                                                  focusBoundaryBefore(focusBoundary, offset), needsHyphen);
+    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
+      continue;  // Skip if too wide or not an improvement
+    }
+'''
+          new_hyphen = '''    const uint8_t candidateFocusBoundary = focusBoundaryBefore(focusBoundary, offset);
+    const int prefixWidth =
+        measureFocusWordWidth(renderer, fontId, candidatePrefix, style, candidateFocusBoundary, needsHyphen);
+
+    // Only an actually inserted visible '-' may consume optical-margin allowance.
+    // Ordinary words and non-inserting break candidates keep the normal line width.
+    int hyphenHangingAllowance = 0;
+    if (needsHyphen && hangingPunctuationLimitPx != 0) {
+      static const std::string hangingHyphen("-");
+      const auto hyphenStyle =
+          candidateFocusBoundary >= candidatePrefix.size()
+              ? static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD)
+              : style;
+      hyphenHangingAllowance =
+          hangingPunctuationAllowance(renderer, fontId, hangingHyphen, hyphenStyle, hangingPunctuationLimitPx);
+    }
+    if (prefixWidth > availableWidth + hyphenHangingAllowance || prefixWidth <= chosenWidth) {
+      continue;  // Too wide even with a hanging inserted hyphen, or not an improvement.
+    }
+'''
+          if text.count(old_hyphen) != 1:
+              raise SystemExit(f'ParsedText.cpp: expected one hyphen candidate block, found {text.count(old_hyphen)}')
+          text = text.replace(old_hyphen, new_hyphen, 1)
+
+          # 2) The minimum-space percentage is a property of a *justified line*, not
+          # the whole paragraph. Move line-state calculation before natural-gap accounting
+          # so the last line and left/right/center lines can use natural 100% spacing.
+          marker = '''  // Calculate total word width for this line, count actual word gaps,
+  // and accumulate total natural gap widths (including space kerning adjustments).
+  int lineWordWidthSum = 0;
+'''
+          line_state = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+
+  // For RTL, implicit/default Left alignment becomes Right alignment.
+  // Explicit text-align:left must remain left for CSS correctness.
+  const CssTextAlign effectiveAlignment =
+      (blockStyle.isRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
+          ? CssTextAlign::Right
+          : blockStyle.alignment;
+
+  // Calculate total word width for this line, count actual word gaps,
+  // and accumulate total natural gap widths (including space kerning adjustments).
+  int lineWordWidthSum = 0;
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('ParsedText.cpp: line gap-accounting marker not found exactly once')
+          text = text.replace(marker, line_state, 1)
+
+          duplicate_state = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+
+  // For RTL, implicit/default Left alignment becomes Right alignment.
+  // Explicit text-align:left must remain left for CSS correctness.
+  const CssTextAlign effectiveAlignment =
+      (blockStyle.isRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
+          ? CssTextAlign::Right
+          : blockStyle.alignment;
+
+'''
+          # Remove the later original copy, leaving the newly inserted early copy.
+          first = text.find(duplicate_state)
+          second = text.find(duplicate_state, first + len(duplicate_state)) if first >= 0 else -1
+          if first < 0 or second < 0:
+              raise SystemExit('ParsedText.cpp: expected two line-state blocks after insertion')
+          text = text[:second] + text[second + len(duplicate_state):]
+
+          extract_pos = text.find('void ParsedText::extractLine(')
+          if extract_pos < 0:
+              raise SystemExit('ParsedText.cpp: extractLine not found')
+          before = text[:extract_pos]
+          extract = text[extract_pos:]
+          paragraph_gate = '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)'
+          line_gate = '(effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100)'
+          replaced = extract.count(paragraph_gate)
+          if replaced < 3:
+              raise SystemExit(f'ParsedText.cpp: expected >=3 scaled spacing gates in extractLine, found {replaced}')
+          extract = extract.replace(paragraph_gate, line_gate)
+          text = before + extract
+
+          # 3) Line breaking may use the selected minimum spacing for justified lines,
+          # but the paragraph's final line must still fit using natural 100% spaces.
+          # If the provisional final line only fits because spaces were compressed,
+          # insert the earliest legal extra break whose suffix fits naturally.
+          linebreak_marker = '''  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
+'''
+          correction = '''  if (blockStyle.alignment == CssTextAlign::Justify && minimumSpacePercent_ < 100 &&
+      !lineBreakIndices.empty()) {
+    const size_t finalEnd = lineBreakIndices.back();
+    const size_t finalStart = lineBreakIndices.size() > 1 ? lineBreakIndices[lineBreakIndices.size() - 2] : 0;
+    const bool finalIsFirstLine = finalStart == 0;
+    const int finalPageWidth = pageWidth - resolveFirstLineIndent(finalIsFirstLine, renderer, fontId);
+
+    const auto naturalLineWidth = [&](const size_t start, const size_t end) {
+      int width = 0;
+      for (size_t idx = start; idx < end; ++idx) {
+        if (idx > start) {
+          if (wordContinues[idx]) {
+            width += renderer.getKerning(fontId, lastCodepoint(words[idx - 1]), firstCodepoint(words[idx]),
+                                         wordStyles[idx - 1]);
+          } else if (!wordNoSpaceBefore[idx]) {
+            width += renderer.getSpaceAdvance(fontId, lastCodepoint(words[idx - 1]), firstCodepoint(words[idx]),
+                                              wordStyles[idx - 1]);
+          }
+        }
+        width += wordWidths[idx];
+      }
+      width += calculateRubyExtraStartOffset(start, end, renderer, fontId);
+      width += calculateRubyExtraEndOffset(start, end, renderer, fontId);
+      return width;
+    };
+
+    if (finalStart < finalEnd && naturalLineWidth(finalStart, finalEnd) > finalPageWidth) {
+      size_t correctedBreak = finalEnd;
+      for (size_t candidate = finalStart + 1; candidate < finalEnd; ++candidate) {
+        if (!TokenBoundary::allowsBreak(wordContinues[candidate], wordNoSpaceBefore[candidate])) continue;
+        if (naturalLineWidth(candidate, finalEnd) <= pageWidth) {
+          correctedBreak = candidate;
+          break;
+        }
+      }
+      if (correctedBreak < finalEnd) {
+        lineBreakIndices.insert(lineBreakIndices.end() - 1, correctedBreak);
+      }
+    }
+  }
+
+  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
+'''
+          if text.count(linebreak_marker) != 1:
+              raise SystemExit('ParsedText.cpp: lineCount marker not found exactly once')
+          text = text.replace(linebreak_marker, correction, 1)
+
+          p.write_text(text, encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify integrated typography behavior
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'availableWidth + hyphenHangingAllowance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'needsHyphen && hangingPunctuationLimitPx != 0' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'naturalLineWidth(finalStart, finalEnd)' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'renderer.displayBuffer();' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'beforeSpec.minimumSpacePercent != afterSpec.minimumSpacePercent' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 integrated release-candidate firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          test -f .pio/build/gh_release_rc/firmware.bin
+          ls -lh .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload integrated test firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-integrated-typography-test
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
