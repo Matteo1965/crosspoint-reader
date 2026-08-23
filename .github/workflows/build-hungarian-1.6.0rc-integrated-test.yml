@@ -8,6 +8,7 @@ name: Build Hungarian 1.6.0rc Integrated Typography Test
     paths:
       - '.github/workflows/build-hungarian-1.6.0rc-integrated-test.yml'
       - '.github/scripts/apply_integrated_typography_test.py'
+      - '.github/scripts/apply_hanging_ratios.py'
 
 permissions:
   contents: read
@@ -34,12 +35,14 @@ jobs:
           git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml > /tmp/space-v2.yml
           git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
           git show origin/hungarian-hyphenation:.github/scripts/apply_integrated_typography_test.py > /tmp/apply_integrated_typography_test.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_hanging_ratios.py > /tmp/apply_hanging_ratios.py
 
       - name: Apply integrated typography patches
         shell: bash
         run: |
           set -euo pipefail
           python3 /tmp/apply_integrated_typography_test.py
+          python3 /tmp/apply_hanging_ratios.py
           git diff --check
 
       - name: Verify integrated typography behavior
@@ -50,6 +53,11 @@ jobs:
           grep -q 'needsHyphen && hangingPunctuationLimitPx != 0' lib/Epub/Epub/ParsedText.cpp
           grep -q 'effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100' lib/Epub/Epub/ParsedText.cpp
           grep -q 'naturalLineWidth(finalStart, finalEnd)' lib/Epub/Epub/ParsedText.cpp
+          grep -q "punctuation == '-'" lib/Epub/Epub/ParsedText.cpp
+          grep -q "punctuation == '?' || punctuation == '!'" lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hangingPercent = 50' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hangingPercent = 10' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hangingPercent = 25' lib/Epub/Epub/ParsedText.cpp
           grep -q 'renderer.displayBuffer();' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'beforeSpec.minimumSpacePercent != afterSpec.minimumSpacePercent' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
