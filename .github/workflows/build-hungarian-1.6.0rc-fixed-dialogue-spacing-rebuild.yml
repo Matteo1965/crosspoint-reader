@@ -1,0 +1,83 @@
+name: Build Hungarian 1.6.0rc Fixed dialogue spacing rebuild
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-fixed-dialogue-spacing-rebuild.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out current integrated Hungarian source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Verify fixed dialogue spacing wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'fixedDialogueSpacing = 0' src/CrossPointSettings.h
+          grep -q 'spec.fixedDialogueSpacing' src/CrossPointSettings.cpp
+          grep -q 'SECTION_FILE_VERSION = 44' lib/Epub/Epub/Section.cpp
+          grep -q 'fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
+          grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Fix párbeszédköz' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'SETTINGS.fixedDialogueSpacing != 0, style' src/activities/settings/TextSettingsPreview.cpp
+          grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
+          grep -q 'simpleRender' lib/Epub/Epub/blocks/TextBlock.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Check firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-fixed-dialogue-spacing-rebuild
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
