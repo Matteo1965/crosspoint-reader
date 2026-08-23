@@ -215,5 +215,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   renderUi();
 
   drawFooter();
-  renderer.displayBuffer();
+  // Reader menu is transient UI. A FAST refresh substantially reduces the
+  // perceived menu-open latency; returning to the reader redraws the page
+  // through its normal refresh cycle, so page quality is unchanged.
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
