@@ -35,7 +35,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
 
   ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
-                    SETTINGS.focusReadingEnabled != 0, 0, style);
+                    SETTINGS.focusReadingEnabled != 0, 0, SETTINGS.fixedDialogueSpacing != 0, style);
 
   // Feed one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting
   const char* text = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
@@ -81,27 +81,26 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
 
   const int textTop = top + previewPadding;
   const int textBottom = top + height - labelReserved;
-  if (textBottom <= textTop) return;
+  const int textHeight = textBottom - textTop;
+  if (textHeight <= 0) return;
 
-  const PreviewKey key{.fontId = fontId,
-                       .fontPointSize = SETTINGS.fontPointSize,
-                       .screenMargin = SETTINGS.screenMargin,
-                       .textWidth = width,
-                       .lineCompression = SETTINGS.getReaderLineCompression(),
-                       .alignment = SETTINGS.paragraphAlignment,
-                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
-                       .focusReading = SETTINGS.focusReadingEnabled != 0,
-                       .hyphenation = SETTINGS.hyphenationEnabled != 0};
+  const PreviewKey key{fontId,
+                       width,
+                       SETTINGS.extraParagraphSpacing,
+                       SETTINGS.hyphenationEnabled,
+                       SETTINGS.focusReadingEnabled,
+                       SETTINGS.paragraphAlignment};
   if (!(layout.key == key)) {
     relayout(layout, renderer, fontId, width);
     layout.key = key;
   }
 
+  const int extraParagraphPx = SETTINGS.extraParagraphSpacing ? lineH / 2 : 0;
   int y = textTop;
   for (const auto& line : layout.lines) {
-    if (!line || y + lineH > textBottom) break;
+    if (y + lineH > textBottom) break;
     line->render(renderer, fontId, left, y);
-    y += lineH;
+    y += lineH + extraParagraphPx;
   }
 }
 
