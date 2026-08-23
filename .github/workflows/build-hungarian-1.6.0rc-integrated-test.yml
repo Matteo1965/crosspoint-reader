@@ -1,21 +1,22 @@
 name: Build Hungarian 1.6.0rc Integrated Typography Test
 
-on:
+'on':
   workflow_dispatch:
   push:
     branches:
       - hungarian-hyphenation
     paths:
-      - .github/workflows/build-hungarian-1.6.0rc-integrated-test.yml
+      - '.github/workflows/build-hungarian-1.6.0rc-integrated-test.yml'
+      - '.github/scripts/apply_integrated_typography_test.py'
 
 permissions:
   contents: read
 
 jobs:
   validate-build:
-    name: validate-build
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
     steps:
       - name: Check out integrated Hungarian source
         uses: actions/checkout@v4
@@ -24,171 +25,21 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Apply stable space and indexing patches
+      - name: Prepare integrated typography patches
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-parser-dialogue-fix.yml > /tmp/base-workflow.yml
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml > /tmp/space-v2.yml
           git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import textwrap
+          git show origin/hungarian-hyphenation:.github/scripts/apply_integrated_typography_test.py > /tmp/apply_integrated_typography_test.py
 
-          workflow = Path('/tmp/current-rc.yml').read_text(encoding='utf-8')
-          blocks = re.findall(r"          python - <<'PY'\n(.*?)\n          PY", workflow, re.S)
-          if len(blocks) < 2:
-              raise SystemExit(f'Expected at least 2 Python patch blocks, found {len(blocks)}')
-          for index, block in enumerate(blocks[:2], 1):
-              code = textwrap.dedent(block)
-              exec(compile(code, f'<stable-rc-block-{index}>', 'exec'))
-          PY
-
-      - name: Apply integrated typography patch
+      - name: Apply integrated typography patches
         shell: bash
         run: |
           set -euo pipefail
-          cat > /tmp/integrated_typography_patch.py <<'PY'
-          from pathlib import Path
-
-          path = Path('lib/Epub/Epub/ParsedText.cpp')
-          text = path.read_text(encoding='utf-8')
-
-          old_hyphen = '''    const int prefixWidth = measureFocusWordWidth(renderer, fontId, candidatePrefix, style,
-                                                  focusBoundaryBefore(focusBoundary, offset), needsHyphen);
-    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
-      continue;  // Skip if too wide or not an improvement
-    }
-'''
-          new_hyphen = '''    const uint8_t candidateFocusBoundary = focusBoundaryBefore(focusBoundary, offset);
-    const int prefixWidth =
-        measureFocusWordWidth(renderer, fontId, candidatePrefix, style, candidateFocusBoundary, needsHyphen);
-
-    // Only an actually inserted visible '-' may consume optical-margin allowance.
-    // Ordinary words and non-inserting break candidates keep the normal line width.
-    int hyphenHangingAllowance = 0;
-    if (needsHyphen && hangingPunctuationLimitPx != 0) {
-      static const std::string hangingHyphen("-");
-      const auto hyphenStyle =
-          candidateFocusBoundary >= candidatePrefix.size()
-              ? static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD)
-              : style;
-      hyphenHangingAllowance =
-          hangingPunctuationAllowance(renderer, fontId, hangingHyphen, hyphenStyle, hangingPunctuationLimitPx);
-    }
-    if (prefixWidth > availableWidth + hyphenHangingAllowance || prefixWidth <= chosenWidth) {
-      continue;  // Too wide even with a hanging inserted hyphen, or not an improvement.
-    }
-'''
-          count = text.count(old_hyphen)
-          if count != 1:
-              raise SystemExit(f'ParsedText.cpp: expected one hyphen candidate block, found {count}')
-          text = text.replace(old_hyphen, new_hyphen, 1)
-
-          marker = '''  // Calculate total word width for this line, count actual word gaps,
-  // and accumulate total natural gap widths (including space kerning adjustments).
-  int lineWordWidthSum = 0;
-'''
-          line_state = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
-
-  // For RTL, implicit/default Left alignment becomes Right alignment.
-  // Explicit text-align:left must remain left for CSS correctness.
-  const CssTextAlign effectiveAlignment =
-      (blockStyle.isRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
-          ? CssTextAlign::Right
-          : blockStyle.alignment;
-
-  // Calculate total word width for this line, count actual word gaps,
-  // and accumulate total natural gap widths (including space kerning adjustments).
-  int lineWordWidthSum = 0;
-'''
-          count = text.count(marker)
-          if count != 1:
-              raise SystemExit(f'ParsedText.cpp: line accounting marker count is {count}')
-          text = text.replace(marker, line_state, 1)
-
-          duplicated = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
-
-  // For RTL, implicit/default Left alignment becomes Right alignment.
-  // Explicit text-align:left must remain left for CSS correctness.
-  const CssTextAlign effectiveAlignment =
-      (blockStyle.isRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
-          ? CssTextAlign::Right
-          : blockStyle.alignment;
-
-'''
-          first = text.find(duplicated)
-          second = text.find(duplicated, first + len(duplicated)) if first >= 0 else -1
-          if first < 0 or second < 0:
-              raise SystemExit('ParsedText.cpp: expected duplicated line state after insertion')
-          text = text[:second] + text[second + len(duplicated):]
-
-          extract_start = text.find('void ParsedText::extractLine(')
-          if extract_start < 0:
-              raise SystemExit('ParsedText.cpp: extractLine not found')
-          before_extract = text[:extract_start]
-          extract = text[extract_start:]
-          paragraph_gate = '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)'
-          line_gate = '(effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100)'
-          gate_count = extract.count(paragraph_gate)
-          if gate_count < 3:
-              raise SystemExit(f'ParsedText.cpp: expected at least 3 paragraph-level gates, found {gate_count}')
-          extract = extract.replace(paragraph_gate, line_gate)
-          text = before_extract + extract
-
-          line_count_marker = '''  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
-'''
-          correction = '''  if (blockStyle.alignment == CssTextAlign::Justify && minimumSpacePercent_ < 100 &&
-      !lineBreakIndices.empty()) {
-    const size_t finalEnd = lineBreakIndices.back();
-    const size_t finalStart = lineBreakIndices.size() > 1 ? lineBreakIndices[lineBreakIndices.size() - 2] : 0;
-    const bool finalIsFirstLine = finalStart == 0;
-    const int finalPageWidth = pageWidth - resolveFirstLineIndent(finalIsFirstLine, renderer, fontId);
-
-    const auto naturalLineWidth = [&](const size_t start, const size_t end) {
-      int width = 0;
-      for (size_t idx = start; idx < end; ++idx) {
-        if (idx > start) {
-          if (wordContinues[idx]) {
-            width += renderer.getKerning(fontId, lastCodepoint(words[idx - 1]), firstCodepoint(words[idx]),
-                                         wordStyles[idx - 1]);
-          } else if (!wordNoSpaceBefore[idx]) {
-            width += renderer.getSpaceAdvance(fontId, lastCodepoint(words[idx - 1]), firstCodepoint(words[idx]),
-                                              wordStyles[idx - 1]);
-          }
-        }
-        width += wordWidths[idx];
-      }
-      width += calculateRubyExtraStartOffset(start, end, renderer, fontId);
-      width += calculateRubyExtraEndOffset(start, end, renderer, fontId);
-      return width;
-    };
-
-    if (finalStart < finalEnd && naturalLineWidth(finalStart, finalEnd) > finalPageWidth) {
-      size_t correctedBreak = finalEnd;
-      for (size_t candidate = finalStart + 1; candidate < finalEnd; ++candidate) {
-        if (!TokenBoundary::allowsBreak(wordContinues[candidate], wordNoSpaceBefore[candidate])) continue;
-        if (naturalLineWidth(candidate, finalEnd) <= pageWidth) {
-          correctedBreak = candidate;
-          break;
-        }
-      }
-      if (correctedBreak < finalEnd) {
-        lineBreakIndices.insert(lineBreakIndices.end() - 1, correctedBreak);
-      }
-    }
-  }
-
-  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
-'''
-          count = text.count(line_count_marker)
-          if count != 1:
-              raise SystemExit(f'ParsedText.cpp: lineCount marker count is {count}')
-          text = text.replace(line_count_marker, correction, 1)
-
-          path.write_text(text, encoding='utf-8')
-          PY
-          python3 /tmp/integrated_typography_patch.py
+          python3 /tmp/apply_integrated_typography_test.py
           git diff --check
 
       - name: Verify integrated typography behavior
