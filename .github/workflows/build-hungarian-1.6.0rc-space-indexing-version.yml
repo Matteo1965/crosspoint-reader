@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin hungarian-hyphenation
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-parser-dialogue-fix.yml > /tmp/base-workflow.yml
           git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml > /tmp/space-v2.yml
           python - <<'PY'
           from pathlib import Path
@@ -56,20 +57,17 @@ jobs:
                   raise SystemExit(f'{path}: expected exactly one match, found {count}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # Whenever an incremental section build is actually started, show Indexing immediately.
           reader = 'src/activities/reader/EpubReaderActivity.cpp'
           replace_once(
               reader,
               '''          if (showPopup) {\n            GUI.drawPopup(renderer, tr(STR_INDEXING));\n            pagesUntilFullRefresh = 1;\n          }\n          buildPopupPending = !showPopup;\n          const unsigned long buildStartMs = millis();\n''',
               '''          // Always show explicit feedback when a section is about to be indexed/rebuilt.\n          GUI.drawPopup(renderer, tr(STR_INDEXING));\n          pagesUntilFullRefresh = 1;\n          showPopup = true;\n          buildPopupPending = false;\n          const unsigned long buildStartMs = millis();\n''')
 
-          # Also show feedback when a deferred partial-cache extension starts later in the reader loop.
           replace_once(
               reader,
               '''    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''',
               '''    GUI.drawPopup(renderer, tr(STR_INDEXING));\n    pagesUntilFullRefresh = 1;\n    if (!section->startBuild(buildSpec)) {\n      partialRebuildStartFailed = true;\n      LOG_ERR("ERS", "Failed to start deferred partial extension build");\n    } else {\n      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,\n              section->pageCount);\n    }\n''')
 
-          # Compact first-page feature notes in CrossPoint Version.
           version = 'src/activities/settings/CrossPointVersionActivity.cpp'
           replace_once(
               version,
