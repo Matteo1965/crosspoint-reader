@@ -1,0 +1,218 @@
+name: Build Hungarian 1.6.0rc Fixed dialogue spacing
+
+'on':
+  workflow_dispatch:
+  push:
+    branches: [hungarian-hyphenation]
+    paths:
+      - '.github/workflows/build-hungarian-1.6.0rc-fixed-dialogue-spacing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out stable integrated Hungarian branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply fixed dialogue spacing feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def edit(path, replacements):
+              p = Path(path)
+              s = p.read_text()
+              for old, new in replacements:
+                  assert old in s, f'marker not found in {path}: {old[:80]!r}'
+                  s = s.replace(old, new, 1)
+              p.write_text(s)
+
+          edit('src/CrossPointSettings.h', [
+              ('  // Optical margin / hanging punctuation percentage: 0, 25, 50, 75 or 100.\n  uint8_t hangingPunctuation = 75;\n',
+               '  // Optical margin / hanging punctuation percentage: 0, 25, 50, 75 or 100.\n  uint8_t hangingPunctuation = 75;\n  // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.\n  uint8_t fixedDialogueSpacing = 0;\n')
+          ])
+
+          edit('lib/Epub/Epub/ReaderRenderSpec.h', [
+              ('  uint8_t hangingPunctuationLimitPx = 0;\n  bool embeddedStyle = true;\n',
+               '  uint8_t hangingPunctuationLimitPx = 0;\n  bool fixedDialogueSpacing = false;\n  bool embeddedStyle = true;\n')
+          ])
+
+          edit('src/CrossPointSettings.cpp', [
+              ('  doc["hangingPunctuation"] = hangingPunctuation;\n',
+               '  doc["hangingPunctuation"] = hangingPunctuation;\n  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;\n'),
+              ('  const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;\n',
+               '  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n  const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;\n'),
+              ('  spec.hangingPunctuationLimitPx =\n      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits) : 0;\n  spec.embeddedStyle = embeddedStyle != 0;\n',
+               '  spec.hangingPunctuationLimitPx =\n      hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits) : 0;\n  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n  spec.embeddedStyle = embeddedStyle != 0;\n')
+          ])
+
+          edit('lib/Epub/Epub/ParsedText.h', [
+              ('  uint8_t hangingPunctuationLimitPx;\n  bool isNaturalAlign;\n',
+               '  uint8_t hangingPunctuationLimitPx;\n  bool fixedDialogueSpacing;\n  bool isNaturalAlign;\n'),
+              ('  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,\n                      const BlockStyle& blockStyle = BlockStyle())\n',
+               '  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,\n                      const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle())\n'),
+              ('        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        isNaturalAlign(false),\n',
+               '        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        fixedDialogueSpacing(fixedDialogueSpacing),\n        isNaturalAlign(false),\n')
+          ])
+
+          edit('lib/Epub/Epub/ParsedText.cpp', [
+              ('  bool effectiveAttachToPrevious = attachToPrevious;\n  bool effectiveNoSpaceBefore = false;\n',
+               '  bool effectiveAttachToPrevious = attachToPrevious;\n  bool effectiveNoSpaceBefore = false;\n\n  // Dialogue typography: when a paragraph begins with a standalone en/em dash,\n  // keep the following normal source space fixed-width and non-breaking. In the\n  // token boundary model continues=true/noSpace=false is exactly that: a regular\n  // space is drawn, but it is neither a line-break opportunity nor a justify gap.\n  if (fixedDialogueSpacing && words.size() == 1 && !attachToPrevious) {\n    const uint32_t first = firstCodepoint(words.front());\n    if ((first == 0x2013 || first == 0x2014) && first == lastCodepoint(words.front())) {\n      effectiveAttachToPrevious = true;\n    }\n  }\n')
+          ])
+
+          edit('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h', [
+              ('  bool focusReadingEnabled;\n  uint8_t hangingPunctuationLimitPx;\n  const CssParser* cssParser;\n',
+               '  bool focusReadingEnabled;\n  uint8_t hangingPunctuationLimitPx;\n  bool fixedDialogueSpacing;\n  const CssParser* cssParser;\n'),
+              ('      const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx,\n      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,\n',
+               '      const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx, const bool fixedDialogueSpacing,\n      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,\n'),
+              ('        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        completePageFn(completePageFn),\n',
+               '        focusReadingEnabled(focusReadingEnabled),\n        hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n        fixedDialogueSpacing(fixedDialogueSpacing),\n        completePageFn(completePageFn),\n')
+          ])
+
+          edit('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp', [
+              ('  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,\n                                        hangingPunctuationLimitPx, blockStyle));\n',
+               '  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,\n                                        hangingPunctuationLimitPx, fixedDialogueSpacing, blockStyle));\n')
+          ])
+
+          # Section cache header + parser wiring. Cache version bump guarantees a clean reflow.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text()
+          assert 'constexpr uint8_t SECTION_FILE_VERSION = 43;' in s
+          s = s.replace('constexpr uint8_t SECTION_FILE_VERSION = 43;', 'constexpr uint8_t SECTION_FILE_VERSION = 44;', 1)
+          s = s.replace('                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t) +',
+                        '                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t) +', 1)
+          s = s.replace('                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.embeddedStyle) +',
+                        '                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +\n                                   sizeof(spec.embeddedStyle) +', 1)
+          s = s.replace('  serialization::writePod(file, spec.hangingPunctuationLimitPx);\n  serialization::writePod(file, spec.embeddedStyle);',
+                        '  serialization::writePod(file, spec.hangingPunctuationLimitPx);\n  serialization::writePod(file, spec.fixedDialogueSpacing);\n  serialization::writePod(file, spec.embeddedStyle);', 1)
+          s = s.replace('    uint8_t fileHangingPunctuationLimitPx;\n    bool fileEmbeddedStyle;',
+                        '    uint8_t fileHangingPunctuationLimitPx;\n    bool fileFixedDialogueSpacing;\n    bool fileEmbeddedStyle;', 1)
+          s = s.replace('    serialization::readPod(file, fileHangingPunctuationLimitPx);\n    serialization::readPod(file, fileEmbeddedStyle);',
+                        '    serialization::readPod(file, fileHangingPunctuationLimitPx);\n    serialization::readPod(file, fileFixedDialogueSpacing);\n    serialization::readPod(file, fileEmbeddedStyle);', 1)
+          s = s.replace('        fileHangingPunctuationLimitPx != spec.hangingPunctuationLimitPx || fileEmbeddedStyle != spec.embeddedStyle ||',
+                        '        fileHangingPunctuationLimitPx != spec.hangingPunctuationLimitPx ||\n        fileFixedDialogueSpacing != spec.fixedDialogueSpacing || fileEmbeddedStyle != spec.embeddedStyle ||', 1)
+          s = s.replace('      spec.focusReadingEnabled, spec.hangingPunctuationLimitPx,\n      [this, ctxPtr]',
+                        '      spec.focusReadingEnabled, spec.hangingPunctuationLimitPx, spec.fixedDialogueSpacing,\n      [this, ctxPtr]', 1)
+          sec.write_text(s)
+
+          # Text Settings: add one Layout row, label and ON/OFF toggle.
+          edit('src/activities/settings/TextSettingsActivity.h', [
+              ('  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, HangingPunctuation, Count };\n',
+               '  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, HangingPunctuation, FixedDialogueSpacing, Count };\n')
+          ])
+
+          p = Path('src/activities/settings/TextSettingsActivity.cpp')
+          s = p.read_text()
+          old = '''        item.label = i == static_cast<int>(LayoutRow::HangingPunctuation)\n                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation")\n                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);'''
+          new = '''        if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";\n        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";\n        } else {\n          item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);\n        }'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          marker = '''    case LayoutRow::ScreenMargin: {\n'''
+          insert = '''    case LayoutRow::FixedDialogueSpacing:\n      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;\n      SETTINGS.saveToFile();\n      requestUpdate();\n      break;\n    case LayoutRow::ScreenMargin: {\n'''
+          assert marker in s
+          s = s.replace(marker, insert, 1)
+          marker = '''    case LayoutRow::HangingPunctuation:\n      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);\n'''
+          insert = '''    case LayoutRow::HangingPunctuation:\n      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);\n    case LayoutRow::FixedDialogueSpacing:\n      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);\n'''
+          assert marker in s
+          s = s.replace(marker, insert, 1)
+          p.write_text(s)
+
+          # Keep the user's latest bookmark wording explicit in the same build.
+          hu = Path('lib/I18n/translations/hungarian.yaml')
+          hs = hu.read_text()
+          hs = hs.replace('STR_TOGGLE_BOOKMARK: "Könyvjelző váltása"', 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"')
+          hu.write_text(hs)
+          PY
+
+          git diff --check
+
+      - name: Verify feature wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'fixedDialogueSpacing = 0' src/CrossPointSettings.h
+          grep -q 'spec.fixedDialogueSpacing' src/CrossPointSettings.cpp
+          grep -q 'SECTION_FILE_VERSION = 44' lib/Epub/Epub/Section.cpp
+          grep -q 'fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
+          grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Fix párbeszédköz' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
+          grep -q 'simpleRender' lib/Epub/Epub/blocks/TextBlock.cpp
+
+      - name: Install clang-format 21
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y wget gnupg lsb-release
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null
+          echo "deb http://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-21 main" | sudo tee /etc/apt/sources.list.d/llvm21.list
+          sudo apt-get update -qq
+          sudo apt-get install -y clang-format-21
+
+      - name: Format and persist feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/clang-format-21 -i \
+            src/CrossPointSettings.h src/CrossPointSettings.cpp \
+            lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp \
+            lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp \
+            lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp \
+            src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp \
+            lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp \
+            lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp \
+            lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp \
+            src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp \
+            lib/I18n/translations/hungarian.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add fixed dialogue spacing setting'
+            git push origin HEAD:agent/hungarian-integrated-v1.6.0rc
+          fi
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-1.6.0rc-x4-fixed-dialogue-spacing
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
