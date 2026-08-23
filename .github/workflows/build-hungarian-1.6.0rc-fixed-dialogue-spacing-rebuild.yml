@@ -33,6 +33,7 @@ jobs:
           grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
           grep -q 'Fix párbeszédköz' src/activities/settings/TextSettingsActivity.cpp
           grep -q 'SETTINGS.fixedDialogueSpacing != 0, style' src/activities/settings/TextSettingsPreview.cpp
+          grep -q 'SETTINGS.fixedDialogueSpacing != 0' src/util/DictHtmlPages.cpp
           grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
           grep -q 'simpleRender' lib/Epub/Epub/blocks/TextBlock.cpp
 
