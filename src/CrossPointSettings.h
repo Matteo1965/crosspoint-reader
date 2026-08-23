@@ -243,6 +243,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphAlignment = JUSTIFIED;
   // Optical margin / hanging punctuation percentage: 0, 25, 50, 75 or 100.
   uint8_t hangingPunctuation = 75;
+  // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
+  uint8_t fixedDialogueSpacing = 0;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)

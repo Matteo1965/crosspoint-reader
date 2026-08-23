@@ -323,7 +323,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
-                                        hangingPunctuationLimitPx, blockStyle));
+                                        hangingPunctuationLimitPx, fixedDialogueSpacing, blockStyle));
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }

@@ -92,6 +92,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["fontFamily"] = fontFamily;
   doc["fontSize"] = fontPointSize;
   doc["hangingPunctuation"] = hangingPunctuation;
+  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -208,6 +209,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
   fontPointSize = storedFontSize;
+  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
   const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;
   if (storedHangingPunctuation == 1) {
     // Migrate the previous On/Off implementation: On meant 50%.
@@ -287,6 +289,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
   spec.hangingPunctuationLimitPx =
       hangingPunctuation ? static_cast<uint8_t>(((hangingPunctuation / 25) << 4) | hangingLimitUnits) : 0;
+  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;

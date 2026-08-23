@@ -53,6 +53,7 @@ class ParsedText {
   bool hyphenationEnabled;
   bool focusReadingEnabled;
   uint8_t hangingPunctuationLimitPx;
+  bool fixedDialogueSpacing;
   bool isNaturalAlign;
   bool hasRtlWord;
   std::vector<std::string> reorderedWordsScratch;
@@ -90,12 +91,13 @@ class ParsedText {
  public:
   explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,
-                      const BlockStyle& blockStyle = BlockStyle())
+                      const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle())
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         hangingPunctuationLimitPx(hangingPunctuationLimitPx),
+        fixedDialogueSpacing(fixedDialogueSpacing),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;

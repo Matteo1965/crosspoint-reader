@@ -29,7 +29,15 @@ class TextSettingsActivity final : public UiTabListActivity {
  private:
   // Row indices per tab. enum class (not plain enum) so a LayoutRow can't be
   // silently confused with a StyleRow of equal value.
-  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, HangingPunctuation, Count };
+  enum class LayoutRow {
+    LineSpacing,
+    ParaSpacing,
+    Alignment,
+    ScreenMargin,
+    HangingPunctuation,
+    FixedDialogueSpacing,
+    Count
+  };
   enum class StyleRow { FocusReading, Hyphenation, HungarianHyphenation, EmbeddedStyle, AntiAliasing, Count };
 
   // --- UiTabListActivity contract ---

@@ -108,9 +108,13 @@ void TextSettingsActivity::rebuildRowItems() {
         item.label = sizes_[i].name.c_str();
         break;
       case Tab::Layout:
-        item.label = i == static_cast<int>(LayoutRow::HangingPunctuation)
-                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation")
-                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";
+        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";
+        } else {
+          item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        }
         break;
       case Tab::Style:
         item.label = i == static_cast<int>(StyleRow::HungarianHyphenation) ? "Magyar elválasztás"
@@ -410,6 +414,11 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
+    case LayoutRow::FixedDialogueSpacing:
+      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
       options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
@@ -444,6 +453,8 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
       return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);
+    case LayoutRow::FixedDialogueSpacing:
+      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
 
     default:
       return "";

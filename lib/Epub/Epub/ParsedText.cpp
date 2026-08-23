@@ -475,6 +475,17 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   bool effectiveAttachToPrevious = attachToPrevious;
   bool effectiveNoSpaceBefore = false;
+
+  // Dialogue typography: when a paragraph begins with a standalone en/em dash,
+  // keep the following normal source space fixed-width and non-breaking. In the
+  // token boundary model continues=true/noSpace=false is exactly that: a regular
+  // space is drawn, but it is neither a line-break opportunity nor a justify gap.
+  if (fixedDialogueSpacing && words.size() == 1 && !attachToPrevious) {
+    const uint32_t first = firstCodepoint(words.front());
+    if ((first == 0x2013 || first == 0x2014) && first == lastCodepoint(words.front())) {
+      effectiveAttachToPrevious = true;
+    }
+  }
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
   // whitespace separated the two words, that space is content and must be rendered: Korean
