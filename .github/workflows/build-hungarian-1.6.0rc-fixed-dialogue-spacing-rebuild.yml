@@ -1,4 +1,4 @@
-name: Build Hungarian 1.6.0rc Fixed dialogue spacing rebuild
+name: Build Hungarian 1.6.0rc Dialogue correction + quoted compounds
 
 'on':
   workflow_dispatch:
@@ -22,16 +22,60 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Verify fixed dialogue spacing wiring
+      - name: Apply dialogue correction and quoted compound hyphenation
         shell: bash
         run: |
           set -euo pipefail
-          grep -q 'fixedDialogueSpacing = 0' src/CrossPointSettings.h
-          grep -q 'spec.fixedDialogueSpacing' src/CrossPointSettings.cpp
-          grep -q 'SECTION_FILE_VERSION = 44' lib/Epub/Epub/Section.cpp
-          grep -q 'fileFixedDialogueSpacing' lib/Epub/Epub/Section.cpp
-          grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'Fix párbeszédköz' src/activities/settings/TextSettingsActivity.cpp
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          parsed = 'lib/Epub/Epub/ParsedText.cpp'
+
+          replace_once(
+              parsed,
+              '''  // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD\n''',
+              '''  // Dialogue correction: normalize a standalone paragraph-opening dialogue marker to\n  // the Hungarian standard en dash. This is deliberately limited to the first\n  // rendered token of the block, so hyphens/dashes inside prose are untouched.\n  if (fixedDialogueSpacing && words.empty()) {\n    const uint32_t openingCp = firstCodepoint(word);\n    if (openingCp == lastCodepoint(word) &&\n        (openingCp == '-' || openingCp == 0x2013 || openingCp == 0x2014 || openingCp == 0x2212)) {\n      word = "\\xE2\\x80\\x93";  // U+2013 EN DASH\n    }\n  }\n\n  // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD\n''')
+
+          old_dialogue = '''  // Dialogue typography: when a paragraph begins with a standalone en/em dash,\n  // keep the following normal source space fixed-width and non-breaking. In the\n  // token boundary model continues=true/noSpace=false is exactly that: a regular\n  // space is drawn, but it is neither a line-break opportunity nor a justify gap.\n  if (fixedDialogueSpacing && words.size() == 1 && !attachToPrevious) {\n    const uint32_t first = firstCodepoint(words.front());\n    if ((first == 0x2013 || first == 0x2014) && first == lastCodepoint(words.front())) {\n      effectiveAttachToPrevious = true;\n    }\n  }\n'''
+          new_dialogue = '''  // Dialogue typography: remember a paragraph-opening dialogue dash independently\n  // of how source whitespace was tokenized. A normal space creates no token, while\n  // NBSP creates an explicit " " token; both must lead to the same fixed, non-breaking\n  // visual gap before the first spoken word.\n  if (fixedDialogueSpacing && !words.empty() && word != " ") {\n    bool paragraphStartsWithDialogueDash = false;\n    bool sawContent = false;\n    for (const auto& existing : words) {\n      if (existing == " ") continue;\n      if (sawContent) {\n        paragraphStartsWithDialogueDash = false;\n        break;\n      }\n      const uint32_t first = firstCodepoint(existing);\n      paragraphStartsWithDialogueDash = first == 0x2013 && first == lastCodepoint(existing);\n      sawContent = true;\n    }\n    if (paragraphStartsWithDialogueDash && !attachToPrevious) {\n      effectiveAttachToPrevious = true;\n    }\n  }\n'''
+          replace_once(parsed, old_dialogue, new_dialogue)
+
+          hyph = 'lib/Epub/Epub/hyphenation/Hyphenator.cpp'
+          old_explicit = '''std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {\n  std::vector<Hyphenator::BreakInfo> breaks;\n\n  for (size_t i = 1; i + 1 < cps.size(); ++i) {\n    const uint32_t cp = cps[i].value;\n    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {\n      continue;\n    }\n    // Offset points to the next codepoint so rendering starts after the hyphen marker.\n    breaks.push_back({cps[i + 1].byteOffset, isSoftHyphen(cp)});\n  }\n\n  return breaks;\n}\n'''
+          new_explicit = '''bool isClosingQuoteBeforeHyphen(const uint32_t cp) {\n  switch (cp) {\n    case '\"':\n    case 0x00BB:  // »\n    case 0x2019:  // ’\n    case 0x201D:  // ”\n      return true;\n    default:\n      return false;\n  }\n}\n\nstd::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {\n  std::vector<Hyphenator::BreakInfo> breaks;\n\n  for (size_t i = 1; i + 1 < cps.size(); ++i) {\n    const uint32_t cp = cps[i].value;\n    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i + 1].value)) continue;\n\n    // Quoted compounds frequently look like: „szpíker”-gyűléseken. Treat the\n    // closing quote immediately before the explicit hyphen as transparent when\n    // deciding whether the hyphen joins two alphabetic segments.\n    size_t left = i;\n    while (left > 0 && isClosingQuoteBeforeHyphen(cps[left - 1].value)) --left;\n    if (left == 0 || !isAlphabetic(cps[left - 1].value)) continue;\n\n    // Offset points to the next codepoint so rendering starts after the hyphen marker.\n    breaks.push_back({cps[i + 1].byteOffset, isSoftHyphen(cp)});\n  }\n\n  return breaks;\n}\n'''
+          replace_once(hyph, old_explicit, new_explicit)
+
+          old_segment = '''    if (i > segStart) {\n      std::vector<CodepointInfo> segment(cps.begin() + segStart, cps.begin() + i);\n      auto segIndexes = hyphenator.breakIndexes(segment);\n'''
+          new_segment = '''    if (i > segStart) {\n      std::vector<CodepointInfo> segment(cps.begin() + segStart, cps.begin() + i);\n      // Preserve original byte offsets but remove quote/punctuation wrappers before\n      // feeding each explicit-hyphen segment to the language pattern engine.\n      // This lets szpíker and gyűléseken hyphenate independently in\n      // „szpíker”-gyűléseken.\n      trimSurroundingPunctuationAndFootnote(segment);\n      auto segIndexes = hyphenator.breakIndexes(segment);\n'''
+          replace_once(hyph, old_segment, new_segment)
+
+          settings = 'src/activities/settings/TextSettingsActivity.cpp'
+          replace_once(settings,
+                       'item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";',
+                       'item.label = I18N.getLanguage() == Language::HU ? "Párbeszéd javítása" : "Dialogue correction";')
+
+          section = 'lib/Epub/Epub/Section.cpp'
+          replace_once(section, 'SECTION_FILE_VERSION = 44', 'SECTION_FILE_VERSION = 45')
+          PY
+
+      - name: Verify new fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'Párbeszéd javítása' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'openingCp == 0x2212' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'paragraphStartsWithDialogueDash' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'isClosingQuoteBeforeHyphen' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'trimSurroundingPunctuationAndFootnote(segment)' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'SECTION_FILE_VERSION = 45' lib/Epub/Epub/Section.cpp
           grep -q 'SETTINGS.fixedDialogueSpacing != 0, style' src/activities/settings/TextSettingsPreview.cpp
           grep -q 'SETTINGS.fixedDialogueSpacing != 0' src/util/DictHtmlPages.cpp
           grep -q 'STR_TOGGLE_BOOKMARK: "Könyvjelző jelölés"' lib/I18n/translations/hungarian.yaml
@@ -79,6 +123,6 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-fixed-dialogue-spacing-rebuild
+          name: crosspoint-hungarian-1.6.0rc-x4-dialogue-correction-quoted-compounds
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
