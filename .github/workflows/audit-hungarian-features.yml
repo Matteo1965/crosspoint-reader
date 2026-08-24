@@ -5,7 +5,7 @@ on:
     branches:
       - agent/hungarian-feature-audit
     paths:
-      - 'scripts/audit_hungarian_features.py'
+      - 'scripts/audit_hungarian_features_v2.py'
       - '.github/workflows/audit-hungarian-features.yml'
 
 permissions:
@@ -27,7 +27,7 @@ jobs:
           python-version: '3.13'
 
       - name: Generate canonical feature report
-        run: python scripts/audit_hungarian_features.py
+        run: python scripts/audit_hungarian_features_v2.py
 
       - name: Publish audit report to branch
         run: |
@@ -38,5 +38,5 @@ jobs:
             echo 'Audit report unchanged.'
             exit 0
           fi
-          git commit -m 'Publish Hungarian Edition feature audit'
+          git commit -m 'Publish strict Hungarian Edition feature audit v2'
           git push origin HEAD:agent/hungarian-feature-audit
