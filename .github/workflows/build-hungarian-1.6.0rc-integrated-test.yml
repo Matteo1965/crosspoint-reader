@@ -75,7 +75,7 @@ jobs:
           grep -q 'buildTowardVisibleTextOffset' lib/Epub/Epub/Section.h
           grep -q 'budgetMs == 0 || millis() - startMs < budgetMs' lib/Epub/Epub/Section.cpp
           grep -q 'RESPONSIVE_REFLOW_PARSE_BUDGET_MS = 12' src/activities/reader/EpubReaderActivity.h
-          grep -q 'section->buildTowardVisibleTextOffset(*offsetJump, RESPONSIVE_REFLOW_PARSE_BUDGET_MS)' src/activities/reader/EpubReaderActivity.cpp
+          grep -Fq 'section->buildTowardVisibleTextOffset(*offsetJump, RESPONSIVE_REFLOW_PARSE_BUDGET_MS)' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'targetDirectedBackground' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'BACKGROUND_BUILD_PAGES_PER_TICK = 1' src/activities/reader/EpubReaderActivity.h
           grep -q 'BACKGROUND_BUILD_IDLE_MS = 250' src/activities/reader/EpubReaderActivity.h
