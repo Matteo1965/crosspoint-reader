@@ -42,7 +42,14 @@ class ParsedText {
     size_t wordIndex;
     uint32_t base;
   };
-  std::deque<uint16_t> wordVisibleOffsetDeltas;
+  // Compatibility shim: ParsedText.cpp bulk-reserves all per-token arrays, but this
+  // storage intentionally remains deque-backed to avoid large contiguous allocations.
+  // reserve() is therefore a deliberate no-op.
+  struct VisibleOffsetDeque : std::deque<uint16_t> {
+    using std::deque<uint16_t>::deque;
+    void reserve(size_t) noexcept {}
+  };
+  VisibleOffsetDeque wordVisibleOffsetDeltas;
   uint32_t visibleOffsetBase = 0;
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
