@@ -1,4 +1,4 @@
-name: Build Hungarian 1.6.0rc Integrated Typography Test
+name: Build Hungarian 1.6.0rc Integrated Typography Stable
 
 'on':
   workflow_dispatch:
@@ -10,6 +10,7 @@ name: Build Hungarian 1.6.0rc Integrated Typography Test
       - '.github/scripts/apply_integrated_typography_test.py'
       - '.github/scripts/apply_hanging_ratios.py'
       - '.github/scripts/apply_typography_round2_fixes.py'
+      - '.github/scripts/apply_paragraph_final_remainder_guard.py'
 
 permissions:
   contents: read
@@ -38,6 +39,7 @@ jobs:
           git show origin/hungarian-hyphenation:.github/scripts/apply_integrated_typography_test.py > /tmp/apply_integrated_typography_test.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_hanging_ratios.py > /tmp/apply_hanging_ratios.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_typography_round2_fixes.py > /tmp/apply_typography_round2_fixes.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_paragraph_final_remainder_guard.py > /tmp/apply_paragraph_final_remainder_guard.py
 
       - name: Apply integrated typography patches
         shell: bash
@@ -46,6 +48,7 @@ jobs:
           python3 /tmp/apply_integrated_typography_test.py
           python3 /tmp/apply_hanging_ratios.py
           python3 /tmp/apply_typography_round2_fixes.py
+          python3 /tmp/apply_paragraph_final_remainder_guard.py
           git diff --check
 
       - name: Verify integrated typography behavior
@@ -57,7 +60,8 @@ jobs:
           grep -q 'effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100' lib/Epub/Epub/ParsedText.cpp
           grep -q 'for (size_t candidate = finalEnd - 1; candidate > finalStart; --candidate)' lib/Epub/Epub/ParsedText.cpp
           grep -q 'isParagraphFinalLexicalWord' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'hasLaterAutomaticBreak' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'remainderLetterCount <= 2' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'hasLaterAutomaticBreak' lib/Epub/Epub/ParsedText.cpp
           grep -q 'filterShortHungarianAutomaticBreaks' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'a.replacement < b.replacement' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'ShortForeignNamesDoNotLeaveVowellessRemainders' test/hyphenation_eval/HungarianTypographyRegressionTest.cpp
@@ -100,9 +104,9 @@ jobs:
           test -f .pio/build/gh_release_rc/firmware.bin
           ls -lh .pio/build/gh_release_rc/firmware.bin
 
-      - name: Upload integrated test firmware artifact
+      - name: Upload stable Hungarian typography firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-typography-round2-test
+          name: crosspoint-hungarian-1.6.0rc-x4-typography-stable-finalword
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
