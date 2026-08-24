@@ -79,28 +79,44 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
-  const int textTop = top + previewPadding;
-  const int textBottom = top + height - labelReserved;
-  const int textHeight = textBottom - textTop;
-  if (textHeight <= 0) return;
+  const int textLeft = left + SETTINGS.screenMargin;
+  const int textWidth = width - 2 * SETTINGS.screenMargin;
+  if (textWidth <= 0) return;
 
-  const PreviewKey key{fontId,
-                       width,
-                       SETTINGS.extraParagraphSpacing,
-                       SETTINGS.hyphenationEnabled,
-                       SETTINGS.focusReadingEnabled,
-                       SETTINGS.paragraphAlignment};
+  const float compression = SETTINGS.getReaderLineCompression();
+  const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
+  const int paragraphGap = SETTINGS.extraParagraphSpacing ? lineAdvance / 2 : 0;
+
+  // Re-lay-out and prewarm only when a layout-affecting setting or geometry changes.
+  // Use designated initializers to keep the cache key aligned with PreviewKey fields.
+  const PreviewKey key{.fontId = fontId,
+                       .fontPointSize = SETTINGS.fontPointSize,
+                       .screenMargin = SETTINGS.screenMargin,
+                       .textWidth = textWidth,
+                       .lineCompression = compression,
+                       .alignment = SETTINGS.paragraphAlignment,
+                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
+                       .focusReading = SETTINGS.focusReadingEnabled != 0,
+                       .hyphenation = SETTINGS.hyphenationEnabled != 0,
+                       .fixedDialogueSpacing = SETTINGS.fixedDialogueSpacing != 0};
   if (!(layout.key == key)) {
-    relayout(layout, renderer, fontId, width);
+    if (auto* fcm = renderer.getFontCacheManager()) {
+      fcm->prewarmCache(fontId, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
+    }
+    relayout(layout, renderer, fontId, textWidth);
     layout.key = key;
   }
 
-  const int extraParagraphPx = SETTINGS.extraParagraphSpacing ? lineH / 2 : 0;
-  int y = textTop;
-  for (const auto& line : layout.lines) {
-    if (y + lineH > textBottom) break;
-    line->render(renderer, fontId, left, y);
-    y += lineH + extraParagraphPx;
+  // Draw the sample twice so paragraph spacing remains visible in the preview.
+  int y = top + previewPadding;
+  const int textBottomLimit = top + height - labelReserved;
+  for (int paragraph = 0; paragraph < 2; paragraph++) {
+    for (const auto& line : layout.lines) {
+      if (y + lineH > textBottomLimit) return;
+      line->render(renderer, fontId, textLeft, y);
+      y += lineAdvance;
+    }
+    y += paragraphGap;
   }
 }
 
