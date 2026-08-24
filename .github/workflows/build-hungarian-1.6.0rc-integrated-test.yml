@@ -12,6 +12,7 @@ name: Build Hungarian 1.6.0rc Responsive Typography Stable
       - '.github/scripts/apply_typography_round2_fixes.py'
       - '.github/scripts/apply_paragraph_final_remainder_guard.py'
       - '.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py'
+      - '.github/scripts/apply_responsive_font_reflow_offset_fix.py'
 
 permissions:
   contents: read
@@ -42,6 +43,7 @@ jobs:
           git show origin/hungarian-hyphenation:.github/scripts/apply_typography_round2_fixes.py > /tmp/apply_typography_round2_fixes.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_paragraph_final_remainder_guard.py > /tmp/apply_paragraph_final_remainder_guard.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py > /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_responsive_font_reflow_offset_fix.py > /tmp/apply_responsive_font_reflow_offset_fix.py
 
       - name: Apply integrated typography patches
         shell: bash
@@ -52,6 +54,7 @@ jobs:
           python3 /tmp/apply_typography_round2_fixes.py
           python3 /tmp/apply_paragraph_final_remainder_guard.py
           python3 /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
+          python3 /tmp/apply_responsive_font_reflow_offset_fix.py
           git diff --check
 
       - name: Verify integrated typography behavior
@@ -75,7 +78,11 @@ jobs:
           grep -q 'responsiveFontReflowPending' src/activities/reader/EpubReaderActivity.h
           grep -q 'responsiveFontReflowPending = beforeSpec.fontId != afterSpec.fontId' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'section->buildSomeMore(responsiveFontReflowPending ? 1 : BUILD_PAGES_PER_CHUNK)' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'offsetJump.reset();' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Responsive font reflow targeting visible offset' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'responsiveTargetReached' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'buildReachedVisibleTextOffset' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'getPageForVisibleTextOffset' src/activities/reader/EpubReaderActivity.cpp
+          ! grep -q 'Exact content-offset remapping is deferred until the section build completes' src/activities/reader/EpubReaderActivity.cpp
           grep -q "punctuation == '-'" lib/Epub/Epub/ParsedText.cpp
           grep -q "punctuation == '?' || punctuation == '!'" lib/Epub/Epub/ParsedText.cpp
           grep -q 'hangingPercent = 50' lib/Epub/Epub/ParsedText.cpp
@@ -117,6 +124,6 @@ jobs:
       - name: Upload responsive Hungarian typography firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-responsive-reflow-finalhyphen
+          name: crosspoint-hungarian-1.6.0rc-x4-responsive-offset-reflow
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
