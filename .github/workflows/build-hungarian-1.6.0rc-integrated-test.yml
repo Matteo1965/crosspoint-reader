@@ -1,4 +1,4 @@
-name: Build Hungarian 1.6.0rc Integrated Typography Stable
+name: Build Hungarian 1.6.0rc Responsive Typography Stable
 
 'on':
   workflow_dispatch:
@@ -11,6 +11,7 @@ name: Build Hungarian 1.6.0rc Integrated Typography Stable
       - '.github/scripts/apply_hanging_ratios.py'
       - '.github/scripts/apply_typography_round2_fixes.py'
       - '.github/scripts/apply_paragraph_final_remainder_guard.py'
+      - '.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py'
 
 permissions:
   contents: read
@@ -40,6 +41,7 @@ jobs:
           git show origin/hungarian-hyphenation:.github/scripts/apply_hanging_ratios.py > /tmp/apply_hanging_ratios.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_typography_round2_fixes.py > /tmp/apply_typography_round2_fixes.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_paragraph_final_remainder_guard.py > /tmp/apply_paragraph_final_remainder_guard.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py > /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
 
       - name: Apply integrated typography patches
         shell: bash
@@ -49,6 +51,7 @@ jobs:
           python3 /tmp/apply_hanging_ratios.py
           python3 /tmp/apply_typography_round2_fixes.py
           python3 /tmp/apply_paragraph_final_remainder_guard.py
+          python3 /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
           git diff --check
 
       - name: Verify integrated typography behavior
@@ -58,6 +61,9 @@ jobs:
           grep -q 'availableWidth + hyphenHangingAllowance' lib/Epub/Epub/ParsedText.cpp
           grep -q 'needsHyphen && hangingPunctuationLimitPx != 0' lib/Epub/Epub/ParsedText.cpp
           grep -q 'effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'repairedByHyphenation' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'availableForFinalPrefix' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hyphenateWordAtIndex(finalWordIndex' lib/Epub/Epub/ParsedText.cpp
           grep -q 'for (size_t candidate = finalEnd - 1; candidate > finalStart; --candidate)' lib/Epub/Epub/ParsedText.cpp
           grep -q 'isParagraphFinalLexicalWord' lib/Epub/Epub/ParsedText.cpp
           grep -q 'remainderLetterCount <= 2' lib/Epub/Epub/ParsedText.cpp
@@ -66,6 +72,10 @@ jobs:
           grep -q 'a.replacement < b.replacement' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'ShortForeignNamesDoNotLeaveVowellessRemainders' test/hyphenation_eval/HungarianTypographyRegressionTest.cpp
           grep -q 'CompoundBoundaryBeatsFalseExtendedReplacement' test/hyphenation_eval/HungarianTypographyRegressionTest.cpp
+          grep -q 'responsiveFontReflowPending' src/activities/reader/EpubReaderActivity.h
+          grep -q 'responsiveFontReflowPending = beforeSpec.fontId != afterSpec.fontId' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'section->buildSomeMore(responsiveFontReflowPending ? 1 : BUILD_PAGES_PER_CHUNK)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'offsetJump.reset();' src/activities/reader/EpubReaderActivity.cpp
           grep -q "punctuation == '-'" lib/Epub/Epub/ParsedText.cpp
           grep -q "punctuation == '?' || punctuation == '!'" lib/Epub/Epub/ParsedText.cpp
           grep -q 'hangingPercent = 50' lib/Epub/Epub/ParsedText.cpp
@@ -104,9 +114,9 @@ jobs:
           test -f .pio/build/gh_release_rc/firmware.bin
           ls -lh .pio/build/gh_release_rc/firmware.bin
 
-      - name: Upload stable Hungarian typography firmware artifact
+      - name: Upload responsive Hungarian typography firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-typography-stable-finalword
+          name: crosspoint-hungarian-1.6.0rc-x4-responsive-reflow-finalhyphen
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
