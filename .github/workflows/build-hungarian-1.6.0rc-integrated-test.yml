@@ -1,4 +1,4 @@
-name: Build Hungarian 1.6.0rc Targeted Parser Reflow
+name: Build Hungarian 1.6.0rc Performance Diagnostics
 
 'on':
   workflow_dispatch:
@@ -15,6 +15,7 @@ name: Build Hungarian 1.6.0rc Targeted Parser Reflow
       - '.github/scripts/apply_responsive_font_reflow_offset_fix.py'
       - '.github/scripts/apply_font_reflow_background_scheduler_fix.py'
       - '.github/scripts/apply_targeted_parser_timeslice_reflow.py'
+      - '.github/scripts/apply_performance_diagnostics.py'
 
 permissions:
   contents: read
@@ -32,7 +33,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Prepare integrated typography patches
+      - name: Prepare integrated typography and diagnostic patches
         shell: bash
         run: |
           set -euo pipefail
@@ -48,8 +49,9 @@ jobs:
           git show origin/hungarian-hyphenation:.github/scripts/apply_responsive_font_reflow_offset_fix.py > /tmp/apply_responsive_font_reflow_offset_fix.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_font_reflow_background_scheduler_fix.py > /tmp/apply_font_reflow_background_scheduler_fix.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_targeted_parser_timeslice_reflow.py > /tmp/apply_targeted_parser_timeslice_reflow.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_performance_diagnostics.py > /tmp/apply_performance_diagnostics.py
 
-      - name: Apply integrated typography and reflow patches
+      - name: Apply integrated typography, reflow and diagnostic patches
         shell: bash
         run: |
           set -euo pipefail
@@ -61,9 +63,10 @@ jobs:
           python3 /tmp/apply_responsive_font_reflow_offset_fix.py
           python3 /tmp/apply_font_reflow_background_scheduler_fix.py
           python3 /tmp/apply_targeted_parser_timeslice_reflow.py
+          python3 /tmp/apply_performance_diagnostics.py
           git diff --check
 
-      - name: Verify targeted parser reflow behavior
+      - name: Verify performance diagnostics and integrated behavior
         shell: bash
         run: |
           set -euo pipefail
@@ -73,14 +76,18 @@ jobs:
           ! grep -q 'hasLaterAutomaticBreak' lib/Epub/Epub/ParsedText.cpp
           grep -q 'filterShortHungarianAutomaticBreaks' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'buildTowardVisibleTextOffset' lib/Epub/Epub/Section.h
-          grep -q 'budgetMs == 0 || millis() - startMs < budgetMs' lib/Epub/Epub/Section.cpp
           grep -q 'RESPONSIVE_REFLOW_PARSE_BUDGET_MS = 12' src/activities/reader/EpubReaderActivity.h
-          grep -Fq 'section->buildTowardVisibleTextOffset(*offsetJump, RESPONSIVE_REFLOW_PARSE_BUDGET_MS)' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'targetDirectedBackground' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'BACKGROUND_BUILD_PAGES_PER_TICK = 1' src/activities/reader/EpubReaderActivity.h
           grep -q 'BACKGROUND_BUILD_IDLE_MS = 250' src/activities/reader/EpubReaderActivity.h
-          grep -q 'readerInputPending = mappedInput.wasAnyPressed() || mappedInput.wasAnyReleased()' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'Responsive font reflow targeting visible offset' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'struct PerformanceDiagnostic' src/activities/reader/EpubReaderActivity.h
+          grep -q 'perfStartFontChange' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'const auto tScan = millis();' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'perfMarkRender(tScan - t0, tPrewarm - tScan' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'perfNoteInputSeen' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'perfFinishInput' src/activities/reader/EpubReaderActivity.cpp
+          grep -q '/performance.log' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'O_WRONLY | O_CREAT | O_APPEND' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'input_latency=%lums' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
 
       - name: Configure unit tests
@@ -104,7 +111,7 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build X4 integrated release-candidate firmware
+      - name: Build X4 performance diagnostic firmware
         run: .venv/bin/pio run -e gh_release_rc
 
       - name: Check firmware size
@@ -112,9 +119,9 @@ jobs:
           test -f .pio/build/gh_release_rc/firmware.bin
           ls -lh .pio/build/gh_release_rc/firmware.bin
 
-      - name: Upload targeted parser reflow firmware artifact
+      - name: Upload performance diagnostic firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-targeted-parser-reflow
+          name: crosspoint-hungarian-1.6.0rc-x4-performance-diagnostic
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
