@@ -36,11 +36,10 @@ class HungarianExtendedRegressionTest : public ::testing::Test {
   }
 };
 
-// These words contain a character sequence that *looks* like one of the compact
-// doubled Hungarian digraph/trigraph forms only because a compound/morpheme
-// boundary happens to join the last letter of the left member with the first
-// letters of the right member. At the boundary we want a normal inserted hyphen,
-// never AppendY/AppendZ/AppendS/AppendZS reconstruction.
+// These words contain a sequence that looks like a compact doubled Hungarian
+// digraph/trigraph only because a compound/morpheme boundary joins the last
+// letter of the left member with the first letters of the right member.
+// At the boundary we want a normal inserted hyphen and Replacement::None.
 TEST_F(HungarianExtendedRegressionTest, CompoundBoundariesMustNotTriggerCompactDoublingReplacement) {
   static constexpr CompoundBoundaryCase cases[] = {
       // s + sz... -> apparent ssz
@@ -52,7 +51,7 @@ TEST_F(HungarianExtendedRegressionTest, CompoundBoundariesMustNotTriggerCompactD
       {"mozgásszervi", "mozgás"},
       {"hússzelet", "hús"},
       {"hússzeletelő", "hús"},
-      {"vadásszenvedély", "vadás"},  // stress case: boundary morphology guard
+      {"olvasásszeretet", "olvasás"},
       {"lakásszám", "lakás"},
 
       // g + gy... -> apparent ggy
@@ -65,7 +64,7 @@ TEST_F(HungarianExtendedRegressionTest, CompoundBoundariesMustNotTriggerCompactD
       // l + ly... -> apparent lly
       {"fallyuk", "fal"},
       {"fallyukasztás", "fal"},
-      {"acéllap", "acél"},  // control-like compound near the lly family
+      {"acéllyukasztás", "acél"},
 
       // n + ny... -> apparent nny
       {"szénnyomás", "szén"},
@@ -92,9 +91,8 @@ TEST_F(HungarianExtendedRegressionTest, CompoundBoundariesMustNotTriggerCompactD
   }
 }
 
-// Positive controls: these are genuine compact doubled multi-letter consonants.
-// Extended Hungarian hyphenation must keep reconstructing the missing letter(s)
-// on the left side: asszony -> asz-szony, mennyi -> meny-nyi, etc.
+// Positive controls: genuine compact doubled multi-letter consonants must keep
+// the Hungarian reconstruction on the left side (asz-szony, meny-nyi, etc.).
 TEST_F(HungarianExtendedRegressionTest, GenuineCompactDoublingsMustKeepReplacement) {
   static constexpr GenuineDoublingCase cases[] = {
       // ssz -> AppendZ
