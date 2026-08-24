@@ -14,15 +14,13 @@
 class GfxRenderer;
 
 class ParsedText {
-  // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
-  // of tokens (CJK splits every character), and a vector grows by reallocating its
-  // whole element array into one contiguous block (32 B/std::string -> 64-128 KB at
-  // a few thousand tokens). On the ESP32-C3 that single large contiguous request
-  // fails under a fragmented, BLE-resident heap and the throwing operator new
-  // abort()s the firmware (fresh-open CJK crash). A deque grows in fixed ~512 B nodes
-  // (largest contiguous alloc stays ~2 KB regardless of token count), so it never
-  // triggers that. The per-token parallel arrays below stay vectors: 1 byte / 1 bit
-  // each, they never approach the contiguous-block ceiling.
+  // words/rubyTexts and the 16-bit visible-offset deltas are std::deque, not std::vector:
+  // a paragraph can hold thousands of tokens (CJK splits every character), and vectors grow
+  // by reallocating their whole element array into one contiguous block. On the ESP32-C3 that
+  // large contiguous request can fail under a fragmented, BLE-resident heap and the throwing
+  // operator new abort()s the firmware. Deques grow in small fixed-size nodes instead. The
+  // remaining per-token parallel arrays stay vectors because their element storage is 1 byte
+  // or bit per token and does not approach the same contiguous-allocation size.
   std::deque<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   // Boundary flags use all four combinations:
@@ -44,7 +42,7 @@ class ParsedText {
     size_t wordIndex;
     uint32_t base;
   };
-  std::vector<uint16_t> wordVisibleOffsetDeltas;
+  std::deque<uint16_t> wordVisibleOffsetDeltas;
   uint32_t visibleOffsetBase = 0;
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
