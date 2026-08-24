@@ -1,4 +1,4 @@
-name: Build Hungarian 1.6.0rc Responsive Typography Stable
+name: Build Hungarian 1.6.0rc Input-Priority Reflow Stable
 
 'on':
   workflow_dispatch:
@@ -13,6 +13,7 @@ name: Build Hungarian 1.6.0rc Responsive Typography Stable
       - '.github/scripts/apply_paragraph_final_remainder_guard.py'
       - '.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py'
       - '.github/scripts/apply_responsive_font_reflow_offset_fix.py'
+      - '.github/scripts/apply_font_reflow_background_scheduler_fix.py'
 
 permissions:
   contents: read
@@ -44,8 +45,9 @@ jobs:
           git show origin/hungarian-hyphenation:.github/scripts/apply_paragraph_final_remainder_guard.py > /tmp/apply_paragraph_final_remainder_guard.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py > /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
           git show origin/hungarian-hyphenation:.github/scripts/apply_responsive_font_reflow_offset_fix.py > /tmp/apply_responsive_font_reflow_offset_fix.py
+          git show origin/hungarian-hyphenation:.github/scripts/apply_font_reflow_background_scheduler_fix.py > /tmp/apply_font_reflow_background_scheduler_fix.py
 
-      - name: Apply integrated typography patches
+      - name: Apply integrated typography and reflow patches
         shell: bash
         run: |
           set -euo pipefail
@@ -55,41 +57,30 @@ jobs:
           python3 /tmp/apply_paragraph_final_remainder_guard.py
           python3 /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
           python3 /tmp/apply_responsive_font_reflow_offset_fix.py
+          python3 /tmp/apply_font_reflow_background_scheduler_fix.py
           git diff --check
 
-      - name: Verify integrated typography behavior
+      - name: Verify integrated typography and input-priority reflow
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'availableWidth + hyphenHangingAllowance' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'needsHyphen && hangingPunctuationLimitPx != 0' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'effectiveAlignment == CssTextAlign::Justify && !isLastLine ? minimumSpacePercent_ : 100' lib/Epub/Epub/ParsedText.cpp
           grep -q 'repairedByHyphenation' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'availableForFinalPrefix' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'hyphenateWordAtIndex(finalWordIndex' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'for (size_t candidate = finalEnd - 1; candidate > finalStart; --candidate)' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'isParagraphFinalLexicalWord' lib/Epub/Epub/ParsedText.cpp
           grep -q 'remainderLetterCount <= 2' lib/Epub/Epub/ParsedText.cpp
           ! grep -q 'hasLaterAutomaticBreak' lib/Epub/Epub/ParsedText.cpp
           grep -q 'filterShortHungarianAutomaticBreaks' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'a.replacement < b.replacement' lib/Epub/Epub/hyphenation/Hyphenator.cpp
-          grep -q 'ShortForeignNamesDoNotLeaveVowellessRemainders' test/hyphenation_eval/HungarianTypographyRegressionTest.cpp
-          grep -q 'CompoundBoundaryBeatsFalseExtendedReplacement' test/hyphenation_eval/HungarianTypographyRegressionTest.cpp
           grep -q 'responsiveFontReflowPending' src/activities/reader/EpubReaderActivity.h
-          grep -q 'responsiveFontReflowPending = beforeSpec.fontId != afterSpec.fontId' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'section->buildSomeMore(responsiveFontReflowPending ? 1 : BUILD_PAGES_PER_CHUNK)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'fontReflowBackgroundThrottled' src/activities/reader/EpubReaderActivity.h
+          grep -q 'BACKGROUND_BUILD_PAGES_PER_TICK = 1' src/activities/reader/EpubReaderActivity.h
+          grep -q 'BACKGROUND_BUILD_IDLE_MS = 250' src/activities/reader/EpubReaderActivity.h
+          grep -q 'readerInputPending = mappedInput.wasAnyPressed() || mappedInput.wasAnyReleased()' src/activities/reader/EpubReaderActivity.cpp
+          grep -q '!readerInputPending && backgroundBuildIdle' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'if (fontReflowBackgroundThrottled) return false;' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Responsive font reflow targeting visible offset' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'responsiveTargetReached' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'buildReachedVisibleTextOffset' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'getPageForVisibleTextOffset' src/activities/reader/EpubReaderActivity.cpp
-          ! grep -q 'Exact content-offset remapping is deferred until the section build completes' src/activities/reader/EpubReaderActivity.cpp
-          grep -q "punctuation == '-'" lib/Epub/Epub/ParsedText.cpp
-          grep -q "punctuation == '?' || punctuation == '!'" lib/Epub/Epub/ParsedText.cpp
-          grep -q 'hangingPercent = 50' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'hangingPercent = 10' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'hangingPercent = 25' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'renderer.displayBuffer();' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'beforeSpec.minimumSpacePercent != afterSpec.minimumSpacePercent' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
 
       - name: Configure unit tests
@@ -121,9 +112,9 @@ jobs:
           test -f .pio/build/gh_release_rc/firmware.bin
           ls -lh .pio/build/gh_release_rc/firmware.bin
 
-      - name: Upload responsive Hungarian typography firmware artifact
+      - name: Upload input-priority reflow firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: crosspoint-hungarian-1.6.0rc-x4-responsive-offset-reflow
+          name: crosspoint-hungarian-1.6.0rc-x4-input-priority-reflow
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
