@@ -80,7 +80,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ADDR2LINE=$(find ~/.platformio ~/.cache -type f -name '*addr2line' 2>/dev/null | grep xtensa | head -1)
+          ADDR2LINE=$(find ~/.platformio ~/.cache -type f -name 'riscv32-esp-elf-addr2line' 2>/dev/null | head -1)
           test -n "$ADDR2LINE"
           "$ADDR2LINE" -pfiaC -e .pio/build/gh_release_rc/firmware.elf \
             0x4207B8BE 0x4207B904 0x420023FA 0x4200B2E6 0x4200B846 0x4200B516 \
