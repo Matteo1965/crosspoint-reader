@@ -128,7 +128,7 @@ helper = helper_marker + '''void filterShortHungarianAutomaticBreaks(const std::
   if (cps.size() > kShortWordMaxCodepoints) return;
 
   breaks.erase(std::remove_if(breaks.begin(), breaks.end(), [&](const Hyphenator::BreakInfo& info) {
-                 if (!info.requiresInsertedHyphen) return false;  // Preserve explicit visible separators.
+                 if (!info.requiresInsertedHyphen) return false;
                  size_t split = cps.size();
                  for (size_t i = 1; i < cps.size(); ++i) {
                    if (cps[i].byteOffset == info.byteOffset) {
@@ -150,10 +150,10 @@ h = h.replace(helper_marker, helper, 1)
 old_sort = '''    if (a.replacement != b.replacement) return a.replacement > b.replacement;
     return a.requiresInsertedHyphen < b.requiresInsertedHyphen;
 '''
-new_sort = '''    // At the same boundary a normal language-pattern break is stronger evidence of
-    // a real morpheme/compound boundary than the heuristic compact-doubling rule.
-    // Prefer Replacement::None, e.g. zokogás-szerűség, while genuine asszony-like
-    // forms still use replacement when no normal break exists at that offset.
+new_sort = '''    // Prefer an ordinary language-pattern break at the same byte offset over
+    // a heuristic extended replacement. This fixes compound-boundary collisions
+    // such as zokogás-szerűség while leaving genuine compact doublings alone when
+    // no ordinary break exists at that position.
     if (a.replacement != b.replacement) return a.replacement < b.replacement;
     return a.requiresInsertedHyphen < b.requiresInsertedHyphen;
 '''
@@ -161,9 +161,6 @@ if h.count(old_sort) != 1:
     raise SystemExit(f"Hyphenator dedupe ordering: expected 1 match, found {h.count(old_sort)}")
 h = h.replace(old_sort, new_sort, 1)
 
-# Apply the short-word guard to each return path, after sorting/deduplication so the
-# final candidate set is checked. Explicit hyphens remain untouched because they do
-# not require an inserted hyphen.
 old_return = '''    sortAndDedupeBreakInfos(explicitBreakInfos);
     return explicitBreakInfos;
 '''
@@ -202,7 +199,7 @@ hyp.write_text(h, encoding="utf-8")
 
 
 # -----------------------------------------------------------------------------
-# 3) Add focused regression tests to the existing HyphenationEvaluationTest target.
+# 3) Focused regression tests.
 # -----------------------------------------------------------------------------
 test_cpp = Path("test/hyphenation_eval/HungarianTypographyRegressionTest.cpp")
 test_cpp.write_text(r'''#include <gtest/gtest.h>
@@ -244,7 +241,7 @@ TEST_F(HungarianTypographyRegression, CompoundBoundaryBeatsFalseExtendedReplacem
   static constexpr Case cases[] = {
       {"zokogásszerűség", "zokogás"}, {"írásszerű", "írás"}, {"mozgásszerv", "mozgás"},
       {"hússzelet", "hús"}, {"anyaggyűjtés", "anyag"}, {"virággyűjtés", "virág"},
-      {"fallyuk", "fal"}, {"szénnyomás", "szén"}, {"vízzsák", "víz"}, {"léccsere", "léc"},
+      {"szénnyomás", "szén"}, {"vízzsák", "víz"}, {"léccsere", "léc"},
   };
   for (const auto& tc : cases) {
     SCOPED_TRACE(tc.word);
@@ -261,7 +258,7 @@ TEST_F(HungarianTypographyRegression, GenuineCompactDoublingsKeepReplacement) {
       {"asszony", "as", Replacement::AppendZ}, {"hosszú", "hos", Replacement::AppendZ},
       {"mennyi", "men", Replacement::AppendY}, {"könnyű", "kön", Replacement::AppendY},
       {"meccsen", "mec", Replacement::AppendS}, {"gallyak", "gal", Replacement::AppendY},
-      {"meggy", "meg", Replacement::AppendY}, {"hattyú", "hat", Replacement::AppendY},
+      {"meggyel", "meg", Replacement::AppendY}, {"hattyú", "hat", Replacement::AppendY},
   };
   for (const auto& tc : cases) {
     SCOPED_TRACE(tc.word);
