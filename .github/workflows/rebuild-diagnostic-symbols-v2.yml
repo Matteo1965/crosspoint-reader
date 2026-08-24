@@ -1,0 +1,115 @@
+name: Rebuild Diagnostic Symbols V2
+
+'on':
+  workflow_dispatch:
+  push:
+    branches:
+      - hungarian-hyphenation
+    paths:
+      - '.github/workflows/rebuild-diagnostic-symbols-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  symbols:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out integrated source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Restore exact diagnostic patch chain
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin hungarian-hyphenation
+          for f in \
+            .github/scripts/apply_integrated_typography_test.py \
+            .github/scripts/apply_hanging_ratios.py \
+            .github/scripts/apply_typography_round2_fixes.py \
+            .github/scripts/apply_paragraph_final_remainder_guard.py \
+            .github/scripts/apply_minspace_finalhyphen_and_responsive_font_reflow.py \
+            .github/scripts/apply_responsive_font_reflow_offset_fix.py \
+            .github/scripts/apply_font_reflow_background_scheduler_fix.py \
+            .github/scripts/apply_targeted_parser_timeslice_reflow.py \
+            .github/scripts/apply_performance_diagnostics.py; do
+            git show origin/hungarian-hyphenation:$f > /tmp/$(basename $f)
+          done
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-parser-dialogue-fix.yml > /tmp/base-workflow.yml
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-tuning-v2.yml > /tmp/space-v2.yml
+          git show origin/hungarian-hyphenation:.github/workflows/build-hungarian-1.6.0rc-space-indexing-version.yml > /tmp/current-rc.yml
+          python3 /tmp/apply_integrated_typography_test.py
+          python3 /tmp/apply_hanging_ratios.py
+          python3 /tmp/apply_typography_round2_fixes.py
+          python3 /tmp/apply_paragraph_final_remainder_guard.py
+          python3 /tmp/apply_minspace_finalhyphen_and_responsive_font_reflow.py
+          python3 /tmp/apply_responsive_font_reflow_offset_fix.py
+          python3 /tmp/apply_font_reflow_background_scheduler_fix.py
+          python3 /tmp/apply_targeted_parser_timeslice_reflow.py
+          python3 /tmp/apply_performance_diagnostics.py
+          git diff --check
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Rebuild diagnostic firmware with symbols
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Decode crash addresses
+        shell: bash
+        run: |
+          set -euo pipefail
+          ELF=.pio/build/gh_release_rc/firmware.elf
+          test -f "$ELF"
+          ADDR2LINE=$(find ~/.platformio -type f -name '*addr2line' | grep -E 'xtensa.*esp32.*addr2line' | head -1)
+          test -n "$ADDR2LINE"
+          {
+            echo "diagnostic-source-head=0517f41175bb2be5bff7e43dd2ae82b0d872b34b"
+            echo "rebuilt-firmware-sha256=$(sha256sum .pio/build/gh_release_rc/firmware.bin | awk '{print $1}')"
+            echo "original-diagnostic-artifact-sha256=4c2c5dfb3c6ee3bfdaaf4df68a8272e51c1d7ec6b8a6eda839b3c02c2648e415"
+            echo
+            for a in 0x4207B904 0x4207B8BE 0x420023FA 0x4200B2E6 0x4200B846 0x4200B516 0x4200B7F4 0x4200B876 0x4200BAC6 0x420092D2 0x420093A8 0x4200A424 0x42009908 0x4200AF44 0x4200B26E 0x420CDA24 0x420809D8; do
+              echo "=== $a ==="
+              "$ADDR2LINE" -pfiaC -e "$ELF" "$a"
+            done
+          } > /tmp/crash-addr2line.txt
+          cat /tmp/crash-addr2line.txt
+
+      - name: Publish decoded result to repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          git worktree add /tmp/result origin/hungarian-hyphenation
+          mkdir -p /tmp/result/.github/debug
+          cp /tmp/crash-addr2line.txt /tmp/result/.github/debug/diagnostic-crash-addr2line.txt
+          cd /tmp/result
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add .github/debug/diagnostic-crash-addr2line.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record decoded diagnostic crash addresses'
+          git push origin HEAD:hungarian-hyphenation
+
+      - name: Upload symbol files
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostic-symbols-v2
+          path: |
+            .pio/build/gh_release_rc/firmware.elf
+            .pio/build/gh_release_rc/firmware.map
+            /tmp/crash-addr2line.txt
+          if-no-files-found: error
