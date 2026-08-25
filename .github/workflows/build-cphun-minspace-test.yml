@@ -1,4 +1,4 @@
-name: Build CPHUN DialogueSpacing + MinSpace integration test
+name: Build CPHUN Fixed Dialogue Space test
 
 'on':
   push:
@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Restore minimum word spacing feature
+      - name: Restore MinSpace and fix dialogue-space width
         shell: bash
         run: |
           set -euo pipefail
@@ -58,7 +58,7 @@ jobs:
              '  bool fixedDialogueSpacing = false;\n',
              '  bool fixedDialogueSpacing = false;\n  uint8_t minimumSpacePercent = 100;\n')
 
-          # Section cache header/key. Bump current version instead of assuming a historical value.
+          # Section cache header/key.
           sec = Path('lib/Epub/Epub/Section.cpp')
           s = sec.read_text(encoding='utf-8')
           mver = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
@@ -84,7 +84,7 @@ jobs:
           s = s.replace(marker, '  ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);\n' + marker, 1)
           sec.write_text(s, encoding='utf-8')
 
-          # ParsedText setting and scaling helper.
+          # ParsedText MinSpace setting.
           ro('lib/Epub/Epub/ParsedText.h',
              'class ParsedText {\n',
              'class ParsedText {\n  static uint8_t minimumSpacePercent_;\n')
@@ -97,14 +97,12 @@ jobs:
           t = t.replace('constexpr int MAX_COST = std::numeric_limits<int>::max();\n',
                         'constexpr int MAX_COST = std::numeric_limits<int>::max();\nuint8_t ParsedText::minimumSpacePercent_ = 100;\n', 1)
           marker = 'int computeJustifyExtra(const int spareSpace, const size_t gapCount) {'
-          helper = '''int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {\n  return std::max(1, (natural * std::clamp<int>(percent, 50, 100) + 99) / 100);\n}\n\n'''
+          helper = '''int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {\n  return std::max(1, (natural * std::clamp<int>(percent, 50, 100) + 99) / 100);\n}\n\nbool isStandaloneDialogueDash(const std::string& word) {\n  if (word.empty()) return false;\n  const uint32_t first = firstCodepoint(word);\n  return (first == 0x2013 || first == 0x2014) && first == lastCodepoint(word);\n}\n\n'''
           if marker not in t:
               raise SystemExit('ParsedText.cpp: justify helper marker not found')
           t = t.replace(marker, helper + marker, 1)
 
-          # Scale natural spaces in justified paragraphs. Dialogue spaces marked by
-          # fixedDialogueSpacing use the same base advance but are not justify gaps,
-          # so they keep exactly this percentage and receive no extra stretch.
+          # Scale ordinary natural spaces in justified paragraphs.
           needle = 'renderer.getSpaceAdvance('
           out = []
           pos = 0
@@ -133,9 +131,35 @@ jobs:
           if wrapped < 3:
               raise SystemExit(f'ParsedText.cpp: unexpectedly few getSpaceAdvance calls: {wrapped}')
           t = ''.join(out)
+
+          # Fixed dialogue boundary: the dash and following word remain unbreakable,
+          # but use an explicit MinSpace-scaled natural space instead of kerning.
+          old = '''      if (j > static_cast<size_t>(i) && continuesVec[j]) {\n        // Attached and breakable-attached boundaries both use kerning when kept on one line.\n        gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);\n'''
+          new = '''      if (j > static_cast<size_t>(i) && continuesVec[j]) {\n        if (fixedDialogueSpacing && j == 1 && isStandaloneDialogueDash(words[0])) {\n          gap = scaledNormalSpaceAdvance(\n              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),\n              minimumSpacePercent_);\n        } else {\n          // Attached and breakable-attached boundaries use kerning when kept on one line.\n          gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);\n        }\n'''
+          if t.count(old) != 1:
+              raise SystemExit(f'computeLineBreaks dialogue marker count={t.count(old)}')
+          t = t.replace(old, new, 1)
+
+          old = '''      if (!isFirstWord && continuesVec[currentIndex]) {\n        // Attached and breakable-attached boundaries both use kerning when kept on one line.\n        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),\n                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);\n'''
+          new = '''      if (!isFirstWord && continuesVec[currentIndex]) {\n        if (fixedDialogueSpacing && currentIndex == 1 && isStandaloneDialogueDash(words[0])) {\n          spacing = scaledNormalSpaceAdvance(\n              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),\n              minimumSpacePercent_);\n        } else {\n          // Attached and breakable-attached boundaries use kerning when kept on one line.\n          spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),\n                                        firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);\n        }\n'''
+          if t.count(old) != 1:
+              raise SystemExit(f'computeHyphenatedLineBreaks dialogue marker count={t.count(old)}')
+          t = t.replace(old, new, 1)
+
+          old = '''    if (continuesVec[boundaryIdx]) {\n      totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),\n                                              firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);\n'''
+          new = '''    if (continuesVec[boundaryIdx]) {\n      if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {\n        totalNaturalGaps += scaledNormalSpaceAdvance(\n            renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),\n                                     lineWordStyles[0]),\n            minimumSpacePercent_);\n      } else {\n        totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),\n                                                firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);\n      }\n'''
+          if t.count(old) != 1:
+              raise SystemExit(f'extractLine natural-gap dialogue marker count={t.count(old)}')
+          t = t.replace(old, new, 1)
+
+          old = '''        if (nextIsContinuation) {\n          int advance = wordWidths[lastBreakAt + wordIdx];\n          advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),\n                                         firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);\n'''
+          new = '''        if (nextIsContinuation) {\n          int advance = wordWidths[lastBreakAt + wordIdx];\n          if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 && isStandaloneDialogueDash(lineWords[0])) {\n            advance += scaledNormalSpaceAdvance(\n                renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),\n                                         lineWordStyles[0]),\n                minimumSpacePercent_);\n          } else {\n            advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),\n                                           firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);\n          }\n'''
+          if t.count(old) != 1:
+              raise SystemExit(f'LTR positioning dialogue marker count={t.count(old)}')
+          t = t.replace(old, new, 1)
           pc.write_text(t, encoding='utf-8')
 
-          # Text Settings menu: MinimumSpace stays before ScreenMargin so it is visible immediately on X4.
+          # Text Settings menu: keep the proven -03 order.
           ro('src/activities/settings/TextSettingsActivity.h',
              '    Alignment,\n    ScreenMargin,\n',
              '    Alignment,\n    MinimumSpace,\n    ScreenMargin,\n')
@@ -162,27 +186,24 @@ jobs:
           ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
           v = ver.read_text(encoding='utf-8')
           v = v.replace('    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n',
-                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-04");\n', 1)
+                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-05");\n', 1)
           v = v.replace('        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n',
-                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Párbeszédköz követi a Min. szóközt" : "Dialogue spacing follows Min. word spacing",\n', 1)
+                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",\n', 1)
           ver.write_text(v, encoding='utf-8')
           PY
 
           git diff --check
 
-      - name: Verify MinSpace and DialogueSpacing integration
+      - name: Verify Fixed Dialogue Space wiring
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
-          grep -q 'minimumSpacePercent' lib/Epub/Epub/ReaderRenderSpec.h
-          grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
-          grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'effectiveAttachToPrevious = true' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'MinimumSpace,' src/activities/settings/TextSettingsActivity.h
-          grep -q 'CPHUN-260825-04' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'isStandaloneDialogueDash' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'currentIndex == 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'boundaryIdx == 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'lastBreakAt == 0 && wordIdx == 0' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'CPHUN-260825-05' src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -211,6 +232,6 @@ jobs:
       - name: Upload CPHUN test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260825-04-DialogueSpacing-MinSpace-FW
+          name: CPHUN-260825-05-Fixed-Dialogue-Space-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
