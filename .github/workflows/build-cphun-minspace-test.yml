@@ -1,4 +1,4 @@
-name: Build CPHUN Fixed Dialogue Space test
+name: Build CPHUN Missing Dialogue Space recovery test
 
 'on':
   push:
@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Restore MinSpace and fix dialogue-space width
+      - name: Restore MinSpace and Fixed Dialogue Space with missing-space recovery
         shell: bash
         run: |
           set -euo pipefail
@@ -132,6 +132,17 @@ jobs:
               raise SystemExit(f'ParsedText.cpp: unexpectedly few getSpaceAdvance calls: {wrapped}')
           t = ''.join(out)
 
+          # Missing dialogue-space recovery. When the EPUB contains e.g. "–Folytasd"
+          # at paragraph start, split the dash and following text into the same
+          # continues=true/noSpace=false boundary used by a valid fixed dialogue space.
+          # The Focus Reading path already tokenizes punctuation/word boundaries, so
+          # only the non-focus fast path needs this explicit split.
+          fast_marker = '''  // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.\n  if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0) {\n'''
+          recovery = '''  // Repair a missing source space after a paragraph-leading en/em dash.\n  if (fixedDialogueSpacing && words.empty() && !attachToPrevious &&\n      (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0)) {\n    const auto* begin = reinterpret_cast<const unsigned char*>(word.c_str());\n    const auto* afterDash = begin;\n    const uint32_t first = utf8NextCodepoint(&afterDash);\n    const size_t dashBytes = static_cast<size_t>(afterDash - begin);\n    if ((first == 0x2013 || first == 0x2014) && dashBytes < word.size()) {\n      pushToken(word.substr(0, dashBytes), effectiveAttachToPrevious, effectiveNoSpaceBefore, 0, visibleTextOffset);\n      pushToken(word.substr(dashBytes), true, false, 0, visibleTextOffset + 1);\n      if (wordStartsRtl) hasRtlWord = true;\n      return;\n    }\n  }\n\n'''
+          if t.count(fast_marker) != 1:
+              raise SystemExit(f'ParsedText.cpp: fast-path marker count={t.count(fast_marker)}')
+          t = t.replace(fast_marker, recovery + fast_marker, 1)
+
           # Fixed dialogue boundary: the dash and following word remain unbreakable,
           # but use an explicit MinSpace-scaled natural space instead of kerning.
           old = '''      if (j > static_cast<size_t>(i) && continuesVec[j]) {\n        // Attached and breakable-attached boundaries both use kerning when kept on one line.\n        gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);\n'''
@@ -186,24 +197,26 @@ jobs:
           ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
           v = ver.read_text(encoding='utf-8')
           v = v.replace('    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n',
-                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-05");\n', 1)
+                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-06");\n', 1)
           v = v.replace('        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n',
-                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",\n', 1)
+                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",\n        hu ? "Hiányzó párbeszédköz automatikus pótlása" : "Recover missing dialogue space",\n', 1)
           ver.write_text(v, encoding='utf-8')
           PY
 
           git diff --check
 
-      - name: Verify Fixed Dialogue Space wiring
+      - name: Verify Missing Dialogue Space recovery wiring
         shell: bash
         run: |
           set -euo pipefail
           grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
           grep -q 'isStandaloneDialogueDash' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'dashBytes < word.size()' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'pushToken(word.substr(dashBytes), true, false' lib/Epub/Epub/ParsedText.cpp
           grep -q 'currentIndex == 1' lib/Epub/Epub/ParsedText.cpp
           grep -q 'boundaryIdx == 1' lib/Epub/Epub/ParsedText.cpp
           grep -q 'lastBreakAt == 0 && wordIdx == 0' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'CPHUN-260825-05' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'CPHUN-260825-06' src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -232,6 +245,6 @@ jobs:
       - name: Upload CPHUN test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260825-05-Fixed-Dialogue-Space-FW
+          name: CPHUN-260825-06-Missing-Dialogue-Space-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
