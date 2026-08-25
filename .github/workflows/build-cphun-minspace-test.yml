@@ -1,4 +1,4 @@
-name: Build CPHUN MinSpace restoration test
+name: Build CPHUN MinSpace UI fix test
 
 'on':
   push:
@@ -78,7 +78,6 @@ jobs:
                         '    serialization::readPod(file, fileFixedDialogueSpacing);\n    serialization::readPod(file, fileMinimumSpacePercent);\n    serialization::readPod(file, fileEmbeddedStyle);', 1)
           s = s.replace('        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.embeddedStyle != fileEmbeddedStyle ||',
                         '        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||\n        spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||\n        spec.embeddedStyle != fileEmbeddedStyle ||', 1)
-          # Apply the selected percentage before parsing/layout begins.
           marker = '  Hyphenator::setPreferredLanguage(epub->getLanguage());'
           if marker not in s:
               raise SystemExit('Section.cpp: Hyphenator language marker not found')
@@ -103,7 +102,6 @@ jobs:
               raise SystemExit('ParsedText.cpp: justify helper marker not found')
           t = t.replace(marker, helper + marker, 1)
 
-          # Scale every normal inter-word space only when the paragraph itself is justified.
           needle = 'renderer.getSpaceAdvance('
           out = []
           pos = 0
@@ -134,34 +132,34 @@ jobs:
           t = ''.join(out)
           pc.write_text(t, encoding='utf-8')
 
-          # Text Settings menu: keep current preview/cache code untouched.
+          # Text Settings menu: put MinimumSpace before ScreenMargin so it is visible immediately on X4.
           ro('src/activities/settings/TextSettingsActivity.h',
-             '    HangingPunctuation,\n    FixedDialogueSpacing,\n',
-             '    HangingPunctuation,\n    MinimumSpace,\n    FixedDialogueSpacing,\n')
+             '    Alignment,\n    ScreenMargin,\n',
+             '    Alignment,\n    MinimumSpace,\n    ScreenMargin,\n')
           ta = Path('src/activities/settings/TextSettingsActivity.cpp')
           u = ta.read_text(encoding='utf-8')
-          label_marker = '        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";'
+          label_marker = '        if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {\n'
           if label_marker not in u:
-              raise SystemExit('TextSettingsActivity.cpp: dialogue label marker not found')
+              raise SystemExit('TextSettingsActivity.cpp: hanging label marker not found')
           u = u.replace(label_marker,
-                        '        } else if (i == static_cast<int>(LayoutRow::MinimumSpace)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";\n' + label_marker, 1)
+                        '        if (i == static_cast<int>(LayoutRow::MinimumSpace)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";\n        } else if (i == static_cast<int>(LayoutRow::ScreenMargin)) {\n          item.label = I18N.get(StrId::STR_SCREEN_MARGIN);\n        } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {\n', 1)
           toggle_marker = '    case LayoutRow::FixedDialogueSpacing:\n      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;'
           picker = '''    case LayoutRow::MinimumSpace: {\n      const char* options[] = {"50%", "60%", "70%", "80%", "90%", "100%"};\n      const int cur = std::clamp<int>((SETTINGS.minimumSpacePercent - 50) / 10, 0, 5);\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing", options, 6, cur,\n                        [](int idx) {\n                          SETTINGS.minimumSpacePercent = static_cast<uint8_t>(50 + idx * 10);\n                          SETTINGS.saveToFile();\n                        });\n      requestUpdate();\n      break;\n    }\n'''
           if toggle_marker not in u:
               raise SystemExit('TextSettingsActivity.cpp: dialogue toggle marker not found')
           u = u.replace(toggle_marker, picker + toggle_marker, 1)
-          value_marker = '    case LayoutRow::FixedDialogueSpacing:\n      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);'
+          value_marker = '    case LayoutRow::ScreenMargin:\n      return std::to_string(SETTINGS.screenMargin);'
           if value_marker not in u:
-              raise SystemExit('TextSettingsActivity.cpp: dialogue value marker not found')
+              raise SystemExit('TextSettingsActivity.cpp: screen margin value marker not found')
           u = u.replace(value_marker,
                         '    case LayoutRow::MinimumSpace:\n      return std::to_string(SETTINGS.minimumSpacePercent) + "%";\n' + value_marker, 1)
           ta.write_text(u, encoding='utf-8')
 
-          # Give this test firmware a visible CPHUN identifier without changing the normal branch source.
+          # Visible firmware identifier.
           ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
           v = ver.read_text(encoding='utf-8')
           v = v.replace('    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n',
-                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-02");\n', 1)
+                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-03");\n', 1)
           v = v.replace('        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n',
                         '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n', 1)
           ver.write_text(v, encoding='utf-8')
@@ -169,7 +167,7 @@ jobs:
 
           git diff --check
 
-      - name: Verify restored wiring
+      - name: Verify restored wiring and UI order
         shell: bash
         run: |
           set -euo pipefail
@@ -178,7 +176,9 @@ jobs:
           grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
           grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
           grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'CPHUN-260825-02' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Alignment,' src/activities/settings/TextSettingsActivity.h
+          grep -q 'MinimumSpace,' src/activities/settings/TextSettingsActivity.h
+          grep -q 'CPHUN-260825-03' src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -207,6 +207,6 @@ jobs:
       - name: Upload CPHUN test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260825-02-MinSpace-Test-FW
+          name: CPHUN-260825-03-MinSpace-UI-Fix-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
