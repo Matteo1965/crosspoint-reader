@@ -1,0 +1,124 @@
+name: Build CPHUN-260825-07
+
+'on':
+  push:
+    branches: [agent/hungarian-integrated-v1.6.0rc]
+    paths:
+      - '.github/workflows/build-cphun-260825-07.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out FAST baseline source
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-integrated-v1.6.0rc
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reapply proven CPHUN-260825-06 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import textwrap
+
+          workflow = Path('.github/workflows/build-cphun-minspace-test.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          script = textwrap.dedent(workflow[start:end])
+          Path('/tmp/apply-cphun-06.py').write_text(script, encoding='utf-8')
+          subprocess.run(['python', '/tmp/apply-cphun-06.py'], check=True)
+          PY
+
+      - name: Apply CPHUN-260825-07 deltas
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          # Force one more section-cache generation than -06 so books are
+          # automatically re-laid-out with the repaired dialogue-space logic.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
+          if not m:
+              raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found')
+          current = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {current + 1};' + s[m.end():]
+          sec.write_text(s, encoding='utf-8')
+
+          # Move the right-aligned setting-state/value column 3 px left on both
+          # settings list screens. This includes the Hungarian "KI" state.
+          for path in ('src/activities/settings/SettingsActivity.cpp',
+                       'src/activities/settings/TextSettingsActivity.cpp'):
+              p = Path(path)
+              t = p.read_text(encoding='utf-8')
+              old = '  props.valueInset = 8;               // air between the value and the row edge\n'
+              new = '  props.valueInset = 11;              // 3 px farther left from the row edge\n'
+              if t.count(old) != 1:
+                  raise SystemExit(f'{path}: expected one valueInset marker, got {t.count(old)}')
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+
+          # Visible build identifier.
+          ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
+          v = ver.read_text(encoding='utf-8')
+          if v.count('CPHUN-260825-06') != 1:
+              raise SystemExit(f'CrossPointVersionActivity.cpp: -06 id count={v.count("CPHUN-260825-06")}')
+          ver.write_text(v.replace('CPHUN-260825-06', 'CPHUN-260825-07', 1), encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify CPHUN-260825-07 wiring
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'minimumSpacePercent = 100' src/CrossPointSettings.h
+          grep -q 'dashBytes < word.size()' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'pushToken(word.substr(dashBytes), true, false' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'props.valueInset = 11' src/activities/settings/SettingsActivity.cpp
+          grep -q 'props.valueInset = 11' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CPHUN-260825-07' src/activities/settings/CrossPointVersionActivity.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Upload CPHUN-260825-07 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260825-07-Cache-and-UI-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
