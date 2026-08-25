@@ -1,4 +1,4 @@
-name: Build CPHUN MinSpace UI fix test
+name: Build CPHUN DialogueSpacing + MinSpace integration test
 
 'on':
   push:
@@ -102,6 +102,9 @@ jobs:
               raise SystemExit('ParsedText.cpp: justify helper marker not found')
           t = t.replace(marker, helper + marker, 1)
 
+          # Scale natural spaces in justified paragraphs. Dialogue spaces marked by
+          # fixedDialogueSpacing use the same base advance but are not justify gaps,
+          # so they keep exactly this percentage and receive no extra stretch.
           needle = 'renderer.getSpaceAdvance('
           out = []
           pos = 0
@@ -132,7 +135,7 @@ jobs:
           t = ''.join(out)
           pc.write_text(t, encoding='utf-8')
 
-          # Text Settings menu: put MinimumSpace before ScreenMargin so it is visible immediately on X4.
+          # Text Settings menu: MinimumSpace stays before ScreenMargin so it is visible immediately on X4.
           ro('src/activities/settings/TextSettingsActivity.h',
              '    Alignment,\n    ScreenMargin,\n',
              '    Alignment,\n    MinimumSpace,\n    ScreenMargin,\n')
@@ -159,15 +162,15 @@ jobs:
           ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
           v = ver.read_text(encoding='utf-8')
           v = v.replace('    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n',
-                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-03");\n', 1)
+                        '    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");\n    drawLabelValue("CPHUN", "CPHUN-260825-04");\n', 1)
           v = v.replace('        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n',
-                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n', 1)
+                        '        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",\n        hu ? "Párbeszédköz követi a Min. szóközt" : "Dialogue spacing follows Min. word spacing",\n', 1)
           ver.write_text(v, encoding='utf-8')
           PY
 
           git diff --check
 
-      - name: Verify restored wiring and UI order
+      - name: Verify MinSpace and DialogueSpacing integration
         shell: bash
         run: |
           set -euo pipefail
@@ -175,10 +178,11 @@ jobs:
           grep -q 'minimumSpacePercent' lib/Epub/Epub/ReaderRenderSpec.h
           grep -q 'fileMinimumSpacePercent' lib/Epub/Epub/Section.cpp
           grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'fixedDialogueSpacing && words.size() == 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'effectiveAttachToPrevious = true' lib/Epub/Epub/ParsedText.cpp
           grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'Alignment,' src/activities/settings/TextSettingsActivity.h
           grep -q 'MinimumSpace,' src/activities/settings/TextSettingsActivity.h
-          grep -q 'CPHUN-260825-03' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'CPHUN-260825-04' src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -207,6 +211,6 @@ jobs:
       - name: Upload CPHUN test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260825-03-MinSpace-UI-Fix-FW
+          name: CPHUN-260825-04-DialogueSpacing-MinSpace-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
