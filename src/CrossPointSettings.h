@@ -255,8 +255,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t hungarianHyphenationExtended = 0;
 
   // Reader screen margin settings
-  static constexpr uint8_t SCREEN_MARGIN_MIN = 4;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 32;
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 8;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 36;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 4;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the

@@ -1040,7 +1040,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         if (fixedDialogueSpacing && j == 1 && isStandaloneDialogueDash(words[0])) {
           gap = scaledNormalSpaceAdvance(
               renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-              100);
+              minimumSpacePercent_);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
           gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
@@ -1155,7 +1155,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         if (fixedDialogueSpacing && currentIndex == 1 && isStandaloneDialogueDash(words[0])) {
           spacing = scaledNormalSpaceAdvance(
               renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-              100);
+              minimumSpacePercent_);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
           spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
@@ -1415,7 +1415,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         totalNaturalGaps += scaledNormalSpaceAdvance(
             renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                      lineWordStyles[0]),
-            100);
+            minimumSpacePercent_);
       } else {
         totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
                                                 firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
@@ -1675,7 +1675,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             advance += scaledNormalSpaceAdvance(
                 renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                          lineWordStyles[0]),
-                100);
+                minimumSpacePercent_);
           } else {
             advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                            firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);

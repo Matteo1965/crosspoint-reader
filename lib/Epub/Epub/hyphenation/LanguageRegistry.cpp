@@ -11,7 +11,7 @@ namespace {
 
 // English hyphenation patterns (3/3 minimum prefix/suffix length)
 LanguageHyphenator englishHyphenator(en_patterns, isLatinLetter, toLowerLatin, 3, 3);
-LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2);
+LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 2, 2);
 
 using EntryArray = std::array<LanguageEntry, 2>;
 

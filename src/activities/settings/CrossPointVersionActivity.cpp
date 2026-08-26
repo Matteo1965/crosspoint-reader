@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "CPHUNBuildId.h"
 
 namespace {
 
@@ -115,9 +116,8 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     };
 
     drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
-    drawLabelValue(tr(STR_BASE_VERSION), "1.6.0rc");
     drawLabelValue(tr(STR_EDITION), "Hungarian Edition");
-    drawLabelValue("CPHUN", "CPHUN-260825-06");
+    drawWrapped(UI_12_FONT_ID, CPHUN_BUILD_ID);
     const std::string buildDate = std::string(__DATE__) + " " + __TIME__;
     drawLabelValue(tr(STR_BUILD_DATE), buildDate.c_str());
 
@@ -152,17 +152,34 @@ void CrossPointVersionActivity::render(RenderLock&&) {
       drawWrapped(UI_12_FONT_ID, line.c_str());
     }
   } else if (currentPage == 1) {
-    drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);
-    drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
-    drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);
-    drawParagraph(StrId::STR_STARDICT_FILES_INTRO);
-    renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
-    y += bodyLineHeight * 2;
-    drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
+    const bool hu = I18N.getLanguage() == Language::HU;
+    if (hu) {
+      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);
+      y += bodyLineHeight;
+      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
+      y += bodyLineHeight;
+      drawWrapped(UI_12_FONT_ID,
+                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "
+                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");
+    } else {
+      drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);
+      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
+      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);
+      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);
+      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
+      y += bodyLineHeight * 2;
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
+    }
   } else {
     drawParagraph(StrId::STR_HYPHENATION_LANGUAGES, true);
     drawParagraph(StrId::STR_HYPHENATION_LANGUAGES_NOTICE);
     drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_HYPHENATION_OTHER_LANGUAGES_NOTICE));
+    if (I18N.getLanguage() == Language::HU) {
+      y += bodyLineHeight;
+      drawWrapped(UI_10_FONT_ID,
+                  "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, amelyeket saját "
+                  "kiegészítéseinkkel és továbbfejlesztéseinkkel bővítettünk.");
+    }
   }
 
   const auto labels =

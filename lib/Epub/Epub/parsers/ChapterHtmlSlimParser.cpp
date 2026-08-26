@@ -1376,6 +1376,31 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       continue;
     }
 
+    // U+2009 THIN SPACE after a paragraph-opening en/em dash is normalized
+    // to the same virtual dialogue boundary as normal space / NBSP.
+    const bool openingDialogueDashBuffered =
+        self->hungarianWhitespaceNormalization && self->fixedDialogueSpacing && self->currentTextBlock &&
+        self->currentTextBlock->isEmpty() && self->partWordBufferIndex == 3 &&
+        static_cast<uint8_t>(self->partWordBuffer[0]) == 0xE2 &&
+        static_cast<uint8_t>(self->partWordBuffer[1]) == 0x80 &&
+        (static_cast<uint8_t>(self->partWordBuffer[2]) == 0x93 ||
+         static_cast<uint8_t>(self->partWordBuffer[2]) == 0x94);
+    if (openingDialogueDashBuffered && static_cast<uint8_t>(s[i]) == 0xE2 && i + 2 < len &&
+        static_cast<uint8_t>(s[i + 1]) == 0x80 && static_cast<uint8_t>(s[i + 2]) == 0x89) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = false;
+      i += 2;
+      continue;
+    }
+
+    // Missing dialogue-space recovery: if text starts immediately after an
+    // opening en/em dash, split the dash into its own token. ParsedText then
+    // inserts the same fixed MinSpace-controlled dialogue gap used for well-formed EPUBs.
+    if (openingDialogueDashBuffered) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = false;
+    }
+
     self->previousHungarianAsciiWhitespace = false;
 
     // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
@@ -1430,6 +1455,36 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
     if (self->partWordBufferIndex == 0) {
       self->partWordVisibleOffset = codepointOffset;
+    }
+
+    // Hungarian Edition display normalization. These legacy two-byte UTF-8
+    // sequences are replaced only in the in-memory parsed text; the EPUB file
+    // itself is never modified. Byte length stays 2, so visible offsets remain stable.
+    if (self->hungarianWhitespaceNormalization && i + 1 < len &&
+        static_cast<uint8_t>(s[i]) == 0xC3) {
+      const uint8_t second = static_cast<uint8_t>(s[i + 1]);
+      uint8_t out1 = 0;
+      uint8_t out2 = 0;
+      if (second == 0xB5 || second == 0xB4) {       // õ / ô -> ő
+        out1 = 0xC5; out2 = 0x91;
+      } else if (second == 0x95 || second == 0x94) {  // Õ / Ô -> Ő
+        out1 = 0xC5; out2 = 0x90;
+      } else if (second == 0xBB) {                  // û -> ű
+        out1 = 0xC5; out2 = 0xB1;
+      } else if (second == 0x9B) {                  // Û -> Ű
+        out1 = 0xC5; out2 = 0xB0;
+      }
+      if (out1 != 0) {
+        if (self->partWordBufferIndex >= MAX_WORD_SIZE - 1) {
+          self->flushPartWordBuffer();
+          self->nextWordContinues = true;
+          self->partWordVisibleOffset = codepointOffset;
+        }
+        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(out1);
+        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(out2);
+        i++;
+        continue;
+      }
     }
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
