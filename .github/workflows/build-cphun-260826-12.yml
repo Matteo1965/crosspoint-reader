@@ -1,0 +1,180 @@
+name: Build CPHUN-260826-12 Targeted Text Fixes
+
+on:
+  push:
+    branches:
+      - agent/cphun-260826-12
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-12
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-260826-12 fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          # 1) Opening dialogue dash + NBSP: only in Hungarian whitespace cleanup and
+          # only at the beginning of a paragraph. Convert this one NBSP to the same
+          # ordinary boundary used by the fixed dialogue-spacing rule. All other NBSPs
+          # retain their normal no-break semantics.
+          parser = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp')
+          s = parser.read_text(encoding='utf-8')
+          marker = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      if (self->hungarianWhitespaceNormalization) {\n'''
+          replacement = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      const bool openingHungarianDialogueDash =\n          self->hungarianWhitespaceNormalization && self->fixedDialogueSpacing && self->currentTextBlock &&\n          self->currentTextBlock->isEmpty() && self->partWordBufferIndex == 3 &&\n          static_cast<uint8_t>(self->partWordBuffer[0]) == 0xE2 &&\n          static_cast<uint8_t>(self->partWordBuffer[1]) == 0x80 &&\n          (static_cast<uint8_t>(self->partWordBuffer[2]) == 0x93 ||\n           static_cast<uint8_t>(self->partWordBuffer[2]) == 0x94);\n      if (openingHungarianDialogueDash) {\n        self->flushPartWordBuffer();\n        self->nextWordContinues = false;\n        self->previousHungarianAsciiWhitespace = false;\n        i++;  // consume U+00A0; following word receives the fixed normal dialogue gap\n        continue;\n      }\n\n      if (self->hungarianWhitespaceNormalization) {\n'''
+          if s.count(marker) != 1:
+              raise SystemExit(f'NBSP insertion marker count={s.count(marker)}')
+          parser.write_text(s.replace(marker, replacement, 1), encoding='utf-8')
+
+          # 2) Min. spacing must only compress ordinary breakable spaces in justified
+          # text. The fixed dialogue gap is typographic punctuation spacing, not a
+          # justification gap, so force it to 100% natural width in all layout passes.
+          parsed = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = parsed.read_text(encoding='utf-8')
+          dialogue_pattern = re.compile(
+              r'(if \(fixedDialogueSpacing && [^\n]+isStandaloneDialogueDash\([^\n]+\)\) \{\n'
+              r'(?:.|\n)*?scaledNormalSpaceAdvance\((?:.|\n)*?,\n\s+)minimumSpacePercent_(\);)',
+              re.MULTILINE,
+          )
+          s, dialogue_count = dialogue_pattern.subn(r'\g<1>100\g<2>', s)
+          if dialogue_count != 3:
+              raise SystemExit(f'fixed dialogue MinSpace replacement count={dialogue_count}, expected 3')
+          parsed.write_text(s, encoding='utf-8')
+
+          # 3) Hungarian legacy accented characters are normalized only for language
+          # processing. Keep the original word bytes stored/rendered by ParsedText.
+          # Codepoint byte offsets are retained, so returned split offsets still point
+          # into the untouched original UTF-8 word.
+          hyph = Path('lib/Epub/Epub/hyphenation/Hyphenator.cpp')
+          s = hyph.read_text(encoding='utf-8')
+          helper_marker = '''// Builds a vector of break information from explicit hyphen markers in the given codepoints.\n'''
+          helper = '''void normalizeHungarianProcessingCodepoints(std::vector<CodepointInfo>& cps) {\n  for (auto& cp : cps) {\n    switch (cp.value) {\n      case 0x00F5:  // õ -> ő\n      case 0x00F4:  // ô -> ő\n        cp.value = 0x0151;\n        break;\n      case 0x00D5:  // Õ -> Ő\n      case 0x00D4:  // Ô -> Ő\n        cp.value = 0x0150;\n        break;\n      case 0x00FB:  // û -> ű\n        cp.value = 0x0171;\n        break;\n      case 0x00DB:  // Û -> Ű\n        cp.value = 0x0170;\n        break;\n      default:\n        break;\n    }\n  }\n}\n\n'''
+          if s.count(helper_marker) != 1:
+              raise SystemExit(f'Hyphenator helper marker count={s.count(helper_marker)}')
+          s = s.replace(helper_marker, helper + helper_marker, 1)
+
+          collect_marker = '''  // Convert to codepoints and normalize word boundaries.\n  auto cps = collectCodepoints(word);\n  trimSurroundingPunctuationAndFootnote(cps);\n'''
+          collect_replacement = '''  // Convert to codepoints. Hungarian legacy accents are normalized only in\n  // this processing copy; the original UTF-8 word remains untouched for rendering.\n  auto cps = collectCodepoints(word);\n  if (preferredLanguageIsHungarian_) {\n    normalizeHungarianProcessingCodepoints(cps);\n  }\n  trimSurroundingPunctuationAndFootnote(cps);\n'''
+          if s.count(collect_marker) != 1:
+              raise SystemExit(f'Hyphenator collection marker count={s.count(collect_marker)}')
+          hyph.write_text(s.replace(collect_marker, collect_replacement, 1), encoding='utf-8')
+
+          # Parsed text behavior changed; invalidate cached sections.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
+          if not m:
+              raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found')
+          current = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {current + 1};' + s[m.end():]
+          sec.write_text(s, encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify retained baseline and targeted fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          check() { echo "[verify] $1"; shift; "$@"; }
+          check minspace-setting grep -q 'minimumSpacePercent' src/CrossPointSettings.h
+          check minspace-menu grep -q 'MinimumSpace' src/activities/settings/TextSettingsActivity.h
+          check minspace-label grep -q 'Min. szóköz' src/activities/settings/TextSettingsActivity.cpp
+          check minspace-render grep -q 'scaledNormalSpaceAdvance' lib/Epub/Epub/ParsedText.cpp
+          check dialogue-nbsp grep -q 'openingHungarianDialogueDash' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          check processing-normalization grep -q 'normalizeHungarianProcessingCodepoints' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          check processing-o-circumflex grep -q 'case 0x00F4' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          check processing-u-circumflex grep -q 'case 0x00FB' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          check floating-hyphen-optical grep -q 'prefixWithoutPunctuation' lib/Epub/Epub/ParsedText.cpp
+          check floating-hyphen-only grep -q "return cp == '-'" lib/Epub/Epub/ParsedText.cpp
+          check floating-default grep -q 'hangingPunctuation = 100' src/CrossPointSettings.h
+          check margin-min grep -q 'SCREEN_MARGIN_MIN = 4' src/CrossPointSettings.h
+          check margin-max grep -q 'SCREEN_MARGIN_MAX = 32' src/CrossPointSettings.h
+          check margin-step grep -q 'SCREEN_MARGIN_STEP = 4' src/CrossPointSettings.h
+          check hu-hyphen-1-2 grep -q 'hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2)' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          check roundedraff-cover grep -q 'homeCoverHeight = 376' src/components/themes/roundedraff/RoundedRaffTheme.h
+          check roundedraff-tile grep -q 'homeCoverTileHeight = 400' src/components/themes/roundedraff/RoundedRaffTheme.h
+
+          # Exactly the three fixed-dialogue layout paths must now use 100%, while
+          # ordinary justified spaces still reference minimumSpacePercent_.
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s = Path('lib/Epub/Epub/ParsedText.cpp').read_text(encoding='utf-8')
+          blocks = re.findall(r'if \(fixedDialogueSpacing && [^\n]+isStandaloneDialogueDash\([^\n]+\)\) \{\n((?:.|\n)*?)\n\s*\} else \{', s)
+          if len(blocks) != 3:
+              raise SystemExit(f'expected 3 fixed-dialogue blocks, got {len(blocks)}')
+          for idx, block in enumerate(blocks, 1):
+              if 'minimumSpacePercent_' in block or ', 100);' not in block:
+                  raise SystemExit(f'fixed-dialogue block {idx} is not natural 100% spacing')
+          if 'blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100' not in s:
+              raise SystemExit('ordinary justified MinSpace path missing')
+          PY
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Show firmware size
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          print(f'firmware.bin: {fw.stat().st_size} bytes ({fw.stat().st_size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload CPHUN-260826-12 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-12-Targeted-Text-Fixes-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+
+      - name: Commit validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          rm -f .github/workflows/build-cphun-260826-12.yml
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "fix: refine Hungarian NBSP, MinSpace and processing normalization"
+            git push origin HEAD:agent/cphun-260826-12
+          fi
