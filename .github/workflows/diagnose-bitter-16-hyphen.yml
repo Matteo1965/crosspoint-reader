@@ -1,0 +1,75 @@
+name: Diagnose Bitter 16pt Hyphen
+
+on:
+  push:
+    branches:
+      - agent/hungarian-v1.6.0rc-next-integration
+    paths:
+      - '.github/workflows/diagnose-bitter-16-hyphen.yml'
+  workflow_dispatch:
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install font tools
+        run: pip install freetype-py fonttools
+
+      - name: Measure Bitter 16pt regular hyphen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import urllib.request
+          import freetype
+          from fontTools.ttLib import TTFont
+          from fontTools.varLib.instancer import instantiateVariableFont
+
+          src = '/tmp/Bitter-variable.ttf'
+          inst = '/tmp/Bitter-500.ttf'
+          url = 'https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf'
+          urllib.request.urlretrieve(url, src)
+
+          font = TTFont(src)
+          instantiateVariableFont(font, {'wght': 500}, inplace=True)
+          font.save(inst)
+          font.close()
+
+          face = freetype.Face(inst)
+          # Must match lib/EpdFont/scripts/fontconvert_sdcard.py exactly.
+          face.set_char_size(16 << 6, 16 << 6, 150, 150)
+          face.load_char('-', freetype.FT_LOAD_RENDER)
+          slot = face.glyph
+          bm = slot.bitmap
+
+          visible_width = bm.width
+          bitmap_left = slot.bitmap_left
+          advance_26_6 = slot.advance.x
+          advance_px = advance_26_6 / 64.0
+          linear_16_16 = slot.linearHoriAdvance
+          linear_px = linear_16_16 / 65536.0
+          right_bearing_from_advance = advance_px - (bitmap_left + visible_width)
+
+          left_gap = 1
+          right_safety = 2
+          required_margin = left_gap + visible_width + right_safety
+
+          print('=== Bitter 16 pt / weight 500 / 150 DPI / U+002D HYPHEN-MINUS ===')
+          print(f'bitmap.width (visible bounding-box width): {visible_width} px')
+          print(f'bitmap_left: {bitmap_left} px')
+          print(f'advance.x: {advance_px:.4f} px')
+          print(f'linearHoriAdvance: {linear_px:.4f} px')
+          print(f'right side bearing from hinted advance: {right_bearing_from_advance:.4f} px')
+          print(f'left optical gap: {left_gap} px')
+          print(f'right safety: {right_safety} px')
+          print(f'required margin for detached full hyphen: {required_margin} px')
+          print('--- margin feasibility ---')
+          for margin in (4, 8, 12, 16, 20, 24, 28, 32):
+              usable_after_safety = margin - right_safety
+              fits = left_gap + visible_width <= usable_after_safety
+              print(f'{margin:2d}px margin: usable={usable_after_safety:2d}px; need(left gap + glyph)={left_gap + visible_width:2d}px; fits={"YES" if fits else "NO"}')
+          PY
