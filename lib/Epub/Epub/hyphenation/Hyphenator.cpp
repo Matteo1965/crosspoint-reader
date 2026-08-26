@@ -204,6 +204,47 @@ uint32_t asciiLower(const uint32_t cp) {
   return (cp >= 'A' && cp <= 'Z') ? cp + ('a' - 'A') : cp;
 }
 
+// Returns the number of Unicode codepoints occupied by one Hungarian consonant
+// grapheme starting at `start`. Multi-letter consonants (cs, dz, dzs, gy, ly,
+// ny, sz, ty, zs) count as one phonological consonant for syllable boundaries.
+size_t hungarianConsonantGraphemeLength(const std::vector<CodepointInfo>& cps, const size_t start) {
+  if (start >= cps.size()) return 0;
+  const uint32_t first = asciiLower(cps[start].value);
+  if (!isAlphabetic(cps[start].value) || isHungarianVowel(cps[start].value)) return 0;
+
+  const uint32_t second = start + 1 < cps.size() ? asciiLower(cps[start + 1].value) : 0;
+  const uint32_t third = start + 2 < cps.size() ? asciiLower(cps[start + 2].value) : 0;
+
+  if (first == 'd' && second == 'z' && third == 's') return 3;
+  if ((first == 'c' && second == 's') || (first == 'd' && second == 'z') ||
+      (first == 'g' && second == 'y') || (first == 'l' && second == 'y') ||
+      (first == 'n' && second == 'y') || (first == 's' && second == 'z') ||
+      (first == 't' && second == 'y') || (first == 'z' && second == 's')) {
+    return 2;
+  }
+  return 1;
+}
+
+// huhyphn intentionally suppresses one-letter edge syllables for traditional
+// print typography. On a narrow e-reader, an explicit 1/x minimum means the user
+// opted into those legal breaks. Restore only the safe V-C-V case, treating
+// Hungarian digraphs/trigraphs as one consonant. Examples: a-lak, o-lyan,
+// u-gyan, A-nyámnak. Counterexamples such as em-ber, ab-lak and asz-tal stay blocked.
+void appendHungarianSingleLetterPrefixBreak(const std::vector<CodepointInfo>& cps,
+                                             const LanguageHyphenator& hyphenator,
+                                             std::vector<Hyphenator::BreakInfo>& outBreaks) {
+  if (hyphenator.minPrefix() != 1 || cps.size() < 3) return;
+  if (cps.size() - 1 < hyphenator.minSuffix()) return;
+  if (!isHungarianVowel(cps[0].value)) return;
+
+  const size_t consonantLen = hungarianConsonantGraphemeLength(cps, 1);
+  if (consonantLen == 0) return;
+  const size_t nextVowel = 1 + consonantLen;
+  if (nextVowel >= cps.size() || !isHungarianVowel(cps[nextVowel].value)) return;
+
+  outBreaks.push_back({byteOffsetForIndex(cps, 1), true});
+}
+
 // Extended Hungarian replacement hyphenation may add a special break only
 // when the compact doubled multi-letter consonant is directly surrounded by
 // Hungarian vowels. This keeps real cases such as asszony -> asz-szony while
@@ -353,6 +394,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   }
 
   std::vector<Hyphenator::BreakInfo> breaks;
+  if (preferredLanguageIsHungarian_ && hyphenator) {
+    appendHungarianSingleLetterPrefixBreak(cps, *hyphenator, breaks);
+  }
   if (useHungarianExtended) {
     appendHungarianExtendedBreaks(cps, breaks);
   }
