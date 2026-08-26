@@ -100,8 +100,7 @@ jobs:
           check hyphen-only grep -q "return cp == '-'" lib/Epub/Epub/ParsedText.cpp
           check packed-percent grep -q 'packedSetting >> 5' lib/Epub/Epub/ParsedText.cpp
           check packed-pixels grep -q 'packedSetting & 0x1F' lib/Epub/Epub/ParsedText.cpp
-          producer_file=$(grep -R -l 'hangingPunctuationLimitPx.*SETTINGS' src lib | head -1)
-          check margin-minus-two grep -q 'SETTINGS.screenMargin - 2' "$producer_file"
+          check margin-minus-two grep -q 'SETTINGS.screenMargin - 2' src/CrossPointSettings.cpp
           check hu-hyphen-1-2 grep -q 'hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2)' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
           check hu-nbsp-normalization grep -q 'emitPendingHungarianNbsp' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
 
