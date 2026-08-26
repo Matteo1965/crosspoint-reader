@@ -42,7 +42,7 @@ namespace {
 //      with no bottom inset refuse to draw.
 // v43: TextBlock arena stores one cached BidiBaseDir byte per word. This avoids
 //      repeating Unicode direction detection on every page redraw.
-constexpr uint8_t SECTION_FILE_VERSION = 47;
+constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

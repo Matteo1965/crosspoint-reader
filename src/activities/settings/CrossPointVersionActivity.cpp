@@ -156,15 +156,14 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     if (hu) {
       drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);
       y += bodyLineHeight;
-      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
-      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);
-      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_NOT_INCLUDED));
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_INSTALL_SEPARATELY));
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_STARDICT_FILES_INTRO));
       renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
-      y += bodyLineHeight * 2;
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
-      y += bodyLineHeight * 2;
-      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
       y += bodyLineHeight;
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
+      y += bodyLineHeight;
+      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
       drawWrapped(UI_12_FONT_ID,
                   "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "
                   "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");
