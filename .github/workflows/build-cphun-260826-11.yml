@@ -2,6 +2,14 @@ name: CPHUN-260826-11 Integrated Fixes
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/cphun-260826-01-test
+    paths:
+      - '.github/workflows/build-cphun-260826-11.yml'
+      - '.github/scripts/apply-cphun-260826-11.py'
+      - '.github/scripts/apply-cphun-260825-06.py'
+      - '.github/scripts/apply-cphun-260825-07.py'
 
 jobs:
   build:
