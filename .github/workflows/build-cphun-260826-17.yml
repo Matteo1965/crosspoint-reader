@@ -1,0 +1,138 @@
+name: Build CPHUN-260826-17 Quickfix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260826-17-quickfix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260826-17
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-17-quickfix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-260826-17 safe final-line spacing fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          Path('src/CPHUNBuildId.h').write_text(
+              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260826-17"\n', encoding='utf-8')
+
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text(encoding='utf-8')
+
+          old_flag = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n\n  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.\n'''
+          new_flag = '''  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n  bool useNaturalLastLineSpacing = false;\n\n  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.\n'''
+          if s.count(old_flag) != 1:
+              raise SystemExit(f'last-line flag marker count={s.count(old_flag)}')
+          s = s.replace(old_flag, new_flag, 1)
+
+          old_fit = '''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n    }\n  }\n\n  // For RTL, implicit/default Left alignment becomes Right alignment.\n'''
+          new_fit = '''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n      useNaturalLastLineSpacing = true;\n    }\n  }\n\n  // Use one spacing decision consistently for final word positioning only.\n  // Keep floating/hanging punctuation calculations unchanged. Fixed dialogue spacing\n  // remains on minimumSpacePercent_ through its dedicated continuation path.\n  const int lineSpacePercent =\n      useNaturalLastLineSpacing ? 100 : __BASE_SPACING_EXPR__;\n\n  // For RTL, implicit/default Left alignment becomes Right alignment.\n'''
+          if s.count(old_fit) != 1:
+              raise SystemExit(f'last-line fit marker count={s.count(old_fit)}')
+          s = s.replace(old_fit, new_fit, 1)
+
+          # Replace only the four pre-existing final-positioning expressions from -15.
+          # The initializer is protected by a placeholder so it cannot rewrite itself.
+          split_marker = '  const int lineSpacePercent =\n'
+          head, sep, tail = s.partition(split_marker)
+          if not sep:
+              raise SystemExit('lineSpacePercent insertion missing')
+          old_expr = '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)'
+          count = tail.count(old_expr)
+          if count != 4:
+              raise SystemExit(f'expected exactly 4 downstream spacing expressions, found {count}')
+          tail = tail.replace(old_expr, 'lineSpacePercent')
+          s = head + sep + tail
+          s = s.replace('__BASE_SPACING_EXPR__', old_expr, 1)
+
+          # Guard against the -16 self-reference regression.
+          if 'useNaturalLastLineSpacing ? 100 : lineSpacePercent' in s:
+              raise SystemExit('self-referential lineSpacePercent regression detected')
+          if s.count('lineSpacePercent') != 5:
+              raise SystemExit(f'unexpected lineSpacePercent reference count={s.count("lineSpacePercent")}')
+
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('lib/Epub/Epub/Section.cpp')
+          sec = p.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', sec)
+          if not m:
+              raise SystemExit('SECTION_FILE_VERSION not found')
+          v = int(m.group(1))
+          p.write_text(sec[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {v + 1};' + sec[m.end():], encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Verify CPHUN-260826-17 requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#define CPHUN_BUILD_ID "CPHUN-260826-17"' src/CPHUNBuildId.h
+          grep -q 'bool useNaturalLastLineSpacing = false;' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'useNaturalLastLineSpacing = true;' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'const int lineSpacePercent' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'useNaturalLastLineSpacing ? 100 : (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100);' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'useNaturalLastLineSpacing ? 100 : lineSpacePercent' lib/Epub/Epub/ParsedText.cpp
+          test "$(grep -o 'lineSpacePercent' lib/Epub/Epub/ParsedText.cpp | wc -l)" -eq 5
+          grep -q 'hangingPunctuationAllowance' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260826-17 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/CPHUNBuildId.h lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/Section.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260826-17: safely fix final-line MinSpace positioning"
+            git push origin HEAD:agent/cphun-260826-17-quickfix
+          fi
+
+      - name: Upload CPHUN-260826-17 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-17-Quickfix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
