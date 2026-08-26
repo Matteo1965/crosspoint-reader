@@ -8,22 +8,32 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
       - name: Apply CPHUN-260826-11 fixes
         run: python3 .github/scripts/apply-cphun-260826-11.py
-      - name: Build firmware
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO Core
         run: |
-          pip install platformio
-          pio run -e xteink_x4
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
       - name: Package firmware
         run: |
           mkdir -p artifact
-          cp .pio/build/xteink_x4/firmware.bin artifact/firmware.bin
+          cp .pio/build/gh_release_rc/firmware.bin artifact/firmware.bin
           cd artifact && zip -r ../CPHUN-260826-11-Integration-FW.zip .
       - uses: actions/upload-artifact@v4
         with:
           name: CPHUN-260826-11-Integration-FW
           path: CPHUN-260826-11-Integration-FW.zip
+          if-no-files-found: error
