@@ -1,0 +1,117 @@
+name: Apply Hungarian whitespace normalization
+
+on:
+  push:
+    branches:
+      - agent/hungarian-v1.6.0rc-whitespace
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-v1.6.0rc-whitespace
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply Hungarian duplicate whitespace normalization
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          h = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h')
+          s = h.read_text()
+          old = '''  bool insideBody = false;\n  bool syntheticCharacterData = false;\n  uint16_t nonVisibleTextDepth = 0;\n'''
+          new = '''  bool insideBody = false;\n  bool syntheticCharacterData = false;\n  uint16_t nonVisibleTextDepth = 0;\n\n  // Hungarian EPUB cleanup: collapse duplicate NBSP+SPACE / SPACE+NBSP pairs\n  // to one ordinary breakable word boundary without modifying the source EPUB.\n  bool hungarianWhitespaceNormalization = false;\n  bool pendingHungarianNbsp = false;\n  bool previousHungarianAsciiWhitespace = false;\n  uint32_t pendingHungarianNbspVisibleOffset = 0;\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          old = '''  void flushPartWordBuffer();\n  void setCurrentPageVisibleOffset(uint32_t offset);\n'''
+          new = '''  void flushPartWordBuffer();\n  void emitPendingHungarianNbsp();\n  void setCurrentPageVisibleOffset(uint32_t offset);\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+          h.write_text(s)
+
+          p = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp')
+          s = p.read_text()
+
+          marker = '''bool isWhitespace(const char c) { return c == ' ' || c == '\\r' || c == '\\n' || c == '\\t'; }\n'''
+          insert = marker + '''\nbool isHungarianLanguageTag(const std::string& language) {\n  if (language.size() < 2) return false;\n  char a = language[0];\n  char b = language[1];\n  if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');\n  if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');\n  if (a == 'h' && b == 'u' &&\n      (language.size() == 2 || language[2] == '-' || language[2] == '_')) {\n    return true;\n  }\n  if (language.size() >= 3) {\n    char c = language[2];\n    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');\n    return a == 'h' && b == 'u' && c == 'n' &&\n           (language.size() == 3 || language[3] == '-' || language[3] == '_');\n  }\n  return false;\n}\n'''
+          assert marker in s
+          s = s.replace(marker, insert, 1)
+
+          marker = '''void ChapterHtmlSlimParser::flushPartWordBuffer() {\n'''
+          idx = s.index(marker)
+          # insert helper just before startNewTextBlock, after flushPartWordBuffer definition
+          boundary = '''// start a new text block if needed\n'''
+          bidx = s.index(boundary, idx)
+          helper = '''void ChapterHtmlSlimParser::emitPendingHungarianNbsp() {\n  if (!pendingHungarianNbsp) return;\n\n  partWordBuffer[0] = ' ';\n  partWordBuffer[1] = '\\0';\n  partWordBufferIndex = 1;\n  partWordVisibleOffset = pendingHungarianNbspVisibleOffset;\n  nextWordContinues = true;\n  flushPartWordBuffer();\n  nextWordContinues = true;\n  pendingHungarianNbsp = false;\n}\n\n'''
+          s = s[:bidx] + helper + s[bidx:]
+
+          old = '''void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {\n  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);\n'''
+          new = '''void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {\n  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);\n  // An element boundary ends adjacency for duplicate-space cleanup. Preserve a standalone NBSP.\n  self->emitPendingHungarianNbsp();\n  self->previousHungarianAsciiWhitespace = false;\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {\n  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);\n'''
+          new = '''void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {\n  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);\n  // Flush a standalone trailing NBSP before styles/block state change.\n  self->emitPendingHungarianNbsp();\n  self->previousHungarianAsciiWhitespace = false;\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''bool ChapterHtmlSlimParser::beginParse() {\n  // Initialize block style stack with a root entry representing "no ancestor block elements".\n'''
+          new = '''bool ChapterHtmlSlimParser::beginParse() {\n  hungarianWhitespaceNormalization = epub && isHungarianLanguageTag(epub->getLanguage());\n  pendingHungarianNbsp = false;\n  previousHungarianAsciiWhitespace = false;\n\n  // Initialize block style stack with a root entry representing "no ancestor block elements".\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''  uint32_t nextCodepointOffset = callbackVisibleOffset;\n  for (int i = 0; i < len; i++) {\n'''
+          new = '''  // Expat may split character data at entity boundaries, so an &#160; can arrive\n  // in a separate callback from the neighboring ordinary space. Delay a terminal\n  // Hungarian NBSP by one callback so NBSP+SPACE can still collapse correctly.\n  if (self->hungarianWhitespaceNormalization && self->pendingHungarianNbsp) {\n    if (len > 0 && isWhitespace(s[0])) {\n      self->pendingHungarianNbsp = false;\n      self->nextWordContinues = false;\n      self->previousHungarianAsciiWhitespace = true;\n    } else {\n      self->emitPendingHungarianNbsp();\n      self->previousHungarianAsciiWhitespace = false;\n    }\n  }\n\n  uint32_t nextCodepointOffset = callbackVisibleOffset;\n  for (int i = 0; i < len; i++) {\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    if (isWhitespace(s[i])) {\n      // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n      // Whitespace is a real word boundary — reset continuation state\n      self->nextWordContinues = false;\n      // Skip the whitespace char\n      continue;\n    }\n'''
+          new = '''    if (isWhitespace(s[i])) {\n      // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n      // Whitespace is a real word boundary — reset continuation state. Remember it\n      // for Hungarian SPACE+NBSP cleanup, including across Expat callbacks.\n      self->nextWordContinues = false;\n      self->previousHungarianAsciiWhitespace = self->hungarianWhitespaceNormalization;\n      // Skip the whitespace char\n      continue;\n    }\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n\n      self->partWordBuffer[0] = ' ';\n      self->partWordBuffer[1] = '\\0';\n      self->partWordBufferIndex = 1;\n      self->partWordVisibleOffset = codepointOffset;\n      self->nextWordContinues = true;  // Attach space to previous word (no break).\n      self->flushPartWordBuffer();\n\n      self->nextWordContinues = true;  // Next real word attaches to this space (no break).\n\n      i++;  // Skip the second byte (0xA0)\n      continue;\n    }\n'''
+          new = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      if (self->hungarianWhitespaceNormalization) {\n        // SPACE+NBSP -> one ordinary breakable boundary. The preceding ASCII\n        // whitespace has already flushed the word, so the NBSP itself is discarded.\n        if (self->previousHungarianAsciiWhitespace) {\n          self->previousHungarianAsciiWhitespace = false;\n          self->nextWordContinues = false;\n          i++;\n          continue;\n        }\n\n        if (self->partWordBufferIndex > 0) {\n          self->flushPartWordBuffer();\n        }\n\n        // NBSP+SPACE in the same callback -> one ordinary boundary.\n        if (i + 2 < len && isWhitespace(s[i + 2])) {\n          self->nextWordContinues = false;\n          self->previousHungarianAsciiWhitespace = true;\n          i++;\n          continue;\n        }\n\n        // Entity expansion frequently leaves the NBSP as the final codepoint of a\n        // callback. Defer it so a leading SPACE in the next callback can collapse it.\n        if (i + 2 >= len) {\n          self->pendingHungarianNbsp = true;\n          self->pendingHungarianNbspVisibleOffset = codepointOffset;\n          self->previousHungarianAsciiWhitespace = false;\n          i++;\n          continue;\n        }\n      }\n\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n\n      self->partWordBuffer[0] = ' ';\n      self->partWordBuffer[1] = '\\0';\n      self->partWordBufferIndex = 1;\n      self->partWordVisibleOffset = codepointOffset;\n      self->nextWordContinues = true;  // Attach space to previous word (no break).\n      self->flushPartWordBuffer();\n\n      self->nextWordContinues = true;  // Next real word attaches to this space (no break).\n      self->previousHungarianAsciiWhitespace = false;\n\n      i++;  // Skip the second byte (0xA0)\n      continue;\n    }\n'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          # Any real non-space character ends SPACE adjacency before it is buffered.
+          marker = '''    // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF\n'''
+          replacement = '''    self->previousHungarianAsciiWhitespace = false;\n\n''' + marker
+          assert marker in s
+          s = s.replace(marker, replacement, 1)
+
+          p.write_text(s)
+          PY
+
+      - name: Format touched source
+        shell: bash
+        run: |
+          clang-format -i lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure
+
+      - name: Commit validated source changes
+        shell: bash
+        run: |
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          if ! git diff --cached --quiet; then
+            git commit -m "fix: normalize duplicate Hungarian NBSP whitespace"
+            git push origin HEAD:agent/hungarian-v1.6.0rc-whitespace
+          fi
