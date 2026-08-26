@@ -1,0 +1,103 @@
+name: Build CPHUN-260826-14 Quickfix
+
+on:
+  push:
+    branches: [agent/cphun-260826-14-quickfix]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-14-quickfix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply quickfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Version/info pages.
+          p=Path('src/activities/settings/CrossPointVersionActivity.cpp'); s=p.read_text()
+          s=s.replace('"Hiányzó párbeszédköz automatikus pótlása"', '"Hiányzó párbeszédközök pótlása"')
+          old='''    if (hu) {\n      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID,\n                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "\n                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");\n    } else {'''
+          new='''    if (hu) {\n      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);\n      y += bodyLineHeight;\n      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);\n      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);\n      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);\n      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");\n      y += bodyLineHeight * 2;\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));\n      y += bodyLineHeight * 2;\n      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID,\n                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "\n                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");\n    } else {'''
+          if old not in s: raise SystemExit('dictionary block marker missing')
+          s=s.replace(old,new,1)
+          s=s.replace('drawWrapped(UI_10_FONT_ID,\n                  "A magyar elválasztás Nagy Bence Huhyphn', 'drawWrapped(UI_12_FONT_ID,\n                  "A magyar elválasztás Nagy Bence Huhyphn',1)
+          p.write_text(s)
+
+          # KI: previous trailing normal space gives 3 px; add a hair space for the requested extra 1 px optical shift.
+          p=Path('lib/I18n/translations/hungarian.yaml'); s=p.read_text()
+          if 'STR_STATE_OFF: "KI "' not in s: raise SystemExit('KI -3 baseline missing')
+          s=s.replace('STR_STATE_OFF: "KI "','STR_STATE_OFF: "KI  "',1)
+          p.write_text(s)
+
+          # Floating punctuation list.
+          p=Path('lib/Epub/Epub/ParsedText.cpp'); s=p.read_text()
+          old="bool isHangingPunctuation(const uint32_t cp) { return cp == '-'; }"
+          new="bool isHangingPunctuation(const uint32_t cp) { return cp == '-' || cp == '.' || cp == ':' || cp == ',' || cp == ';'; }"
+          if old not in s: raise SystemExit('floating punctuation marker missing')
+          s=s.replace(old,new,1)
+
+          # Last justified line: retain MinSpace only when 100% natural gaps would not fit.
+          marker='''  // Calculate spacing (account for indent reducing effective page width on first line)\n  const int effectivePageWidth = pageWidth - firstLineIndent;\n  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n'''
+          insert='''  // Calculate spacing (account for indent reducing effective page width on first line)\n  const int effectivePageWidth = pageWidth - firstLineIndent;\n  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n\n  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.\n  // Keep MinSpace only when compression is actually needed to preserve the chosen unbroken line.\n  if (isLastLine && blockStyle.alignment == CssTextAlign::Justify) {\n    int natural100 = 0;\n    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {\n      const size_t boundaryIdx = lastBreakAt + wordIdx;\n      if (continuesVec[boundaryIdx]) {\n        if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {\n          natural100 += scaledNormalSpaceAdvance(\n              renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),\n                                       lineWordStyles[0]), minimumSpacePercent_);\n        } else {\n          natural100 += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),\n                                            firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);\n        }\n      } else if (!noSpaceBeforeVec[boundaryIdx]) {\n        natural100 += scaledNormalSpaceAdvance(\n            renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]), firstCodepoint(lineWords[wordIdx]),\n                                     lineWordStyles[wordIdx - 1]), 100);\n      }\n    }\n    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n    }\n  }\n'''
+          if marker not in s: raise SystemExit('last-line spacing marker missing')
+          s=s.replace(marker,insert,1)
+          p.write_text(s)
+          PY
+          git diff --check
+
+      - name: Verify quickfix
+        run: |
+          grep -q 'Hiányzó párbeszédközök pótlása' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'STR_DICTIONARY_NOT_INCLUDED' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Javított magyar szótárkezelés' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -A2 'Nagy Bence Huhyphn' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q "cp == '.' || cp == ':' || cp == ',' || cp == ';'" lib/Epub/Epub/ParsedText.cpp
+          grep -q 'last justified line should use natural' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test
+      - name: Build unit tests
+        run: cmake --build build/test
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-14-Quickfix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+
+      - name: Commit validated quickfix sources
+        if: success()
+        run: |
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/activities/settings/CrossPointVersionActivity.cpp lib/I18n/translations/hungarian.yaml lib/Epub/Epub/ParsedText.cpp
+          git commit -m "CPHUN-260826-14: apply UI and layout quickfix" || exit 0
+          git push origin HEAD:agent/cphun-260826-14-quickfix
