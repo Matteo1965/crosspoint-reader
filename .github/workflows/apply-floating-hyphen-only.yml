@@ -1,0 +1,75 @@
+name: Apply floating hyphen only
+
+on:
+  push:
+    branches:
+      - agent/hungarian-v1.6.0rc-floating-hyphen-only
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-v1.6.0rc-floating-hyphen-only
+          fetch-depth: 0
+
+      - name: Keep only hyphen in hanging punctuation list
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '''bool isHangingPunctuation(const uint32_t cp) {
+  switch (cp) {
+    case '.':
+    case ',':
+    case ';':
+    case ':':
+    case '!':
+    case '?':
+    case '-':
+    case 0x2019:  // ’
+    case 0x201D:  // ”
+    case 0x00BB:  // »
+      return true;
+    default:
+      return false;
+  }
+}
+'''
+          new = '''bool isHangingPunctuation(const uint32_t cp) {
+  // Hungarian Edition: temporarily restrict floating punctuation to the
+  // visible hyphen used for line-end hyphenation. Other punctuation marks
+  // remain aligned to the normal text margin.
+  return cp == '-';
+}
+'''
+          if old not in s:
+              raise SystemExit('isHangingPunctuation block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Commit validated source
+        shell: bash
+        run: |
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add lib/Epub/Epub/ParsedText.cpp
+          git rm .github/workflows/apply-floating-hyphen-only.yml
+          git commit -m "fix: restrict floating punctuation to hyphen"
+          git push origin HEAD:agent/hungarian-v1.6.0rc-floating-hyphen-only
