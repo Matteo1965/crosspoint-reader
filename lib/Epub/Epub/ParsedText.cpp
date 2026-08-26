@@ -1498,6 +1498,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Calculate spacing (account for indent reducing effective page width on first line)
   const int effectivePageWidth = pageWidth - firstLineIndent;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+  bool useNaturalLastLineSpacing = false;
 
   // A paragraph's last justified line should use natural (100%) spaces whenever it fits.
   // Keep MinSpace only when compression is actually needed to preserve the chosen unbroken line.
@@ -1522,8 +1523,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
     if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {
       totalNaturalGaps = natural100;
+      useNaturalLastLineSpacing = true;
     }
   }
+
+  // Use one spacing decision consistently for final word positioning only.
+  // Keep floating/hanging punctuation calculations unchanged. Fixed dialogue spacing
+  // remains on minimumSpacePercent_ through its dedicated continuation path.
+  const int lineSpacePercent =
+      useNaturalLastLineSpacing ? 100 : (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100);
 
   // For RTL, implicit/default Left alignment becomes Right alignment.
   // Explicit text-align:left must remain left for CSS correctness.
@@ -1617,7 +1625,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         reorderedGapCount++;
         reorderedNaturalGaps += scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx]),
-                                                         reorderedStylesScratch[wordIdx - 1]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
+                                                         reorderedStylesScratch[wordIdx - 1]), lineSpacePercent);
       } else if (wordIdx > 0 && reorderedContinuesScratch[wordIdx]) {
         if (reorderedWordsScratch[wordIdx] == " ") {
           reorderedGapCount++;
@@ -1691,7 +1699,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         int gap = nextNoSpace ? 0
                               : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
-                                                         reorderedStylesScratch[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
+                                                         reorderedStylesScratch[wordIdx]), lineSpacePercent);
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
           gap +=
               reorderedJustifyExtra + (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);
@@ -1741,7 +1749,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = nextNoSpace
                       ? 0
                       : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), lineSpacePercent);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
@@ -1792,7 +1800,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = nextNoSpace
                       ? 0
                       : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), lineSpacePercent);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
