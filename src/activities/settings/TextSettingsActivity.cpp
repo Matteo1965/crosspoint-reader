@@ -108,7 +108,11 @@ void TextSettingsActivity::rebuildRowItems() {
         item.label = sizes_[i].name.c_str();
         break;
       case Tab::Layout:
-        if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
+        if (i == static_cast<int>(LayoutRow::MinimumSpace)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";
+        } else if (i == static_cast<int>(LayoutRow::ScreenMargin)) {
+          item.label = I18N.get(StrId::STR_SCREEN_MARGIN);
+        } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
           item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";
         } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
           item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";
@@ -414,6 +418,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
+    case LayoutRow::MinimumSpace: {
+      const char* options[] = {"50%", "60%", "70%", "80%", "90%", "100%"};
+      const int cur = std::clamp<int>((SETTINGS.minimumSpacePercent - 50) / 10, 0, 5);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing", options, 6, cur,
+                        [](int idx) {
+                          SETTINGS.minimumSpacePercent = static_cast<uint8_t>(50 + idx * 10);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      break;
+    }
     case LayoutRow::FixedDialogueSpacing:
       SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;
       SETTINGS.saveToFile();
@@ -449,6 +464,8 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       const uint8_t v = SETTINGS.paragraphAlignment;
       return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
     }
+    case LayoutRow::MinimumSpace:
+      return std::to_string(SETTINGS.minimumSpacePercent) + "%";
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:

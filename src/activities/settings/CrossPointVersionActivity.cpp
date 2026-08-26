@@ -117,6 +117,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
     drawLabelValue(tr(STR_BASE_VERSION), "1.6.0rc");
     drawLabelValue(tr(STR_EDITION), "Hungarian Edition");
+    drawLabelValue("CPHUN", "CPHUN-260825-06");
     const std::string buildDate = std::string(__DATE__) + " " + __TIME__;
     drawLabelValue(tr(STR_BUILD_DATE), buildDate.c_str());
 
@@ -142,6 +143,9 @@ void CrossPointVersionActivity::render(RenderLock&&) {
         hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
         hu ? "Javított sorkizárt szedés" : "Improved justified text layout",
         hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
+        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",
+        hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",
+        hu ? "Hiányzó párbeszédköz automatikus pótlása" : "Recover missing dialogue space",
     };
     for (const char* featureText : extraFeatures) {
       const std::string line = std::string("- ") + featureText;

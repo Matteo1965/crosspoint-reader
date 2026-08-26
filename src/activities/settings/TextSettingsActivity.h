@@ -33,6 +33,7 @@ class TextSettingsActivity final : public UiTabListActivity {
     LineSpacing,
     ParaSpacing,
     Alignment,
+    MinimumSpace,
     ScreenMargin,
     HangingPunctuation,
     FixedDialogueSpacing,

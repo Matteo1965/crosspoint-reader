@@ -14,6 +14,7 @@
 class GfxRenderer;
 
 class ParsedText {
+  static uint8_t minimumSpacePercent_;
   // words/rubyTexts and the 16-bit visible-offset deltas are std::deque, not std::vector:
   // a paragraph can hold thousands of tokens (CJK splits every character), and vectors grow
   // by reallocating their whole element array into one contiguous block. On the ESP32-C3 that
@@ -94,6 +95,7 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
+  static void setMinimumSpacePercent(uint8_t percent) { minimumSpacePercent_ = percent; }
   explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,
                       const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle())

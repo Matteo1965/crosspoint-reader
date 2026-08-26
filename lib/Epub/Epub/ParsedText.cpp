@@ -17,6 +17,7 @@
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
+uint8_t ParsedText::minimumSpacePercent_ = 100;
 
 namespace {
 
@@ -223,10 +224,27 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
   if (!isHangingPunctuation(punctuation)) return 0;
   size_t lastStart = word.size() - 1;
   while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
-  const int punctuationAdvance =
-      cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, word.c_str() + lastStart);
+  // Use the hyphen's effective contribution inside this exact word rather than
+  // its standalone advance. Pair kerning (e.g. g- versus r-) can otherwise make
+  // two justified, hyphenated lines end at visibly different x positions.
+  const std::string prefixWithoutPunctuation = word.substr(0, lastStart);
+  const int fullWordAdvance = std::max(0, renderer.getTextAdvanceX(fontId, word.c_str(), style));
+  const int prefixAdvance = prefixWithoutPunctuation.empty()
+                                ? 0
+                                : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
+  const int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
   const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 5) + 4) / 5;
   return std::min<int>(pixelLimit, proportionalAdvance);
+}
+
+int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {
+  return std::max(1, (natural * std::clamp<int>(percent, 50, 100) + 99) / 100);
+}
+
+bool isStandaloneDialogueDash(const std::string& word) {
+  if (word.empty()) return false;
+  const uint32_t first = firstCodepoint(word);
+  return (first == 0x2013 || first == 0x2014) && first == lastCodepoint(word);
 }
 
 int computeJustifyExtra(const int spareSpace, const size_t gapCount) {
@@ -535,6 +553,21 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       hasRtlWord = true;
     }
     return;
+  }
+
+  // Repair a missing source space after a paragraph-leading en/em dash.
+  if (fixedDialogueSpacing && words.empty() && !attachToPrevious &&
+      (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0)) {
+    const auto* begin = reinterpret_cast<const unsigned char*>(word.c_str());
+    const auto* afterDash = begin;
+    const uint32_t first = utf8NextCodepoint(&afterDash);
+    const size_t dashBytes = static_cast<size_t>(afterDash - begin);
+    if ((first == 0x2013 || first == 0x2014) && dashBytes < word.size()) {
+      pushToken(word.substr(0, dashBytes), effectiveAttachToPrevious, effectiveNoSpaceBefore, 0, visibleTextOffset);
+      pushToken(word.substr(dashBytes), true, false, 0, visibleTextOffset + 1);
+      if (wordStartsRtl) hasRtlWord = true;
+      return;
+    }
   }
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
@@ -1004,13 +1037,19 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       // Add space before word j, unless it's the first word on the line or a continuation
       int gap = 0;
       if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        // Attached and breakable-attached boundaries both use kerning when kept on one line.
-        gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+        if (fixedDialogueSpacing && j == 1 && isStandaloneDialogueDash(words[0])) {
+          gap = scaledNormalSpaceAdvance(
+              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
+              minimumSpacePercent_);
+        } else {
+          // Attached and breakable-attached boundaries use kerning when kept on one line.
+          gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+        }
       } else if (j > static_cast<size_t>(i) && noSpaceBeforeVec[j]) {
         gap = 0;
       } else if (j > static_cast<size_t>(i)) {
         gap =
-            renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+            scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
       }
 
       // Calculate extraStartOffset for the first word on the line (i) (protect left margin)
@@ -1113,14 +1152,20 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       const bool isFirstWord = currentIndex == lineStart;
       int spacing = 0;
       if (!isFirstWord && continuesVec[currentIndex]) {
-        // Attached and breakable-attached boundaries both use kerning when kept on one line.
-        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
-                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+        if (fixedDialogueSpacing && currentIndex == 1 && isStandaloneDialogueDash(words[0])) {
+          spacing = scaledNormalSpaceAdvance(
+              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
+              minimumSpacePercent_);
+        } else {
+          // Attached and breakable-attached boundaries use kerning when kept on one line.
+          spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
+                                        firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+        }
       } else if (!isFirstWord && noSpaceBeforeVec[currentIndex]) {
         spacing = 0;
       } else if (!isFirstWord) {
-        spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
-                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+        spacing = scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
+                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
       }
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
@@ -1366,11 +1411,18 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       actualGapCount++;
     }
     if (continuesVec[boundaryIdx]) {
-      totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
-                                              firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+      if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
+        totalNaturalGaps += scaledNormalSpaceAdvance(
+            renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                     lineWordStyles[0]),
+            minimumSpacePercent_);
+      } else {
+        totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                                firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+      }
     } else if (!noSpaceBeforeVec[boundaryIdx]) {
-      totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
-                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+      totalNaturalGaps += scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
     }
   }
 
@@ -1468,9 +1520,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         reorderedGapCount++;
       } else if (wordIdx > 0 && !reorderedContinuesScratch[wordIdx]) {
         reorderedGapCount++;
-        reorderedNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
+        reorderedNaturalGaps += scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx]),
-                                                         reorderedStylesScratch[wordIdx - 1]);
+                                                         reorderedStylesScratch[wordIdx - 1]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
       } else if (wordIdx > 0 && reorderedContinuesScratch[wordIdx]) {
         if (reorderedWordsScratch[wordIdx] == " ") {
           reorderedGapCount++;
@@ -1542,9 +1594,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       } else if (wordIdx + 1 < reorderedWidthsScratch.size()) {
         const bool nextNoSpace = reorderedNoSpaceBeforeScratch[wordIdx + 1];
         int gap = nextNoSpace ? 0
-                              : renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
+                              : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
-                                                         reorderedStylesScratch[wordIdx]);
+                                                         reorderedStylesScratch[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
           gap +=
               reorderedJustifyExtra + (static_cast<int>(reorderedJustifyGapIndex) < reorderedJustifyRemainder ? 1 : 0);
@@ -1593,8 +1645,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             nextNoSpace = noSpaceBeforeVec[lastBreakAt + wordIdx + 1];
             gap = nextNoSpace
                       ? 0
-                      : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+                      : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
@@ -1619,8 +1671,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
           int advance = wordWidths[lastBreakAt + wordIdx];
-          advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
-                                         firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+          if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 && isStandaloneDialogueDash(lineWords[0])) {
+            advance += scaledNormalSpaceAdvance(
+                renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                         lineWordStyles[0]),
+                minimumSpacePercent_);
+          } else {
+            advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
+                                           firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+          }
           // wordIdx > 0 mirrors the gap accounting above (which skips index 0): a leading
           // no-break space must not receive justifyExtra, or the line over-stretches by one
           // gap and the last word is pushed past the right margin (issue #2185).
@@ -1637,8 +1696,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             nextNoSpace = noSpaceBeforeVec[lastBreakAt + wordIdx + 1];
             gap = nextNoSpace
                       ? 0
-                      : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+                      : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);

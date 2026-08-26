@@ -93,6 +93,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["fontSize"] = fontPointSize;
   doc["hangingPunctuation"] = hangingPunctuation;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
+  doc["minimumSpacePercent"] = minimumSpacePercent;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -210,6 +211,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   fontPointSize = storedFontSize;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
+  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;
+  if (minimumSpacePercent < 50 || minimumSpacePercent > 100 || minimumSpacePercent % 10 != 0) {
+    minimumSpacePercent = 100;
+    needsResave = true;
+  }
   const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;
   if (storedHangingPunctuation == 1) {
     // Migrate the previous On/Off implementation: On meant 50%.
@@ -290,6 +296,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.hangingPunctuationLimitPx =
       static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0));
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
+  spec.minimumSpacePercent = minimumSpacePercent;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
