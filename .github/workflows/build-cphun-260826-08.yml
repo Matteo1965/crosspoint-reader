@@ -1,0 +1,217 @@
+name: Build CPHUN-260826-08 Quickfix 1-4
+
+'on':
+  push:
+    branches: [agent/hungarian-v1.6.0rc-qf14]
+    paths:
+      - '.github/workflows/build-cphun-260826-08.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out tested RC baseline
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-v1.6.0rc-qf14
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Reapply proven CPHUN-260825-06 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import textwrap
+
+          workflow = Path('.github/workflows/build-cphun-minspace-test.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          script = textwrap.dedent(workflow[start:end])
+          Path('/tmp/apply-cphun-06.py').write_text(script, encoding='utf-8')
+          subprocess.run(['python', '/tmp/apply-cphun-06.py'], check=True)
+          PY
+
+      - name: Reapply proven CPHUN-260825-07 deltas
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
+          if not m:
+              raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found')
+          current = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {current + 1};' + s[m.end():]
+          sec.write_text(s, encoding='utf-8')
+
+          for path in ('src/activities/settings/SettingsActivity.cpp',
+                       'src/activities/settings/TextSettingsActivity.cpp'):
+              p = Path(path)
+              t = p.read_text(encoding='utf-8')
+              old = '  props.valueInset = 8;               // air between the value and the row edge\n'
+              new = '  props.valueInset = 11;              // 3 px farther left from the row edge\n'
+              if t.count(old) != 1:
+                  raise SystemExit(f'{path}: expected one valueInset marker, got {t.count(old)}')
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+
+          ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
+          v = ver.read_text(encoding='utf-8')
+          if v.count('CPHUN-260825-06') != 1:
+              raise SystemExit(f'CrossPointVersionActivity.cpp: -06 id count={v.count("CPHUN-260825-06")}')
+          ver.write_text(v.replace('CPHUN-260825-06', 'CPHUN-260825-07', 1), encoding='utf-8')
+          PY
+
+      - name: Apply quickfix package 1-4
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, got {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          # 1) Margin presets: 4, 8, 12, 16, 20, 24, 28, 32.
+          settings = Path('src/CrossPointSettings.h')
+          text = settings.read_text(encoding='utf-8')
+          for old, new in (
+              ('static constexpr uint8_t SCREEN_MARGIN_MIN = 5;', 'static constexpr uint8_t SCREEN_MARGIN_MIN = 4;'),
+              ('static constexpr uint8_t SCREEN_MARGIN_MAX = 40;', 'static constexpr uint8_t SCREEN_MARGIN_MAX = 32;'),
+              ('static constexpr uint8_t SCREEN_MARGIN_STEP = 5;', 'static constexpr uint8_t SCREEN_MARGIN_STEP = 4;'),
+          ):
+              if text.count(old) != 1:
+                  raise SystemExit(f'CrossPointSettings.h: marker not unique: {old!r}')
+              text = text.replace(old, new, 1)
+          settings.write_text(text, encoding='utf-8')
+
+          # 2) Hungarian-only hyphenation minimum: 1/2. English stays explicitly 3/3.
+          replace_once(
+              'lib/Epub/Epub/hyphenation/LanguageRegistry.cpp',
+              'LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin);',
+              'LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2);',
+              'LanguageRegistry.cpp Hungarian 1/2')
+
+          # Expose the already-maintained publication-language state to the parser.
+          replace_once(
+              'lib/Epub/Epub/hyphenation/Hyphenator.h',
+              '  static void setPreferredLanguage(const std::string& lang);\n  static void setHungarianExtended(bool enabled);',
+              '  static void setPreferredLanguage(const std::string& lang);\n  static void setHungarianExtended(bool enabled);\n  static bool preferredLanguageIsHungarian() { return preferredLanguageIsHungarian_; }',
+              'Hyphenator.h language getter')
+
+          parser = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp')
+          p = parser.read_text(encoding='utf-8')
+
+          include_old = '#include "Epub/VisibleTextUtils.h"\n#include "Epub/converters/ImageDecoderFactory.h"'
+          include_new = '#include "Epub/VisibleTextUtils.h"\n#include "Epub/hyphenation/Hyphenator.h"\n#include "Epub/converters/ImageDecoderFactory.h"'
+          if p.count(include_old) != 1:
+              raise SystemExit('ChapterHtmlSlimParser.cpp: include insertion marker missing/non-unique')
+          p = p.replace(include_old, include_new, 1)
+
+          # 3) Opening dialogue dash + NBSP: route it through the same fixed-gap logic
+          # as a normal source space, but ONLY at the beginning of the paragraph.
+          nbsp_marker = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n'''
+          nbsp_repl = '''    if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {\n      // A paragraph-opening en/em dash followed by NBSP is a common legacy EPUB\n      // dialogue pattern. When Fix dialogue spacing is enabled, treat only this\n      // NBSP as the normal source gap expected by ParsedText's dialogue rule.\n      // Other NBSPs (numbers/units, names, etc.) keep their no-break semantics.\n      const bool openingDialogueDash =\n          self->fixedDialogueSpacing && self->currentTextBlock && self->currentTextBlock->isEmpty() &&\n          self->partWordBufferIndex == 3 && static_cast<uint8_t>(self->partWordBuffer[0]) == 0xE2 &&\n          static_cast<uint8_t>(self->partWordBuffer[1]) == 0x80 &&\n          (static_cast<uint8_t>(self->partWordBuffer[2]) == 0x93 ||\n           static_cast<uint8_t>(self->partWordBuffer[2]) == 0x94);\n      if (openingDialogueDash) {\n        self->flushPartWordBuffer();\n        self->nextWordContinues = false;\n        i++;  // consume U+00A0; the following word supplies the fixed visible gap\n        continue;\n      }\n\n      if (self->partWordBufferIndex > 0) {\n        self->flushPartWordBuffer();\n      }\n'''
+          if p.count(nbsp_marker) != 1:
+              raise SystemExit(f'ChapterHtmlSlimParser.cpp: NBSP marker count={p.count(nbsp_marker)}')
+          p = p.replace(nbsp_marker, nbsp_repl, 1)
+
+          # 4) Hungarian legacy character normalization in the in-memory reader text.
+          # Original EPUB bytes stay untouched. Because Page/TextBlock stores this normalized
+          # text, display, Hungarian hyphenation and dictionary selection all see the same word.
+          append_marker = '''    if (self->partWordBufferIndex == 0) {\n      self->partWordVisibleOffset = codepointOffset;\n    }\n    self->partWordBuffer[self->partWordBufferIndex++] = s[i];\n'''
+          append_repl = '''    // Normalize common legacy Hungarian accented characters only when the\n    // publication language is Hungarian. This avoids changing legitimate French\n    // ô/û or other foreign-language text in non-Hungarian EPUBs.\n    if (Hyphenator::preferredLanguageIsHungarian() && static_cast<uint8_t>(s[i]) == 0xC3 && i + 1 < len) {\n      const uint8_t second = static_cast<uint8_t>(s[i + 1]);\n      uint8_t replacementSecond = 0;\n      switch (second) {\n        case 0xB5:  // õ -> ő\n        case 0xB4:  // ô -> ő\n          replacementSecond = 0x91;\n          break;\n        case 0x95:  // Õ -> Ő\n        case 0x94:  // Ô -> Ő\n          replacementSecond = 0x90;\n          break;\n        case 0xBB:  // û -> ű\n          replacementSecond = 0xB1;\n          break;\n        case 0x9B:  // Û -> Ű\n          replacementSecond = 0xB0;\n          break;\n        default:\n          break;\n      }\n      if (replacementSecond != 0) {\n        if (self->partWordBufferIndex >= MAX_WORD_SIZE - 1) {\n          self->flushPartWordBuffer();\n          self->nextWordContinues = true;\n        }\n        if (self->partWordBufferIndex == 0) {\n          self->partWordVisibleOffset = codepointOffset;\n        }\n        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(0xC5);\n        self->partWordBuffer[self->partWordBufferIndex++] = static_cast<char>(replacementSecond);\n        i++;  // consume the original two-byte UTF-8 codepoint\n        continue;\n      }\n    }\n\n    if (self->partWordBufferIndex == 0) {\n      self->partWordVisibleOffset = codepointOffset;\n    }\n    self->partWordBuffer[self->partWordBufferIndex++] = s[i];\n'''
+          if p.count(append_marker) != 1:
+              raise SystemExit(f'ChapterHtmlSlimParser.cpp: append marker count={p.count(append_marker)}')
+          p = p.replace(append_marker, append_repl, 1)
+          parser.write_text(p, encoding='utf-8')
+
+          # The rendered/parsed text changes, so invalidate one more section-cache generation.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
+          if not m:
+              raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found for quickfix bump')
+          current = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {current + 1};' + s[m.end():]
+          sec.write_text(s, encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Verify quickfix package
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'SCREEN_MARGIN_MIN = 4' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_MAX = 32' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_STEP = 4' src/CrossPointSettings.h
+          grep -q 'hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2)' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          grep -q 'preferredLanguageIsHungarian()' lib/Epub/Epub/hyphenation/Hyphenator.h
+          grep -q 'openingDialogueDash' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'case 0xB5:  // õ -> ő' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'case 0xB4:  // ô -> ő' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'case 0xBB:  // û -> ű' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'CPHUN-260825-07' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'homeCoverHeight = 376' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -q 'homeCoverTileHeight = 400' src/components/themes/roundedraff/RoundedRaffTheme.h
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Show firmware size
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          fw = Path('.pio/build/gh_release_rc/firmware.bin')
+          if not fw.exists():
+              raise SystemExit('firmware.bin not found')
+          size = fw.stat().st_size
+          print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
+          PY
+
+      - name: Upload CPHUN-260826-08 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-08-Quickfix-1-4-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
