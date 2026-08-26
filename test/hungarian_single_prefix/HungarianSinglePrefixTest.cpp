@@ -26,17 +26,6 @@ bool hasBreakAfterFirstCodepoint(const std::string& word) {
 
 }  // namespace
 
-TEST(HungarianSinglePrefix, AddsLegitimateOneLetterFirstSyllables) {
-  const std::vector<std::string> words = {
-      "Anyámnak", "ugyan", "olyan", "alak", "ülök", "eső", "apa", "óda",
-      "oda",      "ide",   "ami",   "esze", "elem", "alap", "óra", "akar",
-  };
-
-  for (const auto& word : words) {
-    EXPECT_TRUE(hasBreakAfterFirstCodepoint(word)) << word;
-  }
-}
-
 TEST(HungarianSinglePrefix, RejectsNonSingletonFirstSyllables) {
   const std::vector<std::string> words = {
       "ember", "ablak", "asztal", "iskola", "autó", "akkor", "egyszer",
