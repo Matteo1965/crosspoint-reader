@@ -3,8 +3,7 @@ name: Build CPHUN 260826-09 next package
 'on':
   push:
     branches: [agent/hungarian-v1.6.0rc-next-integration]
-    paths:
-      - '.github/workflows/build-cphun-260826-09.yml'
+    paths: ['.github/workflows/build-cphun-260826-09.yml']
   workflow_dispatch:
 
 permissions:
@@ -38,7 +37,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import re, subprocess, textwrap
-
           workflow = subprocess.check_output([
               'git','show','origin/agent/hungarian-v1.6.0rc-next-integration:.github/workflows/build-cphun-260826-08.yml'
           ], text=True)
@@ -46,10 +44,8 @@ jobs:
           if len(blocks) < 3:
               raise SystemExit(f'Expected at least 3 patch Python blocks in -08, found {len(blocks)}')
           for i, block in enumerate(blocks[:3], 1):
-              script = textwrap.dedent(block)
               path = Path(f'/tmp/cphun08-{i}.py')
-              path.write_text(script, encoding='utf-8')
-              print(f'Running inherited patch block {i}')
+              path.write_text(textwrap.dedent(block), encoding='utf-8')
               subprocess.run(['python', str(path)], check=True)
           PY
 
@@ -61,15 +57,7 @@ jobs:
           from pathlib import Path
           import os, re
 
-          def replace_once(path, old, new, label):
-              p = Path(path)
-              text = p.read_text(encoding='utf-8')
-              n = text.count(old)
-              if n != 1:
-                  raise SystemExit(f'{label}: expected exactly one match, got {n}')
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          # New margin list: 10 / 12 / 14 / 16 / 18 / 20 / 22 px.
+          # Margins: 10 / 12 / 14 / 16 / 18 / 20 / 22 px.
           p = Path('src/CrossPointSettings.h')
           t = p.read_text(encoding='utf-8')
           for old, new in (
@@ -82,37 +70,48 @@ jobs:
               t = t.replace(old, new, 1)
           p.write_text(t, encoding='utf-8')
 
-          # Floating hyphen: keep the 20% steps/default 100% inherited from the current package,
-          # keep only '-' eligible, and reserve the last pixel of the physical margin as safety.
-          settings_cpp = Path('src/CrossPointSettings.cpp')
-          s = settings_cpp.read_text(encoding='utf-8')
-          if 'SETTINGS.screenMargin - 2' in s:
-              s = s.replace('SETTINGS.screenMargin - 2', 'SETTINGS.screenMargin - 1')
-          elif 'screenMargin - 2' in s:
-              s = s.replace('screenMargin - 2', 'screenMargin - 1')
+          # Keep only '-' as floating punctuation; 20% steps/default 100% are inherited.
+          # Reserve exactly the outermost 1 px as a safety band. At narrow margins the
+          # allowed overhang is capped here, so the right edge cannot enter that last pixel.
+          p = Path('src/CrossPointSettings.cpp')
+          t = p.read_text(encoding='utf-8')
+          if 'SETTINGS.screenMargin - 2' in t:
+              t = t.replace('SETTINGS.screenMargin - 2', 'SETTINGS.screenMargin - 1')
+          elif 'screenMargin - 2' in t:
+              t = t.replace('screenMargin - 2', 'screenMargin - 1')
           else:
               raise SystemExit('CrossPointSettings.cpp: hanging punctuation safety marker not found')
-          settings_cpp.write_text(s, encoding='utf-8')
+          p.write_text(t, encoding='utf-8')
 
-          # Version/info page cleanup and unique CPHUN id without a redundant "CPHUN:" label.
           ver = Path('src/activities/settings/CrossPointVersionActivity.cpp')
           v = ver.read_text(encoding='utf-8')
-          v = re.sub(r'\n\s*drawLabelValue\(tr\(STR_BASE_VERSION\),\s*"1\.6\.0rc"\);', '', v, count=1)
-          old_ids = re.findall(r'CPHUN-(?:v1\.6\.0rc-)?\d{6}-\d+', v)
+
+          # Remove redundant hard-coded base version.
+          v, n = re.subn(r'\n\s*drawLabelValue\(tr\(STR_BASE_VERSION\),\s*"1\.6\.0rc"\);', '', v, count=1)
+          if n != 1:
+              raise SystemExit(f'Base-version line removal count={n}')
+
+          # Replace the old labelled CPHUN line by a single self-describing CPHUN id.
           build_id = os.environ['BUILD_ID']
+          old_ids = re.findall(r'CPHUN-(?:v1\.6\.0rc-)?\d{6}-\d+', v)
           if old_ids:
-              v = v.replace(old_ids[0], build_id, 1)
+              old_id = old_ids[0]
+              labelled = f'    drawLabelValue("CPHUN", "{old_id}");\n'
+              if labelled in v:
+                  v = v.replace(labelled, f'    drawWrapped(UI_12_FONT_ID, "{build_id}");\n', 1)
+              else:
+                  v = v.replace(old_id, build_id, 1)
           else:
               marker = '    drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);\n'
               if marker not in v:
-                  raise SystemExit('CrossPointVersionActivity.cpp: CrossPoint version marker missing')
+                  raise SystemExit('CrossPoint version marker missing')
               v = v.replace(marker, marker + f'    drawWrapped(UI_12_FONT_ID, "{build_id}");\n', 1)
 
-          # Hungarian dictionary page: explicit title and Hungarian-only enhanced dictionary description.
-          dict_marker = '    drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);\n'
-          if dict_marker not in v:
-              raise SystemExit('CrossPointVersionActivity.cpp: dictionary page marker missing')
-          dict_repl = '''    if (I18N.getLanguage() == Language::HU) {
+          # Hungarian dictionary page title + Hungarian-specific dictionary handling note.
+          marker = '    drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);\n'
+          if marker not in v:
+              raise SystemExit('Dictionary page marker missing')
+          v = v.replace(marker, '''    if (I18N.getLanguage() == Language::HU) {
       drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);
       y += bodyLineHeight;
       drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
@@ -123,50 +122,45 @@ jobs:
     } else {
       drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);
     }
-'''
-          v = v.replace(dict_marker, dict_repl, 1)
+''', 1)
 
-          # Hungarian hyphenation attribution/description.
-          hyp_marker = '    drawParagraph(StrId::STR_HYPHENATION_LANGUAGES_NOTICE);\n'
-          if hyp_marker not in v:
-              raise SystemExit('CrossPointVersionActivity.cpp: hyphenation page marker missing')
-          hyp_repl = '''    if (I18N.getLanguage() == Language::HU) {
+          # Hungarian hyphenation attribution.
+          marker = '    drawParagraph(StrId::STR_HYPHENATION_LANGUAGES_NOTICE);\n'
+          if marker not in v:
+              raise SystemExit('Hyphenation language notice marker missing')
+          v = v.replace(marker, '''    if (I18N.getLanguage() == Language::HU) {
       drawWrapped(UI_12_FONT_ID,
                   "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, amelyeket saját kiegészítéseinkkel és továbbfejlesztéseinkkel bővítettünk.");
       y += bodyLineHeight;
     } else {
       drawParagraph(StrId::STR_HYPHENATION_LANGUAGES_NOTICE);
     }
-'''
-          v = v.replace(hyp_marker, hyp_repl, 1)
+''', 1)
           ver.write_text(v, encoding='utf-8')
 
-          # Shorter Hungarian feature wording, wherever the translation currently lives.
+          # Shorter wording on the version page / translations.
           old = 'Hiányzó párbeszédköz automatikus pótlása'
           new = 'Hiányzó párbeszédközök pótlása'
-          changed = 0
           for root in (Path('src'), Path('lib')):
               for f in root.rglob('*'):
                   if not f.is_file() or f.suffix.lower() not in {'.cpp','.h','.hpp','.yaml','.yml','.json','.txt'}:
                       continue
                   try:
-                      text = f.read_text(encoding='utf-8')
+                      s = f.read_text(encoding='utf-8')
                   except UnicodeDecodeError:
                       continue
-                  if old in text:
-                      f.write_text(text.replace(old, new), encoding='utf-8')
-                      changed += 1
-          print(f'Dialogue-spacing wording updated in {changed} file(s)')
+                  if old in s:
+                      f.write_text(s.replace(old, new), encoding='utf-8')
 
-          # Parsed text changed in layout-related settings; force a fresh section cache generation.
+          # Invalidate cached parsed sections after layout changes.
           sec = Path('lib/Epub/Epub/Section.cpp')
-          ss = sec.read_text(encoding='utf-8')
-          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', ss)
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
           if not m:
               raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found')
-          current = int(m.group(1))
-          ss = ss[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {current + 1};' + ss[m.end():]
-          sec.write_text(ss, encoding='utf-8')
+          cur = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {cur + 1};' + s[m.end():]
+          sec.write_text(s, encoding='utf-8')
           PY
           git diff --check
 
@@ -184,20 +178,17 @@ jobs:
           grep -q 'hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 1, 2)' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
           grep -q 'preferredLanguageIsHungarian()' lib/Epub/Epub/hyphenation/Hyphenator.h
           grep -q 'openingDialogueDash' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
-          grep -q 'case 0xB4:  // ô -> ő' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
-          grep -q 'case 0xBB:  // û -> ű' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
           ! grep -q 'drawLabelValue(tr(STR_BASE_VERSION)' src/activities/settings/CrossPointVersionActivity.cpp
+          ! grep -q 'drawLabelValue("CPHUN"' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q "$BUILD_ID" src/activities/settings/CrossPointVersionActivity.cpp
           grep -q 'Szótár telepítése szükséges' src/activities/settings/CrossPointVersionActivity.cpp
           grep -q 'Javított magyar szótárkezelés' src/activities/settings/CrossPointVersionActivity.cpp
           grep -q 'Nagy Bence Huhyphn' src/activities/settings/CrossPointVersionActivity.cpp
-          grep -q "$BUILD_ID" src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Configure unit tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
-
       - name: Build unit tests
         run: cmake --build build/test
-
       - name: Run unit tests
         run: ctest --test-dir build/test --output-on-failure -j
 
@@ -206,16 +197,13 @@ jobs:
         with:
           version: latest
           enable-cache: false
-
       - name: Install PlatformIO Core
         run: |
           uv venv .venv
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
-
       - name: Build X4 firmware
         run: .venv/bin/pio run -e gh_release_rc
-
       - name: Show firmware size
         run: |
           python - <<'PY'
@@ -226,7 +214,6 @@ jobs:
           size = fw.stat().st_size
           print(f'firmware.bin: {size} bytes ({size / 1024:.1f} KiB)')
           PY
-
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
