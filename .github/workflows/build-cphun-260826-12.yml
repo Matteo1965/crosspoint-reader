@@ -98,12 +98,15 @@ jobs:
           from pathlib import Path
           import re
           s = Path('lib/Epub/Epub/ParsedText.cpp').read_text(encoding='utf-8')
-          blocks = re.findall(r'if \(fixedDialogueSpacing && [^\n]+isStandaloneDialogueDash\([^\n]+\)\) \{\n((?:.|\n)*?)\n\s*\} else \{', s)
-          if len(blocks) != 4:
-              raise SystemExit(f'expected 4 fixed-dialogue blocks, got {len(blocks)}')
-          for idx, block in enumerate(blocks, 1):
-              if 'minimumSpacePercent_' in block or ', 100);' not in block:
-                  raise SystemExit(f'fixed-dialogue block {idx} is not natural 100% spacing')
+          dialogue_starts = [m.start() for m in re.finditer(r'if \(fixedDialogueSpacing && [^\n]+isStandaloneDialogueDash\([^\n]+\)\) \{', s)]
+          if len(dialogue_starts) != 4:
+              raise SystemExit(f'expected 4 fixed-dialogue paths, got {len(dialogue_starts)}')
+          for idx, start in enumerate(dialogue_starts, 1):
+              window = s[start:start + 900]
+              if 'minimumSpacePercent_' in window.split('} else', 1)[0]:
+                  raise SystemExit(f'fixed-dialogue path {idx} still uses minimumSpacePercent_')
+              if '100);' not in window.split('} else', 1)[0]:
+                  raise SystemExit(f'fixed-dialogue path {idx} does not use natural 100% spacing')
           if 'blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100' not in s:
               raise SystemExit('ordinary justified MinSpace path missing')
           PY
