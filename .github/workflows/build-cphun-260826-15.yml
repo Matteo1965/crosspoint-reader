@@ -1,0 +1,137 @@
+name: Build CPHUN-260826-15 Quickfix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260826-15-quickfix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260826-15
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-15-quickfix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-260826-15 quickfix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Build ID must match this build.
+          Path('src/CPHUNBuildId.h').write_text(
+              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260826-15"\n', encoding='utf-8')
+
+          # 1) Compact Hungarian dictionary information page without losing content.
+          p = Path('src/activities/settings/CrossPointVersionActivity.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '''      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);\n      y += bodyLineHeight;\n      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);\n      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);\n      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);\n      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");\n      y += bodyLineHeight * 2;\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));\n      y += bodyLineHeight * 2;\n      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID,\n                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "\n                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");\n'''
+          new = '''      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_NOT_INCLUDED));\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_INSTALL_SEPARATELY));\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_STARDICT_FILES_INTRO));\n      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));\n      y += bodyLineHeight;\n      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);\n      drawWrapped(UI_12_FONT_ID,\n                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "\n                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");\n'''
+          if s.count(old) != 1:
+              raise SystemExit(f'dictionary compact block count={s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          # 2) Normalize a paragraph-leading standalone ASCII hyphen to an en dash in-memory.
+          # The source EPUB is untouched. This lets the existing fixed-dialogue-space path handle '- Text'.
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text(encoding='utf-8')
+          marker = '''void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,\n                         const bool attachToPrevious, const uint32_t visibleTextOffset) {\n  if (word.empty()) return;\n\n'''
+          replacement = '''void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,\n                         const bool attachToPrevious, const uint32_t visibleTextOffset) {\n  if (word.empty()) return;\n\n  // Hungarian Edition dialogue normalization: a standalone ASCII '-' at the\n  // beginning of a paragraph is a common malformed dialogue marker. Normalize it\n  // in memory to U+2013 so the existing fixed-dialogue-space logic can handle it.\n  if (fixedDialogueSpacing && words.empty() && !attachToPrevious && word == "-") {\n    word = "\\xE2\\x80\\x93";\n  }\n\n'''
+          if marker not in s:
+              raise SystemExit('addWord insertion marker not found')
+          s = s.replace(marker, replacement, 1)
+
+          # 3) Last-line MinSpace rule for the non-hyphenated DP line breaker.
+          # A candidate that would be the paragraph's final line is only accepted as\n          # a final-line candidate if all normal spaces fit at 100%. Fixed dialogue\n          # space deliberately keeps following minimumSpacePercent_.
+          old_last = '''      int cost;\n      if (j == totalWordCount - 1) {\n        cost = 0;  // Last line\n      } else {\n'''
+          new_last = '''      int cost;\n      if (j == totalWordCount - 1) {\n        int naturalLastLineWidth = 0;\n        for (size_t k = static_cast<size_t>(i); k <= j; ++k) {\n          int naturalGap = 0;\n          if (k > static_cast<size_t>(i) && continuesVec[k]) {\n            if (fixedDialogueSpacing && k == 1 && isStandaloneDialogueDash(words[0])) {\n              naturalGap = scaledNormalSpaceAdvance(\n                  renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),\n                  minimumSpacePercent_);\n            } else {\n              naturalGap = renderer.getKerning(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),\n                                               wordStyles[k - 1]);\n            }\n          } else if (k > static_cast<size_t>(i) && noSpaceBeforeVec[k]) {\n            naturalGap = 0;\n          } else if (k > static_cast<size_t>(i)) {\n            naturalGap = scaledNormalSpaceAdvance(\n                renderer.getSpaceAdvance(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),\n                                         wordStyles[k - 1]),\n                100);\n          }\n          naturalLastLineWidth += wordWidths[k] + naturalGap;\n          if (k == static_cast<size_t>(i)) {\n            naturalLastLineWidth += calculateRubyExtraStartOffset(k, totalWordCount, renderer, fontId);\n          }\n        }\n        naturalLastLineWidth += calculateRubyExtraEndOffset(i, j + 1, renderer, fontId);\n        if (naturalLastLineWidth > effectivePageWidth) {\n          continue;\n        }\n        cost = 0;  // Last line fits naturally at 100% spaces.\n      } else {\n'''
+          if s.count(old_last) != 1:
+              raise SystemExit(f'non-hyphen last-line block count={s.count(old_last)}')
+          s = s.replace(old_last, new_last, 1)
+
+          # 4) Hyphenated greedy breaker: before consuming the remainder using MinSpace,
+          # test whether the whole remaining paragraph fits as the last line with natural spaces.
+          hyph_marker = '''    // Consume as many words as possible for current line, splitting when prefixes fit\n    while (currentIndex < wordWidths.size()) {\n'''
+          hyph_insert = '''    // If the complete remaining text fits on this line with natural (100%) normal spaces,\n    // keep it as the paragraph's final line without MinSpace compression.\n    if (blockStyle.alignment == CssTextAlign::Justify) {\n      int naturalRemainingWidth = 0;\n      for (size_t k = currentIndex; k < wordWidths.size(); ++k) {\n        int naturalGap = 0;\n        if (k > currentIndex && continuesVec[k]) {\n          if (fixedDialogueSpacing && k == 1 && isStandaloneDialogueDash(words[0])) {\n            naturalGap = scaledNormalSpaceAdvance(\n                renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),\n                minimumSpacePercent_);\n          } else {\n            naturalGap = renderer.getKerning(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),\n                                             wordStyles[k - 1]);\n          }\n        } else if (k > currentIndex && noSpaceBeforeVec[k]) {\n          naturalGap = 0;\n        } else if (k > currentIndex) {\n          naturalGap = scaledNormalSpaceAdvance(\n              renderer.getSpaceAdvance(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]), wordStyles[k - 1]),\n              100);\n        }\n        naturalRemainingWidth += wordWidths[k] + naturalGap;\n      }\n      naturalRemainingWidth += calculateRubyExtraStartOffset(currentIndex, wordWidths.size(), renderer, fontId);\n      naturalRemainingWidth += calculateRubyExtraEndOffset(currentIndex, wordWidths.size(), renderer, fontId);\n      if (naturalRemainingWidth <= effectivePageWidth) {\n        currentIndex = wordWidths.size();\n        lineBreakIndices.push_back(currentIndex);\n        break;\n      }\n    }\n\n    // Consume as many words as possible for current line, splitting when prefixes fit\n    while (currentIndex < wordWidths.size()) {\n'''
+          if s.count(hyph_marker) != 1:
+              raise SystemExit(f'hyphenated insertion marker count={s.count(hyph_marker)}')
+          s = s.replace(hyph_marker, hyph_insert, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Cached sections depend on parser/layout semantics.
+          p = Path('lib/Epub/Epub/Section.cpp')
+          s = p.read_text(encoding='utf-8')
+          import re
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\\d+);', s)
+          if not m:
+              raise SystemExit('SECTION_FILE_VERSION not found')
+          v = int(m.group(1))
+          p.write_text(s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {v + 1};' + s[m.end():], encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Verify CPHUN-260826-15 requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#define CPHUN_BUILD_ID "CPHUN-260826-15"' src/CPHUNBuildId.h
+          grep -q 'word == "-"' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'naturalLastLineWidth' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'naturalRemainingWidth' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Javított magyar szótárkezelés' src/activities/settings/CrossPointVersionActivity.cpp
+          ! grep -q 'y += bodyLineHeight \* 2;' <(sed -n '/Szótár telepítése szükséges/,/} else {/p' src/activities/settings/CrossPointVersionActivity.cpp)
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated quickfix source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/CPHUNBuildId.h src/activities/settings/CrossPointVersionActivity.cpp lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/Section.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260826-15: compact dictionary page and fix dialogue/last-line spacing"
+            git push origin HEAD:agent/cphun-260826-15-quickfix
+          fi
+
+      - name: Upload CPHUN-260826-15 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-15-Quickfix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
