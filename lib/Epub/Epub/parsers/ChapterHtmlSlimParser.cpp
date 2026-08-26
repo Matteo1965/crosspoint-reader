@@ -52,6 +52,25 @@ constexpr const char* LINETHROUGH_TAGS[] = {"del", "s", "strike"};
 constexpr const char* IMAGE_TAGS[] = {"img", "image"};
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+bool isHungarianLanguageTag(const std::string& language) {
+  if (language.size() < 2) return false;
+  char a = language[0];
+  char b = language[1];
+  if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+  if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+  if (a == 'h' && b == 'u' &&
+      (language.size() == 2 || language[2] == '-' || language[2] == '_')) {
+    return true;
+  }
+  if (language.size() >= 3) {
+    char c = language[2];
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    return a == 'h' && b == 'u' && c == 'n' &&
+           (language.size() == 3 || language[3] == '-' || language[3] == '_');
+  }
+  return false;
+}
+
 std::string trimAndNormalize(const std::string& str) {
   if (str.empty()) return "";
   size_t start = 0;
@@ -279,6 +298,19 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   listItemBulletOnly = false;
 }
 
+void ChapterHtmlSlimParser::emitPendingHungarianNbsp() {
+  if (!pendingHungarianNbsp) return;
+
+  partWordBuffer[0] = ' ';
+  partWordBuffer[1] = '\0';
+  partWordBufferIndex = 1;
+  partWordVisibleOffset = pendingHungarianNbspVisibleOffset;
+  nextWordContinues = true;
+  flushPartWordBuffer();
+  nextWordContinues = true;
+  pendingHungarianNbsp = false;
+}
+
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
@@ -395,6 +427,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  // An element boundary ends adjacency for duplicate-space cleanup. Preserve a standalone NBSP.
+  self->emitPendingHungarianNbsp();
+  self->previousHungarianAsciiWhitespace = false;
   if (strcasecmp(name, "body") == 0) {
     // Case-insensitive to match ParagraphStreamer's tag matching (ProgressMapper). A case
     // mismatch here would leave visibleTextOffset at 0 for the whole section, so every page
@@ -1202,6 +1237,20 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
   }
 
+  // Expat may split character data at entity boundaries, so an &#160; can arrive
+  // in a separate callback from the neighboring ordinary space. Delay a terminal
+  // Hungarian NBSP by one callback so NBSP+SPACE can still collapse correctly.
+  if (self->hungarianWhitespaceNormalization && self->pendingHungarianNbsp) {
+    if (len > 0 && isWhitespace(s[0])) {
+      self->pendingHungarianNbsp = false;
+      self->nextWordContinues = false;
+      self->previousHungarianAsciiWhitespace = true;
+    } else {
+      self->emitPendingHungarianNbsp();
+      self->previousHungarianAsciiWhitespace = false;
+    }
+  }
+
   uint32_t nextCodepointOffset = callbackVisibleOffset;
   for (int i = 0; i < len; i++) {
     const uint32_t codepointOffset = nextCodepointOffset;
@@ -1214,8 +1263,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
-      // Whitespace is a real word boundary — reset continuation state
+      // Whitespace is a real word boundary — reset continuation state. Remember it
+      // for Hungarian SPACE+NBSP cleanup, including across Expat callbacks.
       self->nextWordContinues = false;
+      self->previousHungarianAsciiWhitespace = self->hungarianWhitespaceNormalization;
       // Skip the whitespace char
       continue;
     }
@@ -1239,6 +1290,39 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     //   standalone word for hyphenation purposes, so Liang patterns can produce
     //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
+      if (self->hungarianWhitespaceNormalization) {
+        // SPACE+NBSP -> one ordinary breakable boundary. The preceding ASCII
+        // whitespace has already flushed the word, so the NBSP itself is discarded.
+        if (self->previousHungarianAsciiWhitespace) {
+          self->previousHungarianAsciiWhitespace = false;
+          self->nextWordContinues = false;
+          i++;
+          continue;
+        }
+
+        if (self->partWordBufferIndex > 0) {
+          self->flushPartWordBuffer();
+        }
+
+        // NBSP+SPACE in the same callback -> one ordinary boundary.
+        if (i + 2 < len && isWhitespace(s[i + 2])) {
+          self->nextWordContinues = false;
+          self->previousHungarianAsciiWhitespace = true;
+          i++;
+          continue;
+        }
+
+        // Entity expansion frequently leaves the NBSP as the final codepoint of a
+        // callback. Defer it so a leading SPACE in the next callback can collapse it.
+        if (i + 2 >= len) {
+          self->pendingHungarianNbsp = true;
+          self->pendingHungarianNbspVisibleOffset = codepointOffset;
+          self->previousHungarianAsciiWhitespace = false;
+          i++;
+          continue;
+        }
+      }
+
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
       }
@@ -1251,6 +1335,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->flushPartWordBuffer();
 
       self->nextWordContinues = true;  // Next real word attaches to this space (no break).
+      self->previousHungarianAsciiWhitespace = false;
 
       i++;  // Skip the second byte (0xA0)
       continue;
@@ -1275,6 +1360,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       i += 2;  // Skip the remaining two bytes (0x80 0xAF)
       continue;
     }
+
+    self->previousHungarianAsciiWhitespace = false;
 
     // Skip Zero Width No-Break Space / BOM (U+FEFF) = 0xEF 0xBB 0xBF
     const XML_Char FEFF_BYTE_1 = static_cast<XML_Char>(0xEF);
@@ -1371,6 +1458,9 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  // Flush a standalone trailing NBSP before styles/block state change.
+  self->emitPendingHungarianNbsp();
+  self->previousHungarianAsciiWhitespace = false;
   if (self->nonVisibleTextDepth > 0) {
     self->nonVisibleTextDepth--;
   }
@@ -1548,6 +1638,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
 
 bool ChapterHtmlSlimParser::beginParse() {
+  hungarianWhitespaceNormalization = epub && isHungarianLanguageTag(epub->getLanguage());
+  pendingHungarianNbsp = false;
+  previousHungarianAsciiWhitespace = false;
+
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.

@@ -108,6 +108,13 @@ class ChapterHtmlSlimParser {
   bool syntheticCharacterData = false;
   uint16_t nonVisibleTextDepth = 0;
 
+  // Hungarian EPUB cleanup: collapse duplicate NBSP+SPACE / SPACE+NBSP pairs
+  // to one ordinary breakable word boundary without modifying the source EPUB.
+  bool hungarianWhitespaceNormalization = false;
+  bool pendingHungarianNbsp = false;
+  bool previousHungarianAsciiWhitespace = false;
+  uint32_t pendingHungarianNbspVisibleOffset = 0;
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
@@ -130,6 +137,7 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
   void flushPartWordBuffer();
+  void emitPendingHungarianNbsp();
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
