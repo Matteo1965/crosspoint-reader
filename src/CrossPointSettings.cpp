@@ -294,7 +294,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
   const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
   spec.hangingPunctuationLimitPx =
-      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0));
+      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 1 ? SETTINGS.screenMargin - 1 : 0));
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.minimumSpacePercent = minimumSpacePercent;
   spec.embeddedStyle = embeddedStyle != 0;

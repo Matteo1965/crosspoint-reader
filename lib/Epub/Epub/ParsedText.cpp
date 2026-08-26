@@ -1082,36 +1082,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
       int cost;
       if (j == totalWordCount - 1) {
-        int naturalLastLineWidth = 0;
-        for (size_t k = static_cast<size_t>(i); k <= j; ++k) {
-          int naturalGap = 0;
-          if (k > static_cast<size_t>(i) && continuesVec[k]) {
-            if (fixedDialogueSpacing && k == 1 && isStandaloneDialogueDash(words[0])) {
-              naturalGap = scaledNormalSpaceAdvance(
-                  renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-                  minimumSpacePercent_);
-            } else {
-              naturalGap = renderer.getKerning(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),
-                                               wordStyles[k - 1]);
-            }
-          } else if (k > static_cast<size_t>(i) && noSpaceBeforeVec[k]) {
-            naturalGap = 0;
-          } else if (k > static_cast<size_t>(i)) {
-            naturalGap = scaledNormalSpaceAdvance(
-                renderer.getSpaceAdvance(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),
-                                         wordStyles[k - 1]),
-                100);
-          }
-          naturalLastLineWidth += wordWidths[k] + naturalGap;
-          if (k == static_cast<size_t>(i)) {
-            naturalLastLineWidth += calculateRubyExtraStartOffset(k, totalWordCount, renderer, fontId);
-          }
-        }
-        naturalLastLineWidth += calculateRubyExtraEndOffset(i, j + 1, renderer, fontId);
-        if (naturalLastLineWidth > effectivePageWidth) {
-          continue;
-        }
-        cost = 0;  // Last line fits naturally at 100% spaces.
+        cost = 0;  // Last line
       } else {
         const int remainingSpace = effectivePageWidth - currlen;
         // Use long long for the square to prevent overflow
@@ -1182,39 +1153,6 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
 
     // First line has reduced width due to text-indent
     const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
-
-    // If the complete remaining text fits on this line with natural (100%) normal spaces,
-    // keep it as the paragraph's final line without MinSpace compression.
-    if (blockStyle.alignment == CssTextAlign::Justify) {
-      int naturalRemainingWidth = 0;
-      for (size_t k = currentIndex; k < wordWidths.size(); ++k) {
-        int naturalGap = 0;
-        if (k > currentIndex && continuesVec[k]) {
-          if (fixedDialogueSpacing && k == 1 && isStandaloneDialogueDash(words[0])) {
-            naturalGap = scaledNormalSpaceAdvance(
-                renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-                minimumSpacePercent_);
-          } else {
-            naturalGap = renderer.getKerning(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),
-                                             wordStyles[k - 1]);
-          }
-        } else if (k > currentIndex && noSpaceBeforeVec[k]) {
-          naturalGap = 0;
-        } else if (k > currentIndex) {
-          naturalGap = scaledNormalSpaceAdvance(
-              renderer.getSpaceAdvance(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]), wordStyles[k - 1]),
-              100);
-        }
-        naturalRemainingWidth += wordWidths[k] + naturalGap;
-      }
-      naturalRemainingWidth += calculateRubyExtraStartOffset(currentIndex, wordWidths.size(), renderer, fontId);
-      naturalRemainingWidth += calculateRubyExtraEndOffset(currentIndex, wordWidths.size(), renderer, fontId);
-      if (naturalRemainingWidth <= effectivePageWidth) {
-        currentIndex = wordWidths.size();
-        lineBreakIndices.push_back(currentIndex);
-        break;
-      }
-    }
 
     // Consume as many words as possible for current line, splitting when prefixes fit
     while (currentIndex < wordWidths.size()) {
