@@ -1,0 +1,134 @@
+name: Build CPHUN-260826-18 Quickfix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260826-18-quickfix
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260826-18
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-18-quickfix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-260826-18 regression rollback and safety fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          Path('src/CPHUNBuildId.h').write_text(
+              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260826-18"\n', encoding='utf-8')
+
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text(encoding='utf-8')
+
+          # Revert the -15 natural-last-line DP gate. It can prevent the normal
+          # hyphenation path from pulling a prefix of the final word back onto the
+          # previous line, especially at low MinSpace values such as 50%.
+          old_dp = '''      int cost;\n      if (j == totalWordCount - 1) {\n        int naturalLastLineWidth = 0;\n        for (size_t k = static_cast<size_t>(i); k <= j; ++k) {\n          int naturalGap = 0;\n          if (k > static_cast<size_t>(i) && continuesVec[k]) {\n            if (fixedDialogueSpacing && k == 1 && isStandaloneDialogueDash(words[0])) {\n              naturalGap = scaledNormalSpaceAdvance(\n                  renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),\n                  minimumSpacePercent_);\n            } else {\n              naturalGap = renderer.getKerning(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),\n                                               wordStyles[k - 1]);\n            }\n          } else if (k > static_cast<size_t>(i) && noSpaceBeforeVec[k]) {\n            naturalGap = 0;\n          } else if (k > static_cast<size_t>(i)) {\n            naturalGap = scaledNormalSpaceAdvance(\n                renderer.getSpaceAdvance(fontId, lastCodepoint(words[k - 1]), firstCodepoint(words[k]),\n                                         wordStyles[k - 1]),\n                100);\n          }\n          naturalLastLineWidth += wordWidths[k] + naturalGap;\n          if (k == static_cast<size_t>(i)) {\n            naturalLastLineWidth += calculateRubyExtraStartOffset(k, totalWordCount, renderer, fontId);\n          }\n        }\n        naturalLastLineWidth += calculateRubyExtraEndOffset(i, j + 1, renderer, fontId);\n        if (naturalLastLineWidth > effectivePageWidth) {\n          continue;\n        }\n        cost = 0;  // Last line fits naturally at 100% spaces.\n      } else {\n'''
+          new_dp = '''      int cost;\n      if (j == totalWordCount - 1) {\n        cost = 0;  // Last line\n      } else {\n'''
+          if s.count(old_dp) != 1:
+              raise SystemExit(f'last-line DP rollback marker count={s.count(old_dp)}')
+          s = s.replace(old_dp, new_dp, 1)
+
+          # Revert the -15 early final-line shortcut in the hyphenating line breaker.
+          # The normal consume/split loop must always get the opportunity to hyphenate.
+          start_marker = '''    // If the complete remaining text fits on this line with natural (100%) normal spaces,\n    // keep it as the paragraph's final line without MinSpace compression.\n'''
+          end_marker = '''    // Consume as many words as possible for current line, splitting when prefixes fit\n'''
+          start = s.find(start_marker)
+          if start < 0:
+              raise SystemExit('hyphenated last-line shortcut start not found')
+          end = s.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('hyphenated last-line shortcut end not found')
+          s = s[:start] + end_marker + s[end + len(end_marker):]
+          p.write_text(s, encoding='utf-8')
+
+          # Restore the agreed 1 px physical right-edge safety zone for floating punctuation.
+          p = Path('src/CrossPointSettings.cpp')
+          s = p.read_text(encoding='utf-8')
+          old = '(SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0)'
+          new = '(SETTINGS.screenMargin > 1 ? SETTINGS.screenMargin - 1 : 0)'
+          if s.count(old) != 1:
+              raise SystemExit(f'floating safety marker count={s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          # Layout semantics changed; invalidate cached section files.
+          p = Path('lib/Epub/Epub/Section.cpp')
+          sec = p.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', sec)
+          if not m:
+              raise SystemExit('SECTION_FILE_VERSION not found')
+          v = int(m.group(1))
+          p.write_text(sec[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {v + 1};' + sec[m.end():], encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Verify CPHUN-260826-18 requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#define CPHUN_BUILD_ID "CPHUN-260826-18"' src/CPHUNBuildId.h
+          grep -q 'cost = 0;  // Last line' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'Last line fits naturally at 100% spaces' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'If the complete remaining text fits on this line with natural' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'SETTINGS.screenMargin > 1 ? SETTINGS.screenMargin - 1 : 0' src/CrossPointSettings.cpp
+          ! grep -q 'SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0' src/CrossPointSettings.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260826-18 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/CPHUNBuildId.h lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/Section.cpp src/CrossPointSettings.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260826-18: restore stable hyphenation and 1px floating safety"
+            git push origin HEAD:agent/cphun-260826-18-quickfix
+          fi
+
+      - name: Upload CPHUN-260826-18 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-18-Quickfix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
