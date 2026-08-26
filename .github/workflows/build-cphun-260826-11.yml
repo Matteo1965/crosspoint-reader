@@ -1,0 +1,41 @@
+name: CPHUN-260826-11 Integrated Fixes
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260826-01-test
+          submodules: recursive
+
+      - name: Apply CPHUN-260825-06 baseline fixes
+        run: |
+          python3 .github/scripts/apply-cphun-260825-06.py
+
+      - name: Apply CPHUN-260825-07 cache/UI fixes
+        run: |
+          python3 .github/scripts/apply-cphun-260825-07.py
+
+      - name: Apply CPHUN-260826-11 fixes
+        run: |
+          python3 .github/scripts/apply-cphun-260826-11.py
+
+      - name: Build firmware
+        run: |
+          pip install platformio
+          pio run -e xteink_x4
+
+      - name: Package firmware
+        run: |
+          mkdir -p artifact
+          cp .pio/build/xteink_x4/firmware.bin artifact/firmware.bin
+          cd artifact && zip -r ../CPHUN-260826-11-Integration-FW.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260826-11-Integration-FW
+          path: CPHUN-260826-11-Integration-FW.zip
