@@ -1,0 +1,71 @@
+name: Finalize Hungarian whitespace normalization
+
+on:
+  push:
+    branches:
+      - agent/hungarian-v1.6.0rc-whitespace
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-v1.6.0rc-whitespace
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply prepared parser patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          wf = Path('.github/workflows/apply-hungarian-whitespace-normalization.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = wf.index(marker) + len(marker)
+          end = wf.index("\n          PY", start)
+          body = wf[start:end]
+          body = '\n'.join(line[10:] if line.startswith('          ') else line for line in body.splitlines())
+          exec(compile(body, '<whitespace-patch>', 'exec'))
+          PY
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Compile X4 firmware for validation
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated source and remove one-shot workflows
+        shell: bash
+        run: |
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          rm -f .github/workflows/apply-hungarian-whitespace-normalization.yml
+          rm -f .github/workflows/finalize-hungarian-whitespace-normalization.yml
+          git add lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp \
+                  lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h \
+                  .github/workflows
+          git commit -m "fix: normalize duplicate Hungarian NBSP whitespace"
+          git push origin HEAD:agent/hungarian-v1.6.0rc-whitespace
