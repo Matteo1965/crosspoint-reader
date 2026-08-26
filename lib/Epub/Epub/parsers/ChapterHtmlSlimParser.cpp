@@ -1290,6 +1290,21 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     //   standalone word for hyphenation purposes, so Liang patterns can produce
     //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
+      const bool openingHungarianDialogueDash =
+          self->hungarianWhitespaceNormalization && self->fixedDialogueSpacing && self->currentTextBlock &&
+          self->currentTextBlock->isEmpty() && self->partWordBufferIndex == 3 &&
+          static_cast<uint8_t>(self->partWordBuffer[0]) == 0xE2 &&
+          static_cast<uint8_t>(self->partWordBuffer[1]) == 0x80 &&
+          (static_cast<uint8_t>(self->partWordBuffer[2]) == 0x93 ||
+           static_cast<uint8_t>(self->partWordBuffer[2]) == 0x94);
+      if (openingHungarianDialogueDash) {
+        self->flushPartWordBuffer();
+        self->nextWordContinues = false;
+        self->previousHungarianAsciiWhitespace = false;
+        i++;
+        continue;
+      }
+
       if (self->hungarianWhitespaceNormalization) {
         // SPACE+NBSP -> one ordinary breakable boundary. The preceding ASCII
         // whitespace has already flushed the word, so the NBSP itself is discarded.

@@ -58,6 +58,29 @@ size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t in
   return (index < cps.size()) ? cps[index].byteOffset : (cps.empty() ? 0 : cps.back().byteOffset);
 }
 
+void normalizeHungarianProcessingCodepoints(std::vector<CodepointInfo>& cps) {
+  for (auto& cp : cps) {
+    switch (cp.value) {
+      case 0x00F5:
+      case 0x00F4:
+        cp.value = 0x0151;
+        break;
+      case 0x00D5:
+      case 0x00D4:
+        cp.value = 0x0150;
+        break;
+      case 0x00FB:
+        cp.value = 0x0171;
+        break;
+      case 0x00DB:
+        cp.value = 0x0170;
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 // Builds a vector of break information from explicit hyphen markers in the given codepoints.
 // Only hyphens that appear between two alphabetic characters are considered valid breaks.
 //
@@ -314,8 +337,12 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     return {};
   }
 
-  // Convert to codepoints and normalize word boundaries.
+  // Convert to codepoints. Hungarian legacy accents are normalized only in
+  // this processing copy; the original UTF-8 word remains untouched for rendering.
   auto cps = collectCodepoints(word);
+  if (preferredLanguageIsHungarian_) {
+    normalizeHungarianProcessingCodepoints(cps);
+  }
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
   const bool useHungarianExtended = hungarianExtended_ && preferredLanguageIsHungarian_;
