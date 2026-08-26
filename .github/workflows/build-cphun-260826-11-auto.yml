@@ -5,6 +5,7 @@ on:
     branches: [agent/cphun-260826-01-test]
   workflow_dispatch:
 
+# Corrected build environment: gh_release_rc
 jobs:
   build:
     runs-on: ubuntu-latest
