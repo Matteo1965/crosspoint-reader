@@ -145,7 +145,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
         hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
         hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",
         hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",
-        hu ? "Hiányzó párbeszédköz automatikus pótlása" : "Recover missing dialogue space",
+        hu ? "Hiányzó párbeszédközök pótlása" : "Recover missing dialogue space",
     };
     for (const char* featureText : extraFeatures) {
       const std::string line = std::string("- ") + featureText;
@@ -156,6 +156,13 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     if (hu) {
       drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);
       y += bodyLineHeight;
+      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
+      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);
+      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);
+      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
+      y += bodyLineHeight * 2;
+      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
+      y += bodyLineHeight * 2;
       drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
       y += bodyLineHeight;
       drawWrapped(UI_12_FONT_ID,
@@ -176,7 +183,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_HYPHENATION_OTHER_LANGUAGES_NOTICE));
     if (I18N.getLanguage() == Language::HU) {
       y += bodyLineHeight;
-      drawWrapped(UI_10_FONT_ID,
+      drawWrapped(UI_12_FONT_ID,
                   "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, amelyeket saját "
                   "kiegészítéseinkkel és továbbfejlesztéseinkkel bővítettünk.");
     }

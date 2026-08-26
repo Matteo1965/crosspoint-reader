@@ -192,7 +192,7 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   return allowedOffsets;
 }
 
-bool isHangingPunctuation(const uint32_t cp) { return cp == '-'; }
+bool isHangingPunctuation(const uint32_t cp) { return cp == '-' || cp == '.' || cp == ':' || cp == ',' || cp == ';'; }
 
 struct HangingAdvanceCacheEntry {
   int fontId = -1;
@@ -1429,6 +1429,32 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Calculate spacing (account for indent reducing effective page width on first line)
   const int effectivePageWidth = pageWidth - firstLineIndent;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
+
+  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.
+  // Keep MinSpace only when compression is actually needed to preserve the chosen unbroken line.
+  if (isLastLine && blockStyle.alignment == CssTextAlign::Justify) {
+    int natural100 = 0;
+    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
+      const size_t boundaryIdx = lastBreakAt + wordIdx;
+      if (continuesVec[boundaryIdx]) {
+        if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
+          natural100 += scaledNormalSpaceAdvance(
+              renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                       lineWordStyles[0]), minimumSpacePercent_);
+        } else {
+          natural100 += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                            firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+        }
+      } else if (!noSpaceBeforeVec[boundaryIdx]) {
+        natural100 += scaledNormalSpaceAdvance(
+            renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]), firstCodepoint(lineWords[wordIdx]),
+                                     lineWordStyles[wordIdx - 1]), 100);
+      }
+    }
+    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {
+      totalNaturalGaps = natural100;
+    }
+  }
 
   // For RTL, implicit/default Left alignment becomes Right alignment.
   // Explicit text-align:left must remain left for CSS correctness.
