@@ -1,0 +1,28 @@
+name: Hungarian 1-2 Hyphenation Diagnostic
+
+'on':
+  push:
+    branches: [agent/hungarian-1-2-diagnostic]
+    paths:
+      - 'test/hungarian_minimum_diagnostic/**'
+      - 'test/CMakeLists.txt'
+      - '.github/workflows/hungarian-minimum-diagnostic.yml'
+  workflow_dispatch:
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-1-2-diagnostic
+          submodules: recursive
+
+      - name: Configure tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build diagnostic
+        run: cmake --build build/test --target HungarianMinimumDiagnosticTest
+
+      - name: Run diagnostic and print breakpoints
+        run: build/test/hungarian_minimum_diagnostic/HungarianMinimumDiagnosticTest --gtest_filter=HungarianMinimumDiagnostic.PrintSixteenSampleWords
