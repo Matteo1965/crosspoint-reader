@@ -61,8 +61,8 @@ jobs:
               raise SystemExit('lineSpacePercent insertion missing')
           old_expr = '(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)'
           count = tail.count(old_expr)
-          if count != 4:
-              raise SystemExit(f'expected 4 downstream spacing expressions, found {count}')
+          if count != 5:
+              raise SystemExit(f'expected 5 downstream spacing expressions, found {count}')
           tail = tail.replace(old_expr, 'lineSpacePercent')
           s = head + sep + tail
           p.write_text(s, encoding='utf-8')
@@ -86,7 +86,7 @@ jobs:
           grep -q 'bool useNaturalLastLineSpacing = false;' lib/Epub/Epub/ParsedText.cpp
           grep -q 'useNaturalLastLineSpacing = true;' lib/Epub/Epub/ParsedText.cpp
           grep -q 'const int lineSpacePercent' lib/Epub/Epub/ParsedText.cpp
-          test "$(grep -c 'lineSpacePercent' lib/Epub/Epub/ParsedText.cpp)" -ge 5
+          test "$(grep -c 'lineSpacePercent' lib/Epub/Epub/ParsedText.cpp)" -ge 6
           grep -q 'minimumSpacePercent_' lib/Epub/Epub/ParsedText.cpp
 
       - name: Configure unit tests
