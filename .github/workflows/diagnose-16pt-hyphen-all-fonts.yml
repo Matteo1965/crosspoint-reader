@@ -1,0 +1,63 @@
+name: Diagnose 16pt Hyphen Across Fonts
+
+on:
+  push:
+    paths:
+      - '.github/workflows/diagnose-16pt-hyphen-all-fonts.yml'
+  workflow_dispatch:
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install font tools
+        run: pip install freetype-py fonttools pyyaml
+      - name: Measure 16pt regular hyphen across all configured reader fonts
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, tempfile, urllib.request, yaml
+          import freetype
+          from fontTools.ttLib import TTFont
+          from fontTools.varLib.instancer import instantiateVariableFont
+
+          cfg_path='lib/EpdFont/scripts/sd-fonts.yaml'
+          with open(cfg_path, encoding='utf-8') as f:
+              cfg=yaml.safe_load(f)
+
+          print('FONT\tVISIBLE_PX\tADVANCE_PX\tLEFT\tREQ100(1+W+2)\tREQ80(1+ceil(.8W)+1)\tREQ50(1+ceil(.5W)+1)\tFIT8@50\tFIT12@80\tFIT16@100')
+          for fam in cfg['families']:
+              name=fam['name']
+              spec=fam['styles']['regular']
+              try:
+                  if 'path' in spec:
+                      path=os.path.join('lib/EpdFont', spec['path'])
+                  else:
+                      fd, src=tempfile.mkstemp(suffix='.ttf'); os.close(fd)
+                      urllib.request.urlretrieve(spec['url'], src)
+                      path=src
+                  if spec.get('variable'):
+                      font=TTFont(path)
+                      instantiateVariableFont(font, spec['variable'], inplace=True)
+                      fd, inst=tempfile.mkstemp(suffix='.ttf'); os.close(fd)
+                      font.save(inst); font.close(); path=inst
+                  face=freetype.Face(path)
+                  face.set_char_size(16<<6,16<<6,150,150)
+                  face.load_char('-', freetype.FT_LOAD_RENDER)
+                  s=face.glyph; w=s.bitmap.width
+                  adv=s.advance.x/64.0
+                  import math
+                  w80=math.ceil(w*0.8); w50=math.ceil(w*0.5)
+                  req100=1+w+2
+                  req80=1+w80+1
+                  req50=1+w50+1
+                  print(f'{name}\t{w}\t{adv:.2f}\t{s.bitmap_left}\t{req100}\t{req80}\t{req50}\t{"YES" if req50<=8 else "NO"}\t{"YES" if req80<=12 else "NO"}\t{"YES" if req100<=16 else "NO"}')
+              except Exception as e:
+                  print(f'{name}\tERROR\t{e}')
+          PY
