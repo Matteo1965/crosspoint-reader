@@ -1,0 +1,1 @@
+Trigger corrected integration build after fixing Hungarian NBSP verification.
