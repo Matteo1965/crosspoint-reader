@@ -191,23 +191,7 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   return allowedOffsets;
 }
 
-bool isHangingPunctuation(const uint32_t cp) {
-  switch (cp) {
-    case '.':
-    case ',':
-    case ';':
-    case ':':
-    case '!':
-    case '?':
-    case '-':
-    case 0x2019:  // ’
-    case 0x201D:  // ”
-    case 0x00BB:  // »
-      return true;
-    default:
-      return false;
-  }
-}
+bool isHangingPunctuation(const uint32_t cp) { return cp == '-'; }
 
 struct HangingAdvanceCacheEntry {
   int fontId = -1;
@@ -232,8 +216,8 @@ int cachedHangingPunctuationAdvance(const GfxRenderer& renderer, const int fontI
 
 int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
                                 const EpdFontFamily::Style style, const uint8_t packedSetting) {
-  const uint8_t percentStep = packedSetting >> 4;
-  const uint8_t pixelLimit = static_cast<uint8_t>((packedSetting & 0x0F) * 4);
+  const uint8_t percentStep = packedSetting >> 5;
+  const uint8_t pixelLimit = static_cast<uint8_t>(packedSetting & 0x1F);
   if (percentStep == 0 || pixelLimit == 0 || word.empty()) return 0;
   const uint32_t punctuation = lastCodepoint(word);
   if (!isHangingPunctuation(punctuation)) return 0;
@@ -241,7 +225,7 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
   while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
   const int punctuationAdvance =
       cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, word.c_str() + lastStart);
-  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 4) + 3) / 4;
+  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 5) + 4) / 5;
   return std::min<int>(pixelLimit, proportionalAdvance);
 }
 

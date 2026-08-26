@@ -241,8 +241,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
-  // Optical margin / hanging punctuation percentage: 0, 25, 50, 75 or 100.
-  uint8_t hangingPunctuation = 75;
+  // Optical margin / floating hyphenation percentage: 0, 20, 40, 60, 80 or 100.
+  uint8_t hangingPunctuation = 100;
   // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
   uint8_t fixedDialogueSpacing = 0;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -253,9 +253,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t hungarianHyphenationExtended = 0;
 
   // Reader screen margin settings
-  static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
-  static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 4;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 32;
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 4;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in

@@ -404,11 +404,11 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::HangingPunctuation: {
-      const char* options[] = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};
-      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 25, 1, 4);
-      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation", options, 5, cur,
+      const char* options[] = {tr(STR_STATE_OFF), "20%", "40%", "60%", "80%", "100%"};
+      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 20, 1, 5);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation", options, 6, cur,
                         [](int idx) {
-                          SETTINGS.hangingPunctuation = static_cast<uint8_t>(idx * 25);
+                          SETTINGS.hangingPunctuation = static_cast<uint8_t>(idx * 20);
                           SETTINGS.saveToFile();
                         });
       requestUpdate();
