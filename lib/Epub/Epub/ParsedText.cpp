@@ -1479,7 +1479,18 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   int trackingExtraTotal = 0;
   const bool lineHasRubyAnnotation =
       std::any_of(lineRubyTexts.begin(), lineRubyTexts.end(), [](const std::string& ruby) { return !ruby.empty(); });
-  if (letterSpacingLimitPercent > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+
+  // CPHUN-260827-22 diagnostic: force clearly visible +2 px tracking on
+  // normal justified LTR non-last lines. This intentionally bypasses the
+  // 120/240% activation threshold so we can verify the layout->TextBlock->render path.
+  if (effectiveAlignment == CssTextAlign::Justify && !isLastLine && !blockStyle.isRtl && !hasRtlWord &&
+      !focusReadingEnabled && !lineHasRubyAnnotation && actualGapCount > 0) {
+    for (const auto& w : lineWords) {
+      const uint32_t cps = countCodepoints(w);
+      if (cps > 1) trackingExtraTotal += static_cast<int>(cps - 1) * 2;
+    }
+    if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) letterSpacingPx = 2;
+  } else if (letterSpacingLimitPercent > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
       !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && !lineHasRubyAnnotation && actualGapCount > 0) {
     int natural100Gaps = 0;
     size_t normalGapCount = 0;
