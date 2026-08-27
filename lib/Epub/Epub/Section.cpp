@@ -42,7 +42,9 @@ namespace {
 //      with no bottom inset refuse to draw.
 // v43: TextBlock arena stores one cached BidiBaseDir byte per word. This avoids
 //      repeating Unicode direction detection on every page redraw.
-constexpr uint8_t SECTION_FILE_VERSION = 49;
+// v50: Section cache header now includes letterSpacingLimitPercent, so changing
+//      Betűköz korrekció invalidates cached layout and rebuilds affected sections.
+constexpr uint8_t SECTION_FILE_VERSION = 50;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -62,7 +64,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) +
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t);
 }  // namespace
@@ -112,7 +114,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
                                    sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
                                    sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +
-                                   sizeof(spec.minimumSpacePercent) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
+                                   sizeof(spec.minimumSpacePercent) + sizeof(spec.letterSpacingLimitPercent) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
                                    sizeof(spec.focusReadingEnabled) + sizeof(uint32_t) + sizeof(uint32_t) +
                                    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
@@ -130,6 +132,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.hangingPunctuationLimitPx);
   serialization::writePod(file, spec.fixedDialogueSpacing);
   serialization::writePod(file, spec.minimumSpacePercent);
+  serialization::writePod(file, spec.letterSpacingLimitPercent);
   serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
@@ -170,6 +173,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint8_t fileHangingPunctuationLimitPx;
     bool fileFixedDialogueSpacing;
     uint8_t fileMinimumSpacePercent;
+    uint8_t fileLetterSpacingLimitPercent;
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
@@ -184,6 +188,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileHangingPunctuationLimitPx);
     serialization::readPod(file, fileFixedDialogueSpacing);
     serialization::readPod(file, fileMinimumSpacePercent);
+    serialization::readPod(file, fileLetterSpacingLimitPercent);
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
@@ -195,7 +200,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
         spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||
         spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||
-        spec.embeddedStyle != fileEmbeddedStyle ||
+        spec.letterSpacingLimitPercent != fileLetterSpacingLimitPercent || spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
