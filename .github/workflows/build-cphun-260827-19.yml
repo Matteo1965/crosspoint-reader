@@ -38,6 +38,7 @@ jobs:
           PY
           python3 tools/cphun_19_patch.py
           python3 tools/cphun_19_preview_fix.py
+          python3 tools/cphun_19_render_fix.py
           git diff --check
 
       - name: Verify CPHUN-260827-19 requirements
@@ -55,6 +56,7 @@ jobs:
           grep -q 'softHyphenBreakOffsets' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'useNaturalLastLineSpacing' lib/Epub/Epub/ParsedText.cpp
           grep -q 'letterSpacingPx' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'const char\* ptr = text' lib/Epub/Epub/blocks/TextBlock.cpp
           grep -q 'spec.hangingPunctuationLimitPx = hangingPunctuation ? screenMargin : 0' src/CrossPointSettings.cpp
 
       - name: Configure unit tests
