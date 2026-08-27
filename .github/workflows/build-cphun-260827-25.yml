@@ -1,0 +1,88 @@
+name: Build CPHUN-260827-25 Forced Tracking 1px Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - tools/cphun_25_forced_tracking_1px.py
+      - .github/workflows/build-cphun-260827-25.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260827-25
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout diagnostic branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-24 exact cache fix is present
+        run: |
+          set -euo pipefail
+          grep -q 'SECTION_FILE_VERSION = 52' lib/Epub/Epub/Section.cpp
+          grep -q 'writePod(file, letterSpacingPx)' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'block->letterSpacingPx = cachedLetterSpacingPx' lib/Epub/Epub/blocks/TextBlock.cpp
+
+      - name: Apply forced +1px tracking diagnostic
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_25_forced_tracking_1px.py
+          git diff --check
+          grep -q 'letterSpacingPx = 1' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'trackingExtraTotal += static_cast<int>(cps - 1);' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'trackingExtraTotal += static_cast<int>(cps - 1) \* 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260827-25 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add lib/Epub/Epub/ParsedText.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260827-25: reduce forced tracking diagnostic to 1px"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260827-25 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260827-25-Forced-Tracking-1px-ExactCache-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
