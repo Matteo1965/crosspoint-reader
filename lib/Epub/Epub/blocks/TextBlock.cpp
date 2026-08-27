@@ -5,10 +5,59 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Serialization.h>
+#include <Utf8.h>
 
 #include <cstring>
 
 #include "../../../../src/fontIds.h"
+
+namespace {
+
+uint32_t countCodepoints(const char* text) {
+  if (text == nullptr) return 0;
+  const auto* cursor = reinterpret_cast<const uint8_t*>(text);
+  uint32_t count = 0;
+  while (*cursor) {
+    if (utf8NextCodepoint(&cursor) == 0) break;
+    ++count;
+  }
+  return count;
+}
+
+void drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x, const int y, const char* text,
+                     const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
+                     const uint8_t letterSpacingPx) {
+  if (letterSpacingPx == 0 || text == nullptr || *text == '\0') {
+    renderer.drawText(fontId, x, y, text, true, style, baseDir);
+    return;
+  }
+
+  // ParsedText enables tracking only on pure-LTR justified lines. Render one
+  // codepoint at a time so the physical glyph positions match the +1 px per
+  // internal pair already reserved by layout, while preserving pair kerning.
+  const auto* cursor = reinterpret_cast<const uint8_t*>(text);
+  int penX = x;
+  uint32_t previous = 0;
+  while (*cursor) {
+    const auto* glyphStart = cursor;
+    const uint32_t cp = utf8NextCodepoint(&cursor);
+    if (cp == 0) break;
+
+    if (previous != 0) {
+      penX += renderer.getKerning(fontId, previous, cp, style) + letterSpacingPx;
+    }
+
+    const size_t glyphBytes = static_cast<size_t>(cursor - glyphStart);
+    char glyphText[5];
+    memcpy(glyphText, glyphStart, glyphBytes);
+    glyphText[glyphBytes] = '\0';
+    renderer.drawText(fontId, penX, y, glyphText, true, style, baseDir);
+    penX += renderer.getTextAdvanceX(fontId, glyphText, style);
+    previous = cp;
+  }
+}
+
+}  // namespace
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
@@ -124,6 +173,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     xpos[i] = wordXpos[i];
     styles[i] = static_cast<uint8_t>(wordStyles[i]);
     bidiDir[i] = static_cast<uint8_t>(BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
+    if (letterSpacingPx != 0) bidiDir[i] |= 0x80;
     memcpy(text + off, words[i].data(), words[i].size());
     off += static_cast<uint16_t>(words[i].size());
     text[off++] = '\0';
@@ -167,7 +217,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   if (simpleRender) {
     for (uint16_t i = 0; i < numWords; ++i) {
       const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
-      renderer.drawText(fontId, xposArr[i] + x, y, wordText(i), true, wordStyle(i), baseDir);
+      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx);
     }
     return;
   }
@@ -269,7 +319,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, drawX, wordY, word, true, currentStyle, baseDir);
+      drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx);
     }
 
     // Horizontal ruby text rendering
@@ -287,6 +337,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     if (EpdFontFamily::hasTextDecoration(currentStyle)) {
       int lineStartX = drawX;
       int lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir);
+      const uint32_t cps = countCodepoints(word);
+      if (letterSpacingPx != 0 && cps > 1) {
+        lineWidth += static_cast<int>(cps - 1) * letterSpacingPx;
+      }
 
       if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
         lineWidth = (lineWidth + 1) / 2;
@@ -298,6 +352,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         const char* visibleText = word + 3;
         lineStartX += renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
         lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir);
+        const uint32_t visibleCps = countCodepoints(visibleText);
+        if (letterSpacingPx != 0 && visibleCps > 1) {
+          lineWidth += static_cast<int>(visibleCps - 1) * letterSpacingPx;
+        }
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
@@ -410,6 +468,9 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
       return nullptr;
     }
     block->bindArenaPointers();
+    // Backward-compatible cache packing: old caches have only 0/1 here, new
+    // caches use the high bit to persist the line's 1 px tracking flag.
+    block->letterSpacingPx = (block->bidiDirArr[0] & 0x80) != 0 ? 1 : 0;
 
     // Validate offsets before anything dereferences wordText(): offset 0 first,
     // strictly increasing, in bounds, and every word NUL-terminated (word i ends
