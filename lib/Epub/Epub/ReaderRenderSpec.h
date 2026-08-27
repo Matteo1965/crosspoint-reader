@@ -19,9 +19,11 @@ struct ReaderRenderSpec {
   uint16_t viewportHeight = 0;
   bool hyphenationEnabled = false;
   bool hungarianHyphenationExtended = false;
+  bool softHyphenEnabled = false;
   // 0 disables hanging punctuation; otherwise maximum overhang into the physical margin.
   uint8_t hangingPunctuationLimitPx = 0;
   bool fixedDialogueSpacing = false;
+  uint8_t letterSpacingLimitPercent = 0;
   uint8_t minimumSpacePercent = 100;
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;

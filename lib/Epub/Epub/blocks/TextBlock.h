@@ -42,6 +42,7 @@ class TextBlock final : public Block {
   uint16_t numWords = 0;
   uint16_t textBytes = 0;  // total size of the text region, including NULs
   bool focusPresent = false;
+  uint8_t letterSpacingPx = 0;
   bool simpleRender = false;
   bool isValid = true;
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
@@ -70,7 +71,7 @@ class TextBlock final : public Block {
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
-                     std::vector<std::string> rubyTexts = {});
+                     std::vector<std::string> rubyTexts = {}, uint8_t letterSpacingPx = 0);
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;

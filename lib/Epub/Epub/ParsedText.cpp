@@ -1408,6 +1408,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   int lineWordWidthSum = 0;
   size_t actualGapCount = 0;
   int totalNaturalGaps = 0;
+  bool useNaturalLastLineSpacing = false;
 
   for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
     lineWordWidthSum += wordWidths[lastBreakAt + wordIdx];
@@ -1460,6 +1461,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
     if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {
       totalNaturalGaps = natural100;
+      useNaturalLastLineSpacing = true;
     }
   }
 
@@ -1479,14 +1481,42 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                    : 0;
   const int spareSpace =
       effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+
+  uint8_t letterSpacingPx = 0;
+  int trackingExtraTotal = 0;
+  if (letterSpacingLimitPercent > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && rubyTexts.empty() && actualGapCount > 0) {
+    int natural100Gaps = 0;
+    size_t normalGapCount = 0;
+    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
+      const size_t boundaryIdx = lastBreakAt + wordIdx;
+      if (!continuesVec[boundaryIdx] && !noSpaceBeforeVec[boundaryIdx]) {
+        natural100Gaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+        normalGapCount++;
+      }
+    }
+    if (normalGapCount > 0 && natural100Gaps > 0) {
+      const int finalAverageGap = (totalNaturalGaps + std::max(0, spareSpace)) / static_cast<int>(actualGapCount);
+      const int naturalAverageGap = natural100Gaps / static_cast<int>(normalGapCount);
+      if (finalAverageGap * 100 > naturalAverageGap * letterSpacingLimitPercent) {
+        for (const auto& w : lineWords) {
+          const uint32_t cps = countCodepoints(w);
+          if (cps > 1) trackingExtraTotal += static_cast<int>(cps - 1);
+        }
+        if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) letterSpacingPx = 1;
+      }
+    }
+  }
+  const int adjustedSpareSpace = spareSpace - (letterSpacingPx ? trackingExtraTotal : 0);
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                               ? computeJustifyExtra(spareSpace, actualGapCount)
+                               ? computeJustifyExtra(adjustedSpareSpace, actualGapCount)
                                : 0;
   // Integer division can leave a few pixels undistributed. Spread those remainder
   // pixels one-by-one across the first gaps so a justified line reaches the right
   // edge exactly instead of ending up to gapCount-1 pixels short.
   const int justifyRemainder = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)
-                                   ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)
+                                   ? adjustedSpareSpace - justifyExtra * static_cast<int>(actualGapCount)
                                    : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
@@ -1689,7 +1719,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         }
       }
     } else {
-      // LTR: position words from left to right
+      // LTR: position words from left to right. Final-line natural spacing and
+      // optional +1 px tracking are render-only corrections: line breaks are unchanged.
+      const uint8_t ltrSpacePercent =
+          (useNaturalLastLineSpacing && effectiveAlignment == CssTextAlign::Justify) ? 100
+                                                                                     : ltrSpacePercent;
       int xpos = firstLineIndent + extraStartOffset;
       if (effectiveAlignment == CssTextAlign::Right) {
         xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
@@ -1703,7 +1737,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          int advance = wordWidths[lastBreakAt + wordIdx];
+          int advance = wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) : 0);
           if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 && isStandaloneDialogueDash(lineWords[0])) {
             advance += scaledNormalSpaceAdvance(
                 renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
@@ -1730,13 +1764,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = nextNoSpace
                       ? 0
                       : scaledNormalSpaceAdvance(renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100));
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]), ltrSpacePercent);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
             justifyGapIndex++;
           }
-          xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+          xpos += wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) : 0) + gap;
         }
       }
     }
@@ -1759,7 +1793,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   if (!lineHasFocusSplit) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                             std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts));
+                                             std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts), letterSpacingPx);
     if (!block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;

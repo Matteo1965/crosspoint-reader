@@ -417,7 +417,8 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
-      spec.focusReadingEnabled, spec.hangingPunctuationLimitPx, spec.fixedDialogueSpacing,
+      spec.softHyphenEnabled, spec.focusReadingEnabled, spec.hangingPunctuationLimitPx, spec.fixedDialogueSpacing,
+      spec.letterSpacingLimitPercent,
       [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
                      const uint32_t visibleTextOffset) {
         ctxPtr->lut.push_back(

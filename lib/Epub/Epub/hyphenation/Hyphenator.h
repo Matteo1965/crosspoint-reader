@@ -38,6 +38,7 @@ class Hyphenator {
   //      pattern breaks were found). Used as a last resort to prevent a single oversized
   //      word from overflowing the page width.
   static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);
+  static std::vector<BreakInfo> softHyphenBreakOffsets(const std::string& word);
 
   // Uses an explicit language without changing the publication-level language
   // selected for the reader. Intended for auxiliary text such as dictionary
@@ -48,9 +49,11 @@ class Hyphenator {
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
   static void setHungarianExtended(bool enabled);
+  static void setSoftHyphenEnabled(bool enabled);
 
  private:
   static const LanguageHyphenator* cachedHyphenator_;
   static bool preferredLanguageIsHungarian_;
   static bool hungarianExtended_;
+  static bool softHyphenEnabled_;
 };

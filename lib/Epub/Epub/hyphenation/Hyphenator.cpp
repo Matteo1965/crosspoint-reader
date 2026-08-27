@@ -13,6 +13,7 @@
 const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
 bool Hyphenator::preferredLanguageIsHungarian_ = false;
 bool Hyphenator::hungarianExtended_ = false;
+bool Hyphenator::softHyphenEnabled_ = false;
 
 namespace {
 
@@ -340,6 +341,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   // Convert to codepoints. Hungarian legacy accents are normalized only in
   // this processing copy; the original UTF-8 word remains untouched for rendering.
   auto cps = collectCodepoints(word);
+  if (!softHyphenEnabled_) {
+    cps.erase(std::remove_if(cps.begin(), cps.end(), [](const CodepointInfo& cp) { return isSoftHyphen(cp.value); }), cps.end());
+  }
   if (preferredLanguageIsHungarian_) {
     normalizeHungarianProcessingCodepoints(cps);
   }
@@ -450,6 +454,17 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
+std::vector<Hyphenator::BreakInfo> Hyphenator::softHyphenBreakOffsets(const std::string& word) {
+  auto cps = collectCodepoints(word);
+  std::vector<BreakInfo> out;
+  for (size_t i = 1; i + 1 < cps.size(); ++i) {
+    if (isSoftHyphen(cps[i].value) && isAlphabetic(cps[i - 1].value) && isAlphabetic(cps[i + 1].value)) {
+      out.push_back({cps[i + 1].byteOffset, true});
+    }
+  }
+  return out;
+}
+
 std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage(const std::string& word,
                                                                        const bool includeFallback,
                                                                        const std::string& language) {
@@ -475,3 +490,4 @@ void Hyphenator::setPreferredLanguage(const std::string& lang) {
 }
 
 void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }
+void Hyphenator::setSoftHyphenEnabled(const bool enabled) { softHyphenEnabled_ = enabled; }

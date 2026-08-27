@@ -34,12 +34,13 @@ class TextSettingsActivity final : public UiTabListActivity {
     ParaSpacing,
     Alignment,
     MinimumSpace,
+    LetterSpacingCorrection,
     ScreenMargin,
     HangingPunctuation,
     FixedDialogueSpacing,
     Count
   };
-  enum class StyleRow { FocusReading, Hyphenation, HungarianHyphenation, EmbeddedStyle, AntiAliasing, Count };
+  enum class StyleRow { FocusReading, Hyphenation, SoftHyphen, EmbeddedStyle, AntiAliasing, Count };
 
   // --- UiTabListActivity contract ---
   int listCount() const override;

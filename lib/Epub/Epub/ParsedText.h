@@ -57,9 +57,11 @@ class ParsedText {
   BlockStyle blockStyle;
   uint8_t extraParagraphSpacing;
   bool hyphenationEnabled;
+  bool softHyphenEnabled;
   bool focusReadingEnabled;
   uint8_t hangingPunctuationLimitPx;
   bool fixedDialogueSpacing;
+  uint8_t letterSpacingLimitPercent;
   bool isNaturalAlign;
   bool hasRtlWord;
   std::vector<std::string> reorderedWordsScratch;
@@ -97,14 +99,17 @@ class ParsedText {
  public:
   static void setMinimumSpacePercent(uint8_t percent) { minimumSpacePercent_ = percent; }
   explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,
-                      const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle())
+                      const bool softHyphenEnabled = false, const bool focusReadingEnabled = false,
+                      const uint8_t hangingPunctuationLimitPx = 0, const bool fixedDialogueSpacing = false,
+                      const uint8_t letterSpacingLimitPercent = 0, const BlockStyle& blockStyle = BlockStyle())
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
+        softHyphenEnabled(softHyphenEnabled),
         focusReadingEnabled(focusReadingEnabled),
         hangingPunctuationLimitPx(hangingPunctuationLimitPx),
         fixedDialogueSpacing(fixedDialogueSpacing),
+        letterSpacingLimitPercent(letterSpacingLimitPercent),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;

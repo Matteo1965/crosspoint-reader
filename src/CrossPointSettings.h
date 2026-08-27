@@ -245,6 +245,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t hangingPunctuation = 100;
   // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
   uint8_t fixedDialogueSpacing = 0;
+  // 0 disables the post-layout +1 px letter-spacing correction; otherwise the
+  // value is the word-space stretch threshold in percent (120..240).
+  uint8_t letterSpacingLimitPercent = 0;
   // Minimum natural word-space width in justified text: 50..100 percent.
   uint8_t minimumSpacePercent = 100;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -253,6 +256,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
   uint8_t hungarianHyphenationExtended = 0;
+  uint8_t softHyphenEnabled = 0;
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 8;

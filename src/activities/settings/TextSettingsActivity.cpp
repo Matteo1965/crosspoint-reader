@@ -110,6 +110,8 @@ void TextSettingsActivity::rebuildRowItems() {
       case Tab::Layout:
         if (i == static_cast<int>(LayoutRow::MinimumSpace)) {
           item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";
+        } else if (i == static_cast<int>(LayoutRow::LetterSpacingCorrection)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction";
         } else if (i == static_cast<int>(LayoutRow::ScreenMargin)) {
           item.label = I18N.get(StrId::STR_SCREEN_MARGIN);
         } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
@@ -121,8 +123,11 @@ void TextSettingsActivity::rebuildRowItems() {
         }
         break;
       case Tab::Style:
-        item.label = i == static_cast<int>(StyleRow::HungarianHyphenation) ? "Magyar elválasztás"
-                                                                           : I18N.get(STYLE_ROW_NAME_IDS[i]);
+        if (i == static_cast<int>(StyleRow::SoftHyphen)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Beágyazott elválasztás" : "Embedded hyphenation";
+        } else {
+          item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
+        }
         break;
       default:
         break;
@@ -407,23 +412,31 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
                         });
       requestUpdate();
       break;
-    case LayoutRow::HangingPunctuation: {
-      const char* options[] = {tr(STR_STATE_OFF), "20%", "40%", "60%", "80%", "100%"};
-      const int cur = SETTINGS.hangingPunctuation == 0 ? 0 : std::clamp<int>(SETTINGS.hangingPunctuation / 20, 1, 5);
-      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation", options, 6, cur,
-                        [](int idx) {
-                          SETTINGS.hangingPunctuation = static_cast<uint8_t>(idx * 20);
-                          SETTINGS.saveToFile();
-                        });
+    case LayoutRow::HangingPunctuation:
+      SETTINGS.hangingPunctuation = SETTINGS.hangingPunctuation ? 0 : 100;
+      SETTINGS.saveToFile();
       requestUpdate();
       break;
-    }
     case LayoutRow::MinimumSpace: {
       const char* options[] = {"50%", "60%", "70%", "80%", "90%", "100%"};
       const int cur = std::clamp<int>((SETTINGS.minimumSpacePercent - 50) / 10, 0, 5);
       optionPopup_.show(I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing", options, 6, cur,
                         [](int idx) {
                           SETTINGS.minimumSpacePercent = static_cast<uint8_t>(50 + idx * 10);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      break;
+    }
+    case LayoutRow::LetterSpacingCorrection: {
+      const char* options[] = {tr(STR_STATE_OFF), "120%", "140%", "160%", "180%", "200%", "220%", "240%"};
+      int cur = 0;
+      if (SETTINGS.letterSpacingLimitPercent >= 120 && SETTINGS.letterSpacingLimitPercent <= 240) {
+        cur = 1 + (SETTINGS.letterSpacingLimitPercent - 120) / 20;
+      }
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",
+                        options, 8, cur, [](int idx) {
+                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint8_t>(100 + idx * 20);
                           SETTINGS.saveToFile();
                         });
       requestUpdate();
@@ -469,7 +482,10 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
-      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);
+      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case LayoutRow::LetterSpacingCorrection:
+      return SETTINGS.letterSpacingLimitPercent ? std::to_string(SETTINGS.letterSpacingLimitPercent) + "%"
+                                                : tr(STR_STATE_OFF);
     case LayoutRow::FixedDialogueSpacing:
       return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
 
@@ -483,11 +499,21 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::FocusReading:
       SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;
       break;
-    case StyleRow::Hyphenation:
-      SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;
-      break;
-    case StyleRow::HungarianHyphenation:
-      SETTINGS.hungarianHyphenationExtended = !SETTINGS.hungarianHyphenationExtended;
+    case StyleRow::Hyphenation: {
+      const char* optionsHu[] = {"KI", "Alap", "Kiterjesztett magyar"};
+      const char* optionsEn[] = {"Off", "Basic", "Extended Hungarian"};
+      const char** options = I18N.getLanguage() == Language::HU ? optionsHu : optionsEn;
+      const int cur = !SETTINGS.hyphenationEnabled ? 0 : (SETTINGS.hungarianHyphenationExtended ? 2 : 1);
+      optionPopup_.show(I18N.get(StrId::STR_HYPHENATION), options, 3, cur, [](int idx) {
+        SETTINGS.hyphenationEnabled = idx == 0 ? 0 : 1;
+        SETTINGS.hungarianHyphenationExtended = idx == 2 ? 1 : 0;
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      return;
+    }
+    case StyleRow::SoftHyphen:
+      SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled;
       break;
     case StyleRow::EmbeddedStyle:
       SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
@@ -508,9 +534,12 @@ std::string TextSettingsActivity::styleValueText(int row) const {
     case StyleRow::FocusReading:
       return SETTINGS.focusReadingEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::Hyphenation:
-      return SETTINGS.hyphenationEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    case StyleRow::HungarianHyphenation:
-      return SETTINGS.hungarianHyphenationExtended ? "Kiterjesztett" : "Alap";
+      if (!SETTINGS.hyphenationEnabled) return tr(STR_STATE_OFF);
+      return SETTINGS.hungarianHyphenationExtended
+                 ? (I18N.getLanguage() == Language::HU ? "Kiterjesztett magyar" : "Extended Hungarian")
+                 : (I18N.getLanguage() == Language::HU ? "Alap" : "Basic");
+    case StyleRow::SoftHyphen:
+      return SETTINGS.softHyphenEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::EmbeddedStyle:
       return SETTINGS.embeddedStyle ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::AntiAliasing:
@@ -526,7 +555,7 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::HungarianHyphenation || row == StyleRow::EmbeddedStyle ||
+  return row == StyleRow::Hyphenation || row == StyleRow::SoftHyphen || row == StyleRow::EmbeddedStyle ||
          row == StyleRow::AntiAliasing;
 }
 

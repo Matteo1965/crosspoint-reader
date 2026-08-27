@@ -93,6 +93,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["fontSize"] = fontPointSize;
   doc["hangingPunctuation"] = hangingPunctuation;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
+  doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
+  doc["softHyphenEnabled"] = softHyphenEnabled;
   doc["minimumSpacePercent"] = minimumSpacePercent;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
@@ -211,6 +213,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   fontPointSize = storedFontSize;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
+  softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
+  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint8_t)0;
+  if (letterSpacingLimitPercent != 0 &&
+      (letterSpacingLimitPercent < 120 || letterSpacingLimitPercent > 240 || letterSpacingLimitPercent % 20 != 0)) {
+    letterSpacingLimitPercent = 0;
+    needsResave = true;
+  }
   minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;
   if (minimumSpacePercent < 50 || minimumSpacePercent > 100 || minimumSpacePercent % 10 != 0) {
     minimumSpacePercent = 100;
@@ -290,12 +299,10 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
-  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.
-  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
-  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
-  spec.hangingPunctuationLimitPx =
-      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 1 ? SETTINGS.screenMargin - 1 : 0));
+  spec.softHyphenEnabled = softHyphenEnabled != 0;
+  spec.hangingPunctuationLimitPx = hangingPunctuation ? static_cast<uint8_t>(std::min<int>(31, screenMargin)) : 0;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
+  spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
   spec.minimumSpacePercent = minimumSpacePercent;
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;

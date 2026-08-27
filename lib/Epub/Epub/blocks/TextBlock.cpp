@@ -58,8 +58,8 @@ void TextBlock::refreshRenderFlags() {
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
-                     std::vector<std::string> rubyTexts)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {
+                     std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)
+    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), letterSpacingPx(letterSpacingPx) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
   // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
   // every line it extracts, ruby or not; release it here rather than carrying it for the
