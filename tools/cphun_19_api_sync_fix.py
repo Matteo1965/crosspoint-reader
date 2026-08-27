@@ -18,6 +18,13 @@ patch_once(
 )
 
 patch_once(
+    "src/util/DictHtmlPages.cpp",
+    """        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,\n        SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled, /*hangingPunctuationLimitPx=*/0,\n        SETTINGS.fixedDialogueSpacing != 0,\n        [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {\n""",
+    """        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,\n        SETTINGS.hyphenationEnabled, SETTINGS.softHyphenEnabled, SETTINGS.focusReadingEnabled,\n        /*hangingPunctuationLimitPx=*/0, SETTINGS.fixedDialogueSpacing != 0, SETTINGS.letterSpacingLimitPercent,\n        [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {\n""",
+    "Dictionary parser constructor wiring",
+)
+
+patch_once(
     "lib/Epub/Epub/blocks/TextBlock.cpp",
     """TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,\n                     const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,\n                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,\n                     std::vector<std::string> rubyTexts)\n    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {\n""",
     """TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,\n                     const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,\n                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,\n                     std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)\n    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), letterSpacingPx(letterSpacingPx) {\n""",
