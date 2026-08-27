@@ -23,10 +23,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply MinSpace and independent soft-hyphen quickfix
+      - name: Apply letter-spacing render/cache quickfix
         run: |
           set -euo pipefail
-          python3 tools/cphun_19_minspace_softhyphen_fix.py
+          python3 tools/cphun_19_tracking_render_fix.py
           git diff --check
 
       - name: Configure unit tests
@@ -59,9 +59,9 @@ jobs:
           set -euo pipefail
           git config user.name "Matteo"
           git config user.email "atafoto@gmail.com"
-          git add lib/Epub/Epub/ParsedText.cpp
+          git add lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/blocks/TextBlock.h
           if ! git diff --cached --quiet; then
-            git commit -m "CPHUN-260827-19: fix MinSpace geometry and independent soft hyphens"
+            git commit -m "CPHUN-260827-19: render and persist letter spacing"
             git push origin HEAD:agent/cphun-260827-19-typography
           fi
 
