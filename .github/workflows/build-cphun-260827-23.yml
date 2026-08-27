@@ -26,11 +26,11 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply forced +2px tracking diagnostic
+      - name: Verify forced +2px tracking diagnostic already present
         run: |
           set -euo pipefail
-          python3 tools/cphun_22_forced_tracking_diag.py
-          git diff --check
+          grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'trackingExtraTotal.*\* 2' lib/Epub/Epub/ParsedText.cpp
 
       - name: Apply tracking layout scale and cache fix
         run: |
