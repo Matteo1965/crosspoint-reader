@@ -1,0 +1,78 @@
+name: Build CPHUN-260827-24 Exact Tracking Cache Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - 'tools/cphun_24_tracking_cache_value_fix.py'
+      - '.github/workflows/build-cphun-260827-24.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout diagnostic branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          fetch-depth: 0
+
+      - name: Verify forced +2px diagnostic is present
+        run: |
+          grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'trackingExtraTotal += static_cast<int>(cps - 1) \* 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Apply exact tracking cache value fix
+        run: |
+          python3 tools/cphun_24_tracking_cache_value_fix.py
+          git diff --check
+          grep -q 'SECTION_FILE_VERSION = 52' lib/Epub/Epub/Section.cpp
+          grep -q 'writePod(file, letterSpacingPx)' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'block->letterSpacingPx = cachedLetterSpacingPx' lib/Epub/Epub/blocks/TextBlock.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python platformio
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-24 source
+        run: |
+          if git diff --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/Section.cpp
+          git commit -m 'CPHUN-260827-24: persist exact tracking value in section cache'
+          git push origin HEAD:agent/cphun-260827-19-typography
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260827-24-Forced-Tracking-2px-ExactCache-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
