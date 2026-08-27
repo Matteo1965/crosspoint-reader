@@ -1,0 +1,103 @@
+name: Build CPHUN-260827-19 Typography Quickfix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260827-19
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-260827-19 typography quickfix
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_19_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-260827-19 requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '#define CPHUN_BUILD_ID "CPHUN-260827-19"' src/CPHUNBuildId.h
+          grep -q 'letterSpacingLimitPercent' src/CrossPointSettings.h
+          grep -q 'softHyphenEnabled' src/CrossPointSettings.h
+          grep -q 'Betűköz korrekció' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Beágyazott elválasztás' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Kiterjesztett magyar' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'softHyphenBreakOffsets' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'useNaturalLastLineSpacing' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'letterSpacingPx' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'spec.hangingPunctuationLimitPx = hangingPunctuation ? screenMargin : 0' src/CrossPointSettings.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260827-19 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add \
+            src/CPHUNBuildId.h \
+            src/CrossPointSettings.h \
+            src/CrossPointSettings.cpp \
+            src/activities/settings/TextSettingsActivity.h \
+            src/activities/settings/TextSettingsActivity.cpp \
+            lib/Epub/Epub/ReaderRenderSpec.h \
+            lib/Epub/Epub/ParsedText.h \
+            lib/Epub/Epub/ParsedText.cpp \
+            lib/Epub/Epub/hyphenation/Hyphenator.h \
+            lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+            lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h \
+            lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp \
+            lib/Epub/Epub/blocks/TextBlock.h \
+            lib/Epub/Epub/blocks/TextBlock.cpp \
+            lib/Epub/Epub/Section.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260827-19: typography and embedded hyphenation controls"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260827-19 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260827-19-Typography-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
