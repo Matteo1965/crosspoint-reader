@@ -784,14 +784,14 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(s) & 0x03));
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
-    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled || softHyphenEnabled, styleMask);
   }
 
   const int pageWidth = viewportWidth;
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
-  if (hyphenationEnabled) {
+  if (hyphenationEnabled || softHyphenEnabled) {
     // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
     lineBreakIndices =
         computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
@@ -1229,7 +1229,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements). Focus emphasis is a byte
   // annotation, so the hyphenator sees the whole word and every legal break is reachable.
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  auto breakInfos = hyphenationEnabled ? Hyphenator::breakOffsets(word, allowFallbackBreaks)
+                                      : Hyphenator::softHyphenBreakOffsets(word);
   if (breakInfos.empty()) {
     return false;
   }
@@ -1714,8 +1715,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       // LTR: position words from left to right. Final-line natural spacing and
       // optional +1 px tracking are render-only corrections: line breaks are unchanged.
       const uint8_t ltrSpacePercent =
-          (useNaturalLastLineSpacing && effectiveAlignment == CssTextAlign::Justify) ? 100
-                                                                                     : ltrSpacePercent;
+          (useNaturalLastLineSpacing && effectiveAlignment == CssTextAlign::Justify)
+              ? 100
+              : (effectiveAlignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100);
       int xpos = firstLineIndent + extraStartOffset;
       if (effectiveAlignment == CssTextAlign::Right) {
         xpos = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
