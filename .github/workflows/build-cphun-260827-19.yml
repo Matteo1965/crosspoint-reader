@@ -26,16 +26,6 @@ jobs:
       - name: Apply CPHUN-260827-19 typography quickfix
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('tools/cphun_19_patch.py')
-          s = p.read_text(encoding='utf-8')
-          old = "s = once(s, marker, insert + marker, 'letter spacing popup')"
-          new = "s = s.replace(marker, insert + marker, 1)"
-          if old not in s:
-              raise SystemExit('letter spacing patch-script guard marker not found')
-          p.write_text(s.replace(old, new, 1), encoding='utf-8')
-          PY
           python3 tools/cphun_19_patch.py
           python3 tools/cphun_19_preview_fix.py
           python3 tools/cphun_19_render_fix.py
