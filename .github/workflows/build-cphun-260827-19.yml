@@ -23,10 +23,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply optical-margin and fixed-dialogue quickfix
+      - name: Apply MinSpace and independent soft-hyphen quickfix
         run: |
           set -euo pipefail
-          python3 tools/cphun_19_margin_dialogue_fix.py
+          python3 tools/cphun_19_minspace_softhyphen_fix.py
           git diff --check
 
       - name: Configure unit tests
@@ -59,12 +59,9 @@ jobs:
           set -euo pipefail
           git config user.name "Matteo"
           git config user.email "atafoto@gmail.com"
-          git add \
-            src/CrossPointSettings.cpp \
-            lib/Epub/Epub/ParsedText.cpp \
-            src/util/DictHtmlPages.cpp
+          git add lib/Epub/Epub/ParsedText.cpp
           if ! git diff --cached --quiet; then
-            git commit -m "CPHUN-260827-19: fix optical margin and fixed dialogue spacing"
+            git commit -m "CPHUN-260827-19: fix MinSpace geometry and independent soft hyphens"
             git push origin HEAD:agent/cphun-260827-19-typography
           fi
 
