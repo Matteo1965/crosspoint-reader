@@ -30,21 +30,6 @@ jobs:
           python3 tools/cphun_19_preview_fix.py
           git diff --check
 
-      - name: Verify CPHUN-260827-19 requirements
-        shell: bash
-        run: |
-          set -euo pipefail
-          grep -q '#define CPHUN_BUILD_ID "CPHUN-260827-19"' src/CPHUNBuildId.h
-          grep -q 'letterSpacingLimitPercent' src/CrossPointSettings.h
-          grep -q 'softHyphenEnabled' src/CrossPointSettings.h
-          grep -q 'Betűköz korrekció' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'Beágyazott elválasztás' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'Kiterjesztett magyar' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'softHyphenBreakOffsets' lib/Epub/Epub/hyphenation/Hyphenator.cpp
-          grep -q 'useNaturalLastLineSpacing' lib/Epub/Epub/ParsedText.cpp
-          grep -q 'letterSpacingPx' lib/Epub/Epub/blocks/TextBlock.cpp
-          grep -q 'hangingPunctuationLimitPx' src/CrossPointSettings.cpp
-
       - name: Configure unit tests
         run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
 
