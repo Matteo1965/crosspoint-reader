@@ -300,7 +300,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
   spec.softHyphenEnabled = softHyphenEnabled != 0;
-  spec.hangingPunctuationLimitPx = hangingPunctuation ? static_cast<uint8_t>(std::min<int>(31, screenMargin)) : 0;
+  spec.hangingPunctuationLimitPx = hangingPunctuation && screenMargin > 0 ? static_cast<uint8_t>(screenMargin - 1) : 0;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
   spec.minimumSpacePercent = minimumSpacePercent;

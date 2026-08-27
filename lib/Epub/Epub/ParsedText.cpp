@@ -216,10 +216,8 @@ int cachedHangingPunctuationAdvance(const GfxRenderer& renderer, const int fontI
 }
 
 int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                                const EpdFontFamily::Style style, const uint8_t packedSetting) {
-  const uint8_t percentStep = packedSetting >> 5;
-  const uint8_t pixelLimit = static_cast<uint8_t>(packedSetting & 0x1F);
-  if (percentStep == 0 || pixelLimit == 0 || word.empty()) return 0;
+                                const EpdFontFamily::Style style, const uint8_t pixelLimit) {
+  if (pixelLimit == 0 || word.empty()) return 0;
   const uint32_t punctuation = lastCodepoint(word);
   if (!isHangingPunctuation(punctuation)) return 0;
   size_t lastStart = word.size() - 1;
@@ -233,8 +231,9 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
                                 ? 0
                                 : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
   const int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
-  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 5) + 4) / 5;
-  return std::min<int>(pixelLimit, proportionalAdvance);
+  // Optikai margó is a simple OFF/ON control. ON allows 100% of the
+  // punctuation contribution to hang, capped by screenMargin - 1.
+  return std::min<int>(pixelLimit, punctuationAdvance);
 }
 
 int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {
@@ -1045,9 +1044,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       int gap = 0;
       if (j > static_cast<size_t>(i) && continuesVec[j]) {
         if (fixedDialogueSpacing && j == 1 && isStandaloneDialogueDash(words[0])) {
-          gap = scaledNormalSpaceAdvance(
-              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-              minimumSpacePercent_);
+          gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
           gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
@@ -1160,9 +1157,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       int spacing = 0;
       if (!isFirstWord && continuesVec[currentIndex]) {
         if (fixedDialogueSpacing && currentIndex == 1 && isStandaloneDialogueDash(words[0])) {
-          spacing = scaledNormalSpaceAdvance(
-              renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]),
-              minimumSpacePercent_);
+          spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
           spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
@@ -1420,10 +1415,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
     if (continuesVec[boundaryIdx]) {
       if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
-        totalNaturalGaps += scaledNormalSpaceAdvance(
-            renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
-                                     lineWordStyles[0]),
-            minimumSpacePercent_);
+        totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                     lineWordStyles[0]);
       } else {
         totalNaturalGaps += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
                                                 firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
@@ -1446,9 +1439,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const size_t boundaryIdx = lastBreakAt + wordIdx;
       if (continuesVec[boundaryIdx]) {
         if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
-          natural100 += scaledNormalSpaceAdvance(
-              renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
-                                       lineWordStyles[0]), minimumSpacePercent_);
+          natural100 += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                       lineWordStyles[0]);
         } else {
           natural100 += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx - 1]),
                                             firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
@@ -1739,10 +1731,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         if (nextIsContinuation) {
           int advance = wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) : 0);
           if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 && isStandaloneDialogueDash(lineWords[0])) {
-            advance += scaledNormalSpaceAdvance(
-                renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
-                                         lineWordStyles[0]),
-                minimumSpacePercent_);
+            advance += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
+                                         lineWordStyles[0]);
           } else {
             advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                            firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
