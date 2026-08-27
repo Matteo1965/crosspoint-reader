@@ -149,6 +149,7 @@ class OptionPopup {
     // tracks the live orientation and uiScale fonts; a target held across
     // show() would stale-bind both after a rotation or scale change.
     fui::GfxRendererTarget target = makeUiTarget(renderer);
+    const fui::ThemeTokens& theme = refreshSharedUiThemeTokens(target);
     // Frame stores a const DeviceContext&; keep it in a local that outlives
     // the frame (a deviceContext() temporary would dangle).
     const fui::DeviceContext device = target.deviceContext();
@@ -193,6 +194,12 @@ class OptionPopup {
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
     props.gap = static_cast<int16_t>(compact16 ? std::max(0, metrics.optionPopupItemSpacing - 2)
                                                     : metrics.optionPopupItemSpacing);
+    // Rounded invert-fill themes use a black pill, not the default gray focus cursor.
+    if (theme.listSelectionStyle == fui::SelectionStyle::InvertFill && theme.listRowRadius > 0) {
+      props.buttonStyles = fui::defaultButtonStyles();
+      props.buttonStyles.focused = props.buttonStyles.selected;
+      fui::setStyleRadius(props.buttonStyles, theme.listRowRadius);
+    }
     // defaultPopupStyles() (the fallback fui::optionDialog uses when styles is
     // left unset) has no border, so the dialog frame drawn by the old
     // BaseTheme::drawOptionPopup outline is opted back in explicitly here,
@@ -228,6 +235,12 @@ class OptionPopup {
   }
 
   bool isActive() const { return active; }
+
+  // Close without firing the callback when the host screen goes away.
+  void dismiss() {
+    active = false;
+    onSelectCallback = nullptr;
+  }
 
  private:
   // The dialog has no scrolling, so options past MAX_OPTIONS would render off
