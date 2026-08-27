@@ -61,7 +61,8 @@ jobs:
           git config user.email "atafoto@gmail.com"
           git add \
             src/CrossPointSettings.cpp \
-            lib/Epub/Epub/ParsedText.cpp
+            lib/Epub/Epub/ParsedText.cpp \
+            src/util/DictHtmlPages.cpp
           if ! git diff --cached --quiet; then
             git commit -m "CPHUN-260827-19: fix optical margin and fixed dialogue spacing"
             git push origin HEAD:agent/cphun-260827-19-typography
