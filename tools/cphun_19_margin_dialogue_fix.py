@@ -61,4 +61,19 @@ if count < 3:
     raise SystemExit(f"fixed dialogue natural-space replacements: expected at least 3, found {count}")
 
 p.write_text(s, encoding="utf-8")
-print(f"CPHUN-19 margin/dialogue fix applied; fixed-dialogue replacements={count}")
+
+# Keep the dictionary HTML parser call synchronized with the CPHUN-19
+# ChapterHtmlSlimParser constructor. Dictionary pages inherit the user's
+# embedded soft-hyphen and letter-spacing settings just like normal EPUB text.
+replace_once(
+    "src/util/DictHtmlPages.cpp",
+    """        SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled, /*hangingPunctuationLimitPx=*/0,
+        SETTINGS.fixedDialogueSpacing != 0,
+""",
+    """        SETTINGS.hyphenationEnabled, SETTINGS.softHyphenEnabled != 0, SETTINGS.focusReadingEnabled,
+        /*hangingPunctuationLimitPx=*/0, SETTINGS.fixedDialogueSpacing != 0, SETTINGS.letterSpacingLimitPercent,
+""",
+    "dictionary ChapterHtmlSlimParser constructor",
+)
+
+print(f"CPHUN-19 margin/dialogue/dictionary sync fix applied; fixed-dialogue replacements={count}")
