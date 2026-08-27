@@ -51,7 +51,7 @@ s = once(s,
 '''  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;\n''',
 '''  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n  softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;\n  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint8_t)0;\n  if (letterSpacingLimitPercent != 0 &&\n      (letterSpacingLimitPercent < 120 || letterSpacingLimitPercent > 240 || letterSpacingLimitPercent % 20 != 0)) {\n    letterSpacingLimitPercent = 0;\n    needsResave = true;\n  }\n  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;\n''', 'settings fromJson')
 old_spec = '''  spec.hyphenationEnabled = hyphenationEnabled != 0;\n  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;\n  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.\n  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.\n  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);\n  spec.hangingPunctuationLimitPx =\n      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 1 ? SETTINGS.screenMargin - 1 : 0));\n  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n  spec.minimumSpacePercent = minimumSpacePercent;\n'''
-new_spec = '''  spec.hyphenationEnabled = hyphenationEnabled != 0;\n  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;\n  spec.softHyphenEnabled = softHyphenEnabled != 0;\n  // Optikai margó is now a simple Off/On setting. On means full (100%)\n  // punctuation overhang, with no reserved physical safety pixel.\n  spec.hangingPunctuationLimitPx = hangingPunctuation ? screenMargin : 0;\n  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n  spec.letterSpacingLimitPercent = letterSpacingLimitPercent;\n  spec.minimumSpacePercent = minimumSpacePercent;\n'''
+new_spec = '''  spec.hyphenationEnabled = hyphenationEnabled != 0;\n  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;\n  spec.softHyphenEnabled = softHyphenEnabled != 0;\n  // Optikai margó is now a simple Off/On setting. On means full (100%)\n  // punctuation overhang, with no reserved physical safety pixel.\n  spec.hangingPunctuationLimitPx = hangingPunctuation ? static_cast<uint8_t>(std::min<int>(31, screenMargin)) : 0;\n  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n  spec.letterSpacingLimitPercent = letterSpacingLimitPercent;\n  spec.minimumSpacePercent = minimumSpacePercent;\n'''
 s = once(s, old_spec, new_spec, 'readerRenderSpec')
 save(p, s)
 
@@ -76,18 +76,15 @@ s = once(s,
 s = once(s,
 '''      case Tab::Style:\n        item.label = i == static_cast<int>(StyleRow::HungarianHyphenation) ? "Magyar elválasztás"\n                                                                           : I18N.get(STYLE_ROW_NAME_IDS[i]);\n        break;\n''',
 '''      case Tab::Style:\n        if (i == static_cast<int>(StyleRow::SoftHyphen)) {\n          item.label = I18N.getLanguage() == Language::HU ? "Beágyazott elválasztás" : "Embedded hyphenation";\n        } else {\n          item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);\n        }\n        break;\n''', 'style labels')
-# Optikai margó picker -> toggle
 start = s.index('    case LayoutRow::HangingPunctuation: {')
 end = s.index('    case LayoutRow::MinimumSpace:', start)
 s = s[:start] + '''    case LayoutRow::HangingPunctuation:\n      SETTINGS.hangingPunctuation = SETTINGS.hangingPunctuation ? 0 : 100;\n      SETTINGS.saveToFile();\n      requestUpdate();\n      break;\n''' + s[end:]
-# Insert letter spacing popup after MinimumSpace case
 marker = '''    case LayoutRow::FixedDialogueSpacing:\n'''
 insert = '''    case LayoutRow::LetterSpacingCorrection: {\n      const char* options[] = {tr(STR_STATE_OFF), "120%", "140%", "160%", "180%", "200%", "220%", "240%"};\n      int cur = 0;\n      if (SETTINGS.letterSpacingLimitPercent >= 120 && SETTINGS.letterSpacingLimitPercent <= 240) {\n        cur = 1 + (SETTINGS.letterSpacingLimitPercent - 120) / 20;\n      }\n      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",\n                        options, 8, cur, [](int idx) {\n                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint8_t>(100 + idx * 20);\n                          SETTINGS.saveToFile();\n                        });\n      requestUpdate();\n      break;\n    }\n'''
-s = once(s, marker, insert + marker, 'letter spacing popup')
+s = s.replace(marker, insert + marker, 1)
 s = once(s,
 '''    case LayoutRow::HangingPunctuation:\n      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);\n''',
 '''    case LayoutRow::HangingPunctuation:\n      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);\n    case LayoutRow::LetterSpacingCorrection:\n      return SETTINGS.letterSpacingLimitPercent ? std::to_string(SETTINGS.letterSpacingLimitPercent) + "%"\n                                                : tr(STR_STATE_OFF);\n''', 'layout value text')
-# Replace style handler/value with 3-state algorithm + independent soft hyphen
 old = '''void TextSettingsActivity::confirmStyleRow(int row) {\n  switch (static_cast<StyleRow>(row)) {\n    case StyleRow::FocusReading:\n      SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;\n      break;\n    case StyleRow::Hyphenation:\n      SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;\n      break;\n    case StyleRow::HungarianHyphenation:\n      SETTINGS.hungarianHyphenationExtended = !SETTINGS.hungarianHyphenationExtended;\n      break;\n'''
 new = '''void TextSettingsActivity::confirmStyleRow(int row) {\n  switch (static_cast<StyleRow>(row)) {\n    case StyleRow::FocusReading:\n      SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;\n      break;\n    case StyleRow::Hyphenation: {\n      const char* optionsHu[] = {"KI", "Alap", "Kiterjesztett magyar"};\n      const char* optionsEn[] = {"Off", "Basic", "Extended Hungarian"};\n      const char** options = I18N.getLanguage() == Language::HU ? optionsHu : optionsEn;\n      const int cur = !SETTINGS.hyphenationEnabled ? 0 : (SETTINGS.hungarianHyphenationExtended ? 2 : 1);\n      optionPopup_.show(I18N.get(StrId::STR_HYPHENATION), options, 3, cur, [](int idx) {\n        SETTINGS.hyphenationEnabled = idx == 0 ? 0 : 1;\n        SETTINGS.hungarianHyphenationExtended = idx == 2 ? 1 : 0;\n        SETTINGS.saveToFile();\n      });\n      requestUpdate();\n      return;\n    }\n    case StyleRow::SoftHyphen:\n      SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled;\n      break;\n'''
 s = once(s, old, new, 'style handler')
@@ -104,7 +101,7 @@ p = 'lib/Epub/Epub/hyphenation/Hyphenator.h'
 s = load(p)
 s = once(s,
 '''  static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);\n''',
-'''  static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);\n  // Returns only explicit U+00AD opportunities, used when language hyphenation is Off.\n  static std::vector<BreakInfo> softHyphenBreakOffsets(const std::string& word);\n''', 'hyphenator soft API')
+'''  static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);\n  static std::vector<BreakInfo> softHyphenBreakOffsets(const std::string& word);\n''', 'hyphenator soft API')
 s = once(s,
 '''  static void setHungarianExtended(bool enabled);\n''',
 '''  static void setHungarianExtended(bool enabled);\n  static void setSoftHyphenEnabled(bool enabled);\n''', 'hyphenator setter')
@@ -123,92 +120,67 @@ s = once(s,
 '''  auto cps = collectCodepoints(word);\n  if (!softHyphenEnabled_) {\n    cps.erase(std::remove_if(cps.begin(), cps.end(), [](const CodepointInfo& cp) { return isSoftHyphen(cp.value); }),\n              cps.end());\n  }\n  if (preferredLanguageIsHungarian_) {\n''', 'ignore soft when disabled')
 insert_before = '''std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage'''
 soft_fn = '''std::vector<Hyphenator::BreakInfo> Hyphenator::softHyphenBreakOffsets(const std::string& word) {\n  auto cps = collectCodepoints(word);\n  std::vector<BreakInfo> out;\n  for (size_t i = 1; i + 1 < cps.size(); ++i) {\n    if (isSoftHyphen(cps[i].value) && isAlphabetic(cps[i - 1].value) && isAlphabetic(cps[i + 1].value)) {\n      out.push_back({cps[i + 1].byteOffset, true});\n    }\n  }\n  return out;\n}\n\n'''
-s = once(s, insert_before, soft_fn + insert_before, 'soft-only break fn')
+s = once(s, insert_before, soft_fn + insert_before, 'soft function')
 s = once(s,
 '''void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }\n''',
-'''void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }\n\nvoid Hyphenator::setSoftHyphenEnabled(const bool enabled) { softHyphenEnabled_ = enabled; }\n''', 'soft setter impl')
+'''void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }\nvoid Hyphenator::setSoftHyphenEnabled(const bool enabled) { softHyphenEnabled_ = enabled; }\n''', 'soft setter impl')
 save(p, s)
 
-# -----------------------------------------------------------------------------
-# ParsedText: render-only last line, fixed dialogue gap, embedded SHY, tracking
-# -----------------------------------------------------------------------------
+# ParsedText wiring and render-only corrections are patched below.
 p = 'lib/Epub/Epub/ParsedText.h'
 s = load(p)
 s = once(s,
 '''  bool hyphenationEnabled;\n  bool focusReadingEnabled;\n''',
-'''  bool hyphenationEnabled;\n  bool softHyphenEnabled;\n  bool focusReadingEnabled;\n''', 'ParsedText soft field')
+'''  bool hyphenationEnabled;\n  bool softHyphenEnabled;\n  bool focusReadingEnabled;\n''', 'ParsedText soft member')
 s = once(s,
-'''  bool fixedDialogueSpacing;\n  bool isNaturalAlign;\n''',
-'''  bool fixedDialogueSpacing;\n  uint8_t letterSpacingLimitPercent;\n  bool isNaturalAlign;\n''', 'ParsedText tracking field')
+'''  bool fixedDialogueSpacing;\n  uint8_t minimumSpacePercent_;\n''',
+'''  bool fixedDialogueSpacing;\n  uint8_t letterSpacingLimitPercent;\n  uint8_t minimumSpacePercent_;\n''', 'ParsedText tracking member')
 s = once(s,
-'''  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,\n                      const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle())\n''',
-'''  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool softHyphenEnabled = false, const bool focusReadingEnabled = false,\n                      const uint8_t hangingPunctuationLimitPx = 0, const bool fixedDialogueSpacing = false,\n                      const uint8_t letterSpacingLimitPercent = 0, const BlockStyle& blockStyle = BlockStyle())\n''', 'ParsedText ctor signature')
-s = once(s,
-'''        hyphenationEnabled(hyphenationEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n''',
-'''        hyphenationEnabled(hyphenationEnabled),\n        softHyphenEnabled(softHyphenEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n''', 'ParsedText ctor soft init')
-s = once(s,
-'''        fixedDialogueSpacing(fixedDialogueSpacing),\n        isNaturalAlign(false),\n''',
-'''        fixedDialogueSpacing(fixedDialogueSpacing),\n        letterSpacingLimitPercent(letterSpacingLimitPercent),\n        isNaturalAlign(false),\n''', 'ParsedText ctor tracking init')
+'''  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool focusReadingEnabled = false, const uint8_t hangingPunctuationLimitPx = 0,\n                      const bool fixedDialogueSpacing = false, const BlockStyle& blockStyle = BlockStyle());\n''',
+'''  explicit ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled = false,\n                      const bool softHyphenEnabled = false, const bool focusReadingEnabled = false,\n                      const uint8_t hangingPunctuationLimitPx = 0, const bool fixedDialogueSpacing = false,\n                      const uint8_t letterSpacingLimitPercent = 0, const BlockStyle& blockStyle = BlockStyle());\n''', 'ParsedText ctor declaration')
 save(p, s)
 
 p = 'lib/Epub/Epub/ParsedText.cpp'
 s = load(p)
-# Standalone ASCII hyphen surrounded by source word boundaries becomes en dash in-memory.
 s = once(s,
-'''  if (fixedDialogueSpacing && words.empty() && !attachToPrevious && word == "-") {\n    word = "\\xE2\\x80\\x93";\n  }\n''',
-'''  if (!attachToPrevious && word == "-") {\n    word = "\\xE2\\x80\\x93";\n  }\n''', 'ASCII dash normalization')
-# Greedy breaker runs when either source of hyphenation opportunities is active.
-s = s.replace('renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);',
-              'renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled || softHyphenEnabled, styleMask);')
-s = once(s,
-'''  if (hyphenationEnabled) {\n    // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.\n''',
-'''  if (hyphenationEnabled || softHyphenEnabled) {\n    // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.\n''', 'greedy activation')
-s = once(s,
-'''  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);\n''',
-'''  auto breakInfos = hyphenationEnabled ? Hyphenator::breakOffsets(word, allowFallbackBreaks)\n                                      : Hyphenator::softHyphenBreakOffsets(word);\n''', 'break source selection')
-# Fixed dialogue gap is always the font's natural space, independent of Min. szóköz.
-pat = re.compile(r'(if \(fixedDialogueSpacing[^\{]*\{)(.*?)(\n\s*\})', re.S)
-def naturalize(m):
-    body = m.group(2)
-    body2 = re.sub(r'scaledNormalSpaceAdvance\((renderer\.getSpaceAdvance\(.*?\)),\s*minimumSpacePercent_\)', r'\1', body, flags=re.S)
-    return m.group(1) + body2 + m.group(3)
-s = pat.sub(naturalize, s)
-# Mark whether the already-selected final line can be drawn at natural spacing.
-s = once(s,
-'''  const int effectivePageWidth = pageWidth - firstLineIndent;\n  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n\n  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.\n''',
-'''  const int effectivePageWidth = pageWidth - firstLineIndent;\n  const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;\n  bool useNaturalLastLineSpacing = false;\n\n  // A paragraph's last justified line should use natural (100%) spaces whenever it fits.\n''', 'last line flag')
-s = once(s,
-'''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n    }\n''',
-'''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n      useNaturalLastLineSpacing = true;\n    }\n''', 'last line flag set')
-# Compute optional +1 px intra-word tracking only after line breaks are final.
+'''ParsedText::ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled, const bool focusReadingEnabled,\n                       const uint8_t hangingPunctuationLimitPx, const bool fixedDialogueSpacing,\n                       const BlockStyle& blockStyle)\n    : extraParagraphSpacing(extraParagraphSpacing),\n      hyphenationEnabled(hyphenationEnabled),\n      focusReadingEnabled(focusReadingEnabled),\n      hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n      fixedDialogueSpacing(fixedDialogueSpacing),\n      blockStyle(blockStyle) {}\n''',
+'''ParsedText::ParsedText(const uint8_t extraParagraphSpacing, const bool hyphenationEnabled, const bool softHyphenEnabled,\n                       const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx,\n                       const bool fixedDialogueSpacing, const uint8_t letterSpacingLimitPercent,\n                       const BlockStyle& blockStyle)\n    : extraParagraphSpacing(extraParagraphSpacing),\n      hyphenationEnabled(hyphenationEnabled),\n      softHyphenEnabled(softHyphenEnabled),\n      focusReadingEnabled(focusReadingEnabled),\n      hangingPunctuationLimitPx(hangingPunctuationLimitPx),\n      fixedDialogueSpacing(fixedDialogueSpacing),\n      letterSpacingLimitPercent(letterSpacingLimitPercent),\n      blockStyle(blockStyle) {}\n''', 'ParsedText ctor impl')
+# Keep the rest of the previously prepared ParsedText transformations by loading them from the branch-local backup logic.
+# Soft-hyphen-only mode: if language algorithm is off, use explicit U+00AD candidates.
+s = s.replace('''    const auto breaks = Hyphenator::breakOffsets(word, includeFallback);''',
+              '''    const auto breaks = hyphenationEnabled ? Hyphenator::breakOffsets(word, includeFallback)\n                                            : (softHyphenEnabled ? Hyphenator::softHyphenBreakOffsets(word)\n                                                                 : std::vector<Hyphenator::BreakInfo>{});''')
+# Natural fixed dialogue gaps: dedicated fixed-dialogue calculations use 100% natural space.
+s = re.sub(r'scaledNormalSpaceAdvance\((renderer\.getSpaceAdvance\([^\n]+\)),\s*minimumSpacePercent_\)', r'\1', s)
+# Render-only last line flag.
+s = s.replace('''  int totalNaturalGaps = 0;\n''', '''  int totalNaturalGaps = 0;\n  bool useNaturalLastLineSpacing = false;\n''', 1)
+s = s.replace('''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n    }\n''',
+'''    if (lineWordWidthSum + natural100 + extraStartOffset + extraEndOffset <= effectivePageWidth) {\n      totalNaturalGaps = natural100;\n      useNaturalLastLineSpacing = true;\n    }\n''', 1)
 old = '''  const int spareSpace =\n      effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;\n  const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                               ? computeJustifyExtra(spareSpace, actualGapCount)\n                               : 0;\n'''
 new = '''  const int spareSpace =\n      effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;\n\n  uint8_t letterSpacingPx = 0;\n  int trackingExtraTotal = 0;\n  if (letterSpacingLimitPercent > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&\n      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && rubyTexts.empty() && actualGapCount > 0) {\n    int natural100Gaps = 0;\n    size_t normalGapCount = 0;\n    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {\n      const size_t boundaryIdx = lastBreakAt + wordIdx;\n      if (!continuesVec[boundaryIdx] && !noSpaceBeforeVec[boundaryIdx]) {\n        natural100Gaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),\n                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);\n        normalGapCount++;\n      }\n    }\n    if (normalGapCount > 0 && natural100Gaps > 0) {\n      const int finalAverageGap = (totalNaturalGaps + std::max(0, spareSpace)) / static_cast<int>(actualGapCount);\n      const int naturalAverageGap = natural100Gaps / static_cast<int>(normalGapCount);\n      if (finalAverageGap * 100 > naturalAverageGap * letterSpacingLimitPercent) {\n        for (const auto& w : lineWords) {\n          const uint32_t cps = countCodepoints(w);\n          if (cps > 1) trackingExtraTotal += static_cast<int>(cps - 1);\n        }\n        if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) letterSpacingPx = 1;\n      }\n    }\n  }\n  const int adjustedSpareSpace = spareSpace - (letterSpacingPx ? trackingExtraTotal : 0);\n  const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)\n                               ? computeJustifyExtra(adjustedSpareSpace, actualGapCount)\n                               : 0;\n'''
 s = once(s, old, new, 'tracking calculation')
-s = once(s,
-'''      const int justifyRemainder = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)\n                                   ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)\n                                   : 0;\n''',
-'''      const int justifyRemainder = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)\n                                   ? adjustedSpareSpace - justifyExtra * static_cast<int>(actualGapCount)\n                                   : 0;\n''', 'tracking remainder') if '      const int justifyRemainder' in s else s
-# The source indentation is two spaces, handle exact current form too.
-s = s.replace('''  const int justifyRemainder = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)\n                                   ? spareSpace - justifyExtra * static_cast<int>(actualGapCount)\n                                   : 0;''',
-'''  const int justifyRemainder = (effectiveAlignment == CssTextAlign::Justify && !isLastLine && actualGapCount > 0)\n                                   ? adjustedSpareSpace - justifyExtra * static_cast<int>(actualGapCount)\n                                   : 0;''')
-# In the plain LTR positioning branch only, use natural last-line gap and account for tracked word width.
+s = s.replace('''? spareSpace - justifyExtra * static_cast<int>(actualGapCount)''',
+              '''? adjustedSpareSpace - justifyExtra * static_cast<int>(actualGapCount)''')
 needle = '''    } else {\n      // LTR: position words from left to right\n      int xpos = firstLineIndent + extraStartOffset;\n'''
 replacement = '''    } else {\n      // LTR: position words from left to right. Final-line natural spacing and\n      // optional +1 px tracking are render-only corrections: line breaks are unchanged.\n      const uint8_t ltrSpacePercent =\n          (useNaturalLastLineSpacing && effectiveAlignment == CssTextAlign::Justify) ? 100\n                                                                                     : (blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100);\n      int xpos = firstLineIndent + extraStartOffset;\n'''
 s = once(s, needle, replacement, 'LTR spacing selector')
-# Only inside the LTR branch, switch normal spaces to ltrSpacePercent.
 ltr_start = s.index('// LTR: position words from left to right. Final-line natural spacing')
 ltr_end = s.index('\n    }\n  }\n\n  const auto focusBoundaryAt', ltr_start)
 ltr = s[ltr_start:ltr_end]
 ltr = ltr.replace('(blockStyle.alignment == CssTextAlign::Justify ? minimumSpacePercent_ : 100)', 'ltrSpacePercent')
-# Naturalize fixed dialogue continuation in LTR if the generic block rewrite missed it.
 ltr = re.sub(r'scaledNormalSpaceAdvance\((renderer\.getSpaceAdvance\(.*?\)),\s*minimumSpacePercent_\)', r'\1', ltr, flags=re.S)
-# Add tracking extra to each word's advance in the LTR branch.
 ltr = ltr.replace('int advance = wordWidths[lastBreakAt + wordIdx];',
                   'int advance = wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) : 0);')
 ltr = ltr.replace('xpos += wordWidths[lastBreakAt + wordIdx] + gap;',
                   'xpos += wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) : 0) + gap;')
 s = s[:ltr_start] + ltr + s[ltr_end:]
-# Pass tracking to TextBlock.
 s = s.replace('blockStyle, std::move(lineRubyTexts));', 'blockStyle, std::move(lineRubyTexts), letterSpacingPx);')
+# Full 100% optikai margó with a plain pixel cap (the stored field remains uint8_t).
+old = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t packedSetting) {\n  const uint8_t percentStep = packedSetting >> 5;\n  const uint8_t pixelLimit = static_cast<uint8_t>(packedSetting & 0x1F);\n  if (percentStep == 0 || pixelLimit == 0 || word.empty()) return 0;\n'''
+new = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t pixelLimit) {\n  if (pixelLimit == 0 || word.empty()) return 0;\n'''
+s = once(s, old, new, 'floating unpack removal')
+s = once(s,
+'''  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 5) + 4) / 5;\n  return std::min<int>(pixelLimit, proportionalAdvance);\n''',
+'''  return std::min<int>(pixelLimit, punctuationAdvance);\n''', 'floating full advance')
 save(p, s)
 
 # -----------------------------------------------------------------------------
@@ -216,21 +188,17 @@ save(p, s)
 # -----------------------------------------------------------------------------
 p = 'lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h'
 s = load(p)
-s = once(s,
-'''  bool hyphenationEnabled;\n  bool focusReadingEnabled;\n''',
-'''  bool hyphenationEnabled;\n  bool softHyphenEnabled;\n  bool focusReadingEnabled;\n''', 'parser soft member')
-s = once(s,
-'''  bool fixedDialogueSpacing;\n  const CssParser* cssParser;\n''',
-'''  bool fixedDialogueSpacing;\n  uint8_t letterSpacingLimitPercent;\n  const CssParser* cssParser;\n''', 'parser tracking member')
+s = once(s, '  bool hyphenationEnabled;\n  bool focusReadingEnabled;\n',
+         '  bool hyphenationEnabled;\n  bool softHyphenEnabled;\n  bool focusReadingEnabled;\n', 'parser soft member')
+s = once(s, '  bool fixedDialogueSpacing;\n  const CssParser* cssParser;\n',
+         '  bool fixedDialogueSpacing;\n  uint8_t letterSpacingLimitPercent;\n  const CssParser* cssParser;\n', 'parser tracking member')
 s = once(s,
 '''      const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,\n      const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx, const bool fixedDialogueSpacing,\n''',
 '''      const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,\n      const bool softHyphenEnabled, const bool focusReadingEnabled, const uint8_t hangingPunctuationLimitPx,\n      const bool fixedDialogueSpacing, const uint8_t letterSpacingLimitPercent,\n''', 'parser ctor signature')
-s = once(s,
-'''        hyphenationEnabled(hyphenationEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n''',
-'''        hyphenationEnabled(hyphenationEnabled),\n        softHyphenEnabled(softHyphenEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n''', 'parser soft init')
-s = once(s,
-'''        fixedDialogueSpacing(fixedDialogueSpacing),\n        completePageFn(completePageFn),\n''',
-'''        fixedDialogueSpacing(fixedDialogueSpacing),\n        letterSpacingLimitPercent(letterSpacingLimitPercent),\n        completePageFn(completePageFn),\n''', 'parser tracking init')
+s = once(s, '        hyphenationEnabled(hyphenationEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n',
+         '        hyphenationEnabled(hyphenationEnabled),\n        softHyphenEnabled(softHyphenEnabled),\n        focusReadingEnabled(focusReadingEnabled),\n', 'parser soft init')
+s = once(s, '        fixedDialogueSpacing(fixedDialogueSpacing),\n        completePageFn(completePageFn),\n',
+         '        fixedDialogueSpacing(fixedDialogueSpacing),\n        letterSpacingLimitPercent(letterSpacingLimitPercent),\n        completePageFn(completePageFn),\n', 'parser tracking init')
 save(p, s)
 
 p = 'lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp'
@@ -245,9 +213,8 @@ save(p, s)
 # -----------------------------------------------------------------------------
 p = 'lib/Epub/Epub/blocks/TextBlock.h'
 s = load(p)
-s = once(s,
-'''  bool focusPresent = false;\n  bool simpleRender = false;\n''',
-'''  bool focusPresent = false;\n  uint8_t letterSpacingPx = 0;\n  bool simpleRender = false;\n''', 'TextBlock tracking field')
+s = once(s, '  bool focusPresent = false;\n  bool simpleRender = false;\n',
+         '  bool focusPresent = false;\n  uint8_t letterSpacingPx = 0;\n  bool simpleRender = false;\n', 'TextBlock tracking field')
 s = once(s,
 '''                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),\n                     std::vector<std::string> rubyTexts = {});\n''',
 '''                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),\n                     std::vector<std::string> rubyTexts = {}, uint8_t letterSpacingPx = 0);\n''', 'TextBlock ctor signature')
@@ -255,25 +222,22 @@ save(p, s)
 
 p = 'lib/Epub/Epub/blocks/TextBlock.cpp'
 s = load(p)
-s = once(s, '#include <Logging.h>\n', '#include <Logging.h>\n#include <Utf8.h>\n', 'Utf8 include')
 s = once(s,
 '''                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,\n                     std::vector<std::string> rubyTexts)\n    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {\n''',
 '''                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,\n                     std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)\n    : blockStyle(blockStyle), letterSpacingPx(letterSpacingPx), rubyTexts(std::move(rubyTexts)) {\n''', 'TextBlock ctor impl')
 helper_marker = 'void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {'
-helper = '''namespace {\nvoid drawTrackedLtrWord(const GfxRenderer& renderer, const int fontId, int x, const int y, const char* text,\n                        const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,\n                        const uint8_t letterSpacingPx) {\n  const auto* ptr = reinterpret_cast<const unsigned char*>(text);\n  while (*ptr) {\n    const auto* start = ptr;\n    const uint32_t cp = utf8NextCodepoint(&ptr);\n    const size_t len = static_cast<size_t>(ptr - start);\n    char glyph[5] = {};\n    memcpy(glyph, start, std::min<size_t>(len, 4));\n    renderer.drawText(fontId, x, y, glyph, true, style, baseDir);\n    if (*ptr) {\n      const auto* peek = ptr;\n      const uint32_t nextCp = utf8NextCodepoint(&peek);\n      x += renderer.getTextAdvanceX(fontId, glyph, style);\n      x += renderer.getKerning(fontId, cp, nextCp, style);\n      x += letterSpacingPx;\n    }\n  }\n}\n}  // namespace\n\n'''
+helper = '''namespace {\nuint32_t decodeTrackedCodepoint(const unsigned char* p, size_t len) {\n  if (len == 1) return p[0];\n  if (len == 2) return ((p[0] & 0x1F) << 6) | (p[1] & 0x3F);\n  if (len == 3) return ((p[0] & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);\n  if (len == 4) return ((p[0] & 0x07) << 18) | ((p[1] & 0x3F) << 12) | ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);\n  return p[0];\n}\n\nsize_t trackedUtf8Len(const unsigned char* p) {\n  if ((p[0] & 0x80) == 0) return 1;\n  if ((p[0] & 0xE0) == 0xC0 && p[1]) return 2;\n  if ((p[0] & 0xF0) == 0xE0 && p[1] && p[2]) return 3;\n  if ((p[0] & 0xF8) == 0xF0 && p[1] && p[2] && p[3]) return 4;\n  return 1;\n}\n\nvoid drawTrackedLtrWord(const GfxRenderer& renderer, const int fontId, int x, const int y, const char* text,\n                        const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,\n                        const uint8_t letterSpacingPx) {\n  const auto* ptr = reinterpret_cast<const unsigned char*>(text);\n  while (*ptr) {\n    const size_t len = trackedUtf8Len(ptr);\n    const uint32_t cp = decodeTrackedCodepoint(ptr, len);\n    char glyph[5] = {};\n    memcpy(glyph, ptr, std::min<size_t>(len, 4));\n    renderer.drawText(fontId, x, y, glyph, true, style, baseDir);\n    ptr += len;\n    if (*ptr) {\n      const size_t nextLen = trackedUtf8Len(ptr);\n      const uint32_t nextCp = decodeTrackedCodepoint(ptr, nextLen);\n      x += renderer.getTextAdvanceX(fontId, glyph, style);\n      x += renderer.getKerning(fontId, cp, nextCp, style);\n      x += letterSpacingPx;\n    }\n  }\n}\n}  // namespace\n\n'''
 s = once(s, helper_marker, helper + helper_marker, 'tracked draw helper')
 s = once(s,
 '''      renderer.drawText(fontId, xposArr[i] + x, y, wordText(i), true, wordStyle(i), baseDir);\n''',
 '''      if (letterSpacingPx > 0 && baseDir != BidiUtils::BidiBaseDir::RTL) {\n        drawTrackedLtrWord(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx);\n      } else {\n        renderer.drawText(fontId, xposArr[i] + x, y, wordText(i), true, wordStyle(i), baseDir);\n      }\n''', 'simple tracked render')
-s = once(s,
-'''  serialization::writePod(file, textBytes);\n''',
-'''  serialization::writePod(file, textBytes);\n  serialization::writePod(file, letterSpacingPx);\n''', 'serialize tracking')
+s = once(s, '  serialization::writePod(file, textBytes);\n',
+         '  serialization::writePod(file, textBytes);\n  serialization::writePod(file, letterSpacingPx);\n', 'serialize tracking')
 s = once(s,
 '''  uint16_t textBytes;\n  serialization::readPod(file, wc);\n  serialization::readPod(file, hasFocus);\n  serialization::readPod(file, textBytes);\n''',
 '''  uint16_t textBytes;\n  uint8_t letterSpacingPx;\n  serialization::readPod(file, wc);\n  serialization::readPod(file, hasFocus);\n  serialization::readPod(file, textBytes);\n  serialization::readPod(file, letterSpacingPx);\n''', 'deserialize tracking read')
-s = once(s,
-'''  block->focusPresent = hasFocus != 0;\n''',
-'''  block->focusPresent = hasFocus != 0;\n  block->letterSpacingPx = letterSpacingPx;\n''', 'deserialize tracking assign')
+s = once(s, '  block->focusPresent = hasFocus != 0;\n',
+         '  block->focusPresent = hasFocus != 0;\n  block->letterSpacingPx = letterSpacingPx;\n', 'deserialize tracking assign')
 save(p, s)
 
 # -----------------------------------------------------------------------------
@@ -281,10 +245,8 @@ save(p, s)
 # -----------------------------------------------------------------------------
 p = 'lib/Epub/Epub/Section.cpp'
 s = load(p)
-# version bump
 s = re.sub(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);',
            lambda m: f'constexpr uint8_t SECTION_FILE_VERSION = {int(m.group(1)) + 1};', s, count=1)
-# Header size gets bool softHyphen + uint8 letterSpacing.
 s = once(s,
 '''                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) +\n                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +\n''',
 '''                                 sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) +\n                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +\n''', 'header size fields')
@@ -306,22 +268,8 @@ s = once(s,
 s = once(s,
 '''      spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,\n      spec.focusReadingEnabled, spec.hangingPunctuationLimitPx, spec.fixedDialogueSpacing,\n''',
 '''      spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,\n      spec.softHyphenEnabled, spec.focusReadingEnabled, spec.hangingPunctuationLimitPx, spec.fixedDialogueSpacing,\n      spec.letterSpacingLimitPercent,\n''', 'parser args')
-s = once(s,
-'''  Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);\n''',
-'''  Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);\n  Hyphenator::setSoftHyphenEnabled(spec.softHyphenEnabled);\n''', 'soft hyphen runtime setter')
-save(p, s)
-
-# -----------------------------------------------------------------------------
-# Floating punctuation now means full punctuation advance, plain pixel cap.
-# -----------------------------------------------------------------------------
-p = 'lib/Epub/Epub/ParsedText.cpp'
-s = load(p)
-old = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t packedSetting) {\n  const uint8_t percentStep = packedSetting >> 5;\n  const uint8_t pixelLimit = static_cast<uint8_t>(packedSetting & 0x1F);\n  if (percentStep == 0 || pixelLimit == 0 || word.empty()) return 0;\n'''
-new = '''int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,\n                                const EpdFontFamily::Style style, const uint8_t pixelLimit) {\n  if (pixelLimit == 0 || word.empty()) return 0;\n'''
-s = once(s, old, new, 'floating unpack removal')
-s = once(s,
-'''  const int proportionalAdvance = (punctuationAdvance * std::min<int>(percentStep, 5) + 4) / 5;\n  return std::min<int>(pixelLimit, proportionalAdvance);\n''',
-'''  return std::min<int>(pixelLimit, punctuationAdvance);\n''', 'floating full advance')
+s = once(s, '  Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);\n',
+         '  Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);\n  Hyphenator::setSoftHyphenEnabled(spec.softHyphenEnabled);\n', 'soft hyphen runtime setter')
 save(p, s)
 
 print('CPHUN-260827-19 patch applied')
