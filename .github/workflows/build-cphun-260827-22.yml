@@ -1,0 +1,67 @@
+name: Build CPHUN-260827-22 Forced Tracking Diagnostic
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - tools/cphun_22_forced_tracking_diag.py
+      - .github/workflows/build-cphun-260827-22.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    env:
+      CPHUN_BUILD_ID: CPHUN-260827-22
+    steps:
+      - name: Run actions/checkout@v4
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply forced +2px tracking diagnostic
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_22_forced_tracking_diag.py
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S tests -B tests/build
+
+      - name: Build unit tests
+        run: cmake --build tests/build -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir tests/build --output-on-failure
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install PlatformIO Core
+        run: uv tool install platformio
+
+      - name: Build X4 firmware
+        run: pio run -e x4
+
+      - name: Commit validated CPHUN-260827-22 source
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add lib/Epub/Epub/ParsedText.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260827-22: force +2px tracking diagnostic"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260827-22 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260827-22-Forced-Tracking-2px-FW
+          path: .pio/build/x4/firmware.bin
+          if-no-files-found: error
