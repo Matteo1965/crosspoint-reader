@@ -44,7 +44,7 @@ namespace {
 //      repeating Unicode direction detection on every page redraw.
 // v50: Section cache header now includes letterSpacingLimitPercent, so changing
 //      Betűköz korrekció invalidates cached layout and rebuilds affected sections.
-constexpr uint8_t SECTION_FILE_VERSION = 50;
+constexpr uint8_t SECTION_FILE_VERSION = 51;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
