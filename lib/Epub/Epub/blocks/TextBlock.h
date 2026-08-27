@@ -23,6 +23,7 @@
 //   int16_t  xpos[wordCount]
 //   uint16_t focusSuffixX[wordCount]   present only when focusPresent
 //   uint8_t  styles[wordCount]
+//   uint8_t  bidiDir[wordCount]        low bit = direction, high bit = 1px tracking flag
 //   uint8_t  focusBoundary[wordCount]  present only when focusPresent
 //   char     text[textBytes]           all words back to back, NUL-terminated
 //
@@ -89,7 +90,7 @@ class TextBlock final : public Block {
   }
   int16_t wordXpos(const uint16_t i) const { return xposArr[i]; }
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
-  uint8_t wordBidiDir(const uint16_t i) const { return bidiDirArr[i]; }
+  uint8_t wordBidiDir(const uint16_t i) const { return bidiDirArr[i] & 0x01; }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
   uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
   bool hasRuby() const;
