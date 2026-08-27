@@ -396,6 +396,9 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, numWords);
   serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
   serialization::writePod(file, textBytes);
+  // CPHUN-260827-24: persist the actual tracking value. The bidi high bit only
+  // records tracking presence and cannot distinguish +1 px from +2 px.
+  serialization::writePod(file, letterSpacingPx);
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
     if (file.write(arena.get(), size) != size) {
@@ -432,9 +435,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint16_t wc;
   uint8_t hasFocus;
   uint16_t textBytes;
+  uint8_t cachedLetterSpacingPx = 0;
   serialization::readPod(file, wc);
   serialization::readPod(file, hasFocus);
   serialization::readPod(file, textBytes);
+  serialization::readPod(file, cachedLetterSpacingPx);
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -468,9 +473,9 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
       return nullptr;
     }
     block->bindArenaPointers();
-    // Backward-compatible cache packing: old caches have only 0/1 here, new
-    // caches use the high bit to persist the line's 1 px tracking flag.
-    block->letterSpacingPx = (block->bidiDirArr[0] & 0x80) != 0 ? 1 : 0;
+    // Cache v52 stores the exact tracking value explicitly, preserving diagnostic
+    // +2 px tracking instead of collapsing every non-zero value to +1 px.
+    block->letterSpacingPx = cachedLetterSpacingPx;
 
     // Validate offsets before anything dereferences wordText(): offset 0 first,
     // strictly increasing, in bounds, and every word NUL-terminated (word i ends
