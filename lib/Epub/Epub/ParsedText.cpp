@@ -1477,8 +1477,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   uint8_t letterSpacingPx = 0;
   int trackingExtraTotal = 0;
+  const bool lineHasRubyAnnotation =
+      std::any_of(lineRubyTexts.begin(), lineRubyTexts.end(), [](const std::string& ruby) { return !ruby.empty(); });
   if (letterSpacingLimitPercent > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
-      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && rubyTexts.empty() && actualGapCount > 0) {
+      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && !lineHasRubyAnnotation && actualGapCount > 0) {
     int natural100Gaps = 0;
     size_t normalGapCount = 0;
     for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
