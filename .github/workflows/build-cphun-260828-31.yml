@@ -1,0 +1,98 @@
+name: Build CPHUN-260828-31 Corrected Tracking Scale
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - tools/cphun_31_tracking_scale_360_180_and_version_info.py
+      - .github/workflows/build-cphun-260828-31.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260828-31
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout typography branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-30 baseline
+        run: |
+          set -euo pipefail
+          grep -q '0, 600, 500, 420, 360, 300, 240, 180' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' src/CrossPointSettings.h
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'uint16_t letterSpacingLimitPercent;' lib/Epub/Epub/ParsedText.h
+          grep -q 'uint16_t letterSpacingLimitPercent;' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          grep -q 'const bool fixedDialogueSpacing, const uint16_t letterSpacingLimitPercent' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          grep -q 'letterSpacingPx = 1' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Apply CPHUN-31 scale and version info
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_31_tracking_scale_360_180_and_version_info.py
+          git diff --check
+          grep -q '0, 360, 330, 300, 270, 240, 210, 180' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '360, 330, 300, 270, 240, 210, 180' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'letterSpacingLimitPercent != 210' src/CrossPointSettings.cpp
+          grep -q 'letterSpacingLimitPercent != 270' src/CrossPointSettings.cpp
+          grep -q 'letterSpacingLimitPercent != 330' src/CrossPointSettings.cpp
+          grep -q 'Beágyazott elválasztás (Soft hyphen)' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'CPHUN-260828-31' src/CPHUNBuildId.h
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260828-31 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/activities/settings/TextSettingsActivity.cpp src/CrossPointSettings.cpp \
+                  src/activities/settings/CrossPointVersionActivity.cpp src/CPHUNBuildId.h
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260828-31: corrected tracking scale and version info"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260828-31 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260828-31-Tracking-Scale-360-180-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
