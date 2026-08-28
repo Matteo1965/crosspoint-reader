@@ -130,7 +130,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, x, y, "crosspoint-reader/releases");
     y += linkLineHeight + bodyLineHeight;
 
-    drawWrapped(UI_12_FONT_ID, hu ? "A Hungarian Edition főbb fejlesztései:" : "Key Hungarian Edition improvements:", true);
+    drawWrapped(UI_12_FONT_ID, hu ? "A Hungarian Edition fő fejlesztései:" : "Key Hungarian Edition improvements:", true);
     const char* features[] = {
         hu ? "- Magyar felhasználói felület" : "- Hungarian user interface",
         hu ? "- Magyar szótár és szótövezés → 2. oldal" : "- Hungarian dictionary and stemming → page 2",
@@ -158,38 +158,32 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawWrapped(UI_12_FONT_ID, hu ? "Magyar elválasztás" : "Hungarian hyphenation", true);
     y += bodyLineHeight;
     drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
-                hu ? "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, saját kiegészítésekkel és továbbfejlesztésekkel."
-                   : "Hungarian hyphenation is based on Bence Nagy's Huhyphn patterns, with custom additions and improvements.");
-    drawSection(hu ? "Dupla kettős mássalhangzók elválasztása" : "Long Hungarian multigraph consonants",
-                hu ? "A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
-                   : "Support for correct Hungarian hyphenation of long multigraph consonants.");
+                hu ? "Nagy Bence Huhyphn elválasztási mintái, saját kiegészítésekkel és továbbfejlesztésekkel. A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
+                   : "Bence Nagy's Huhyphn patterns with custom additions and improvements, including correct Hungarian hyphenation of long multigraph consonants.");
     drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
-                hu ? "Az EPUB-ban beágyazott feltételes elválasztási pontok támogatása és megfelelő megjelenítése, opcionálisan aktiválható funkcióként."
-                   : "Support and correct display of conditional hyphenation points embedded in EPUB files, as an optional feature.");
+                hu ? "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként."
+                   : "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
     drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
-                hu ? "Angol és magyar nyelvű elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
+                hu ? "Angol és magyar elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
                    : "English and Hungarian hyphenation are supported. The firmware contains no hyphenation patterns for other languages.");
   } else {
     drawWrapped(UI_12_FONT_ID, hu ? "Sorkizárás és tipográfia" : "Justification and typography", true);
     y += bodyLineHeight;
     drawSection(hu ? "Javított sorkizárt szedés" : "Improved justified text",
-                hu ? "A sorkizárt szöveg egyenletesebb megjelenítése, a túl nagy szóközök csökkentésével."
-                   : "More even justified text by reducing excessively large word spaces.");
+                hu ? "Egyenletesebb szövegkép a túl nagy szóközök csökkentésével."
+                   : "More even text by reducing excessively large word spaces.");
     drawSection(hu ? "Betűköz-korrekció" : "Letter-spacing correction",
-                hu ? "A túl nagy szóközök mérséklése a betűköz finom növelésével. A korrekció mértéke az olvasó beállításaiban szabályozható."
-                   : "Reduces excessive word spacing by subtly increasing letter spacing. The correction level is adjustable in reader settings.");
-    drawSection(hu ? "Minimális szóköz" : "Minimum word spacing",
-                hu ? "A sorkizárás során alkalmazható legkisebb szóköz 50–100% között állítható."
-                   : "The minimum word spacing used for justification can be adjusted between 50–100%.");
-    drawSection(hu ? "Párbeszédköz javítása" : "Dialogue spacing correction",
-                hu ? "A párbeszédjeleket követő hiányzó vagy túl nagy szóközök automatikus korrekciója."
-                   : "Automatically corrects missing or excessive spacing after dialogue marks.");
+                hu ? "A túl nagy szóközök mérséklése a betűköz finom növelésével."
+                   : "Reduces excessive word spacing by subtly increasing letter spacing.");
+    drawSection(hu ? "Szó- és párbeszédközök" : "Word and dialogue spacing",
+                hu ? "A minimális szóköz 50–100% között állítható, a hibás párbeszédközök automatikusan javíthatók."
+                   : "Minimum word spacing is adjustable between 50–100%, and incorrect dialogue spacing can be corrected automatically.");
     drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
-                hu ? "A bekezdések közötti térköz növelése a szöveg tagoltabb megjelenítéséhez."
-                   : "Increases spacing between paragraphs for clearer text structure.");
+                hu ? "A bekezdések közötti térköz növelése."
+                   : "Increases spacing between paragraphs.");
     drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
-                hu ? "Az írásjelek optikai margóba helyezésével egyenletesebb szövegszél alakítható ki."
-                   : "Places punctuation into the optical margin for a more even text edge.");
+                hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszél alakítható ki."
+                   : "Places punctuation into the margin for a more even text edge.");
   }
 
   const auto labels =
