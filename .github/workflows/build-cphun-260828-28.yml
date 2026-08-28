@@ -1,0 +1,105 @@
+name: Build CPHUN-260828-28 Gentler Tracking Scale
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - tools/cphun_28_tracking_threshold_scale_360_180.py
+      - .github/workflows/build-cphun-260828-28.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260828-28
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout typography branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-27 baseline
+        run: |
+          set -euo pipefail
+          grep -q 'SECTION_FILE_VERSION = 52' lib/Epub/Epub/Section.cpp
+          grep -q 'uint8_t letterSpacingLimitPercent = 0' src/CrossPointSettings.h
+          grep -q 'uint8_t letterSpacingLimitPercent = 0' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q '260 - idx \* 20' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'letterSpacingPx = 1' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Apply 360-180 percent threshold scale
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_28_tracking_threshold_scale_360_180.py
+          git diff --check
+          grep -q 'SECTION_FILE_VERSION = 53' lib/Epub/Epub/Section.cpp
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' src/CrossPointSettings.h
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'uint16_t letterSpacingLimitPercent;' lib/Epub/Epub/ParsedText.h
+          grep -q 'const uint16_t letterSpacingLimitPercent = 0' lib/Epub/Epub/ParsedText.h
+          grep -q 'uint16_t fileLetterSpacingLimitPercent' lib/Epub/Epub/Section.cpp
+          grep -q 'letterSpacingLimitPercent < 180' src/CrossPointSettings.cpp
+          grep -q 'letterSpacingLimitPercent > 360' src/CrossPointSettings.cpp
+          grep -q 'letterSpacingLimitPercent % 30' src/CrossPointSettings.cpp
+          grep -q '360 - SETTINGS.letterSpacingLimitPercent' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '390 - idx \* 30' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '(390 - SETTINGS.letterSpacingLimitPercent) / 3' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'finalAverageGap \* 100 > naturalAverageGap \* letterSpacingLimitPercent' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'letterSpacingPx = 1' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260828-28 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp \
+                  src/activities/settings/TextSettingsActivity.cpp \
+                  lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/ParsedText.h lib/Epub/Epub/Section.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260828-28: tune tracking correction scale"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260828-28 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260828-28-Tracking-Scale-360-180-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
