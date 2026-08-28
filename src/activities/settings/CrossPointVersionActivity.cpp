@@ -13,7 +13,7 @@
 
 namespace {
 
-constexpr int PAGE_COUNT = 3;
+constexpr int PAGE_COUNT = 4;
 constexpr int SIDE_PADDING = 20;
 
 }  // namespace
@@ -77,6 +77,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
   int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int bodyLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int linkLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const bool hu = I18N.getLanguage() == Language::HU;
 
   const auto drawWrapped = [&](const int fontId, const char* text, const bool bold = false) {
     const auto family = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
@@ -104,8 +105,9 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     }
   };
 
-  const auto drawParagraph = [&](const StrId id, const bool bold = false) {
-    drawWrapped(UI_12_FONT_ID, I18N.get(id), bold);
+  const auto drawSection = [&](const char* title, const char* text) {
+    drawWrapped(UI_12_FONT_ID, title, true);
+    drawWrapped(UI_12_FONT_ID, text);
     y += bodyLineHeight;
   };
 
@@ -118,8 +120,8 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
     drawLabelValue(tr(STR_EDITION), "Hungarian Edition");
     drawWrapped(UI_12_FONT_ID, CPHUN_BUILD_ID);
-    const std::string buildDate = std::string(__DATE__) + " " + __TIME__;
-    drawLabelValue(tr(STR_BUILD_DATE), buildDate.c_str());
+    const std::string buildDate = std::string(__DATE__) + " " + __TIME__ + " GMT";
+    drawLabelValue(hu ? "Dátum" : "Date", buildDate.c_str());
 
     y += bodyLineHeight;
     drawWrapped(UI_12_FONT_ID, tr(STR_GITHUB_RELEASES), true);
@@ -128,65 +130,66 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, x, y, "crosspoint-reader/releases");
     y += linkLineHeight + bodyLineHeight;
 
-    drawWrapped(UI_12_FONT_ID, tr(STR_DIFFERENCES_FROM_BASE), true);
-    const StrId features[] = {StrId::STR_FEATURE_HUNGARIAN_UI, StrId::STR_FEATURE_HUNGARIAN_HYPHENATION,
-                              StrId::STR_FEATURE_HUNGARIAN_STEMMING, StrId::STR_FEATURE_DICTIONARY_DISPLAY};
-    for (const StrId feature : features) {
-      const char* featureText = feature == StrId::STR_FEATURE_HUNGARIAN_STEMMING
-                                    ? "Magyar szótövezés: 357 új szóalak"
-                                    : I18N.get(feature);
-      const std::string line = std::string("- ") + featureText;
-      drawWrapped(UI_12_FONT_ID, line.c_str());
-    }
-    const bool hu = I18N.getLanguage() == Language::HU;
-    const char* extraFeatures[] = {
-        hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
-        hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
-        hu ? "Javított sorkizárt szedés" : "Improved justified text layout",
-        hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
-        hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",
-        hu ? "Fix párbeszédköz: Min. szóköz szerint" : "Fixed dialogue space follows Min. word spacing",
-        hu ? "Hiányzó párbeszédközök pótlása" : "Recover missing dialogue space",
+    drawWrapped(UI_12_FONT_ID, hu ? "A Hungarian Edition főbb fejlesztései:" : "Key Hungarian Edition improvements:", true);
+    const char* features[] = {
+        hu ? "- Magyar felhasználói felület" : "- Hungarian user interface",
+        hu ? "- Magyar szótár és szótövezés → 2. oldal" : "- Hungarian dictionary and stemming → page 2",
+        hu ? "- Magyar elválasztás → 3. oldal" : "- Hungarian hyphenation → page 3",
+        hu ? "- Sorkizárás és tipográfia → 4. oldal" : "- Justification and typography → page 4",
     };
-    for (const char* featureText : extraFeatures) {
-      const std::string line = std::string("- ") + featureText;
-      drawWrapped(UI_12_FONT_ID, line.c_str());
-    }
+    for (const char* feature : features) drawWrapped(UI_12_FONT_ID, feature);
   } else if (currentPage == 1) {
-    const bool hu = I18N.getLanguage() == Language::HU;
-    if (hu) {
-      drawWrapped(UI_12_FONT_ID, "Szótár telepítése szükséges", true);
-      y += bodyLineHeight;
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_NOT_INCLUDED));
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_INSTALL_SEPARATELY));
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_STARDICT_FILES_INTRO));
-      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
-      y += bodyLineHeight;
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
-      y += bodyLineHeight;
-      drawWrapped(UI_12_FONT_ID, "Javított magyar szótárkezelés", true);
-      drawWrapped(UI_12_FONT_ID,
-                  "A magyar nyelvhez külön továbbfejlesztett szótárkezelés ragozott és toldalékolt "
-                  "szóalakok esetén is segíti a megfelelő szótári címszó megtalálását.");
-    } else {
-      drawParagraph(StrId::STR_DICTIONARY_REQUIRED, true);
-      drawParagraph(StrId::STR_DICTIONARY_NOT_INCLUDED);
-      drawParagraph(StrId::STR_DICTIONARY_INSTALL_SEPARATELY);
-      drawParagraph(StrId::STR_STARDICT_FILES_INTRO);
-      renderer.drawText(UI_12_FONT_ID, x, y, ".ifo + .idx + .dict");
-      y += bodyLineHeight * 2;
-      drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_DICTIONARY_LICENSE_NOTICE));
-    }
+    drawWrapped(UI_12_FONT_ID, hu ? "Magyar szótár és szótövezés" : "Hungarian dictionary and stemming", true);
+    y += bodyLineHeight;
+    drawSection(hu ? "StarDict szótárak" : "StarDict dictionaries",
+                hu ? "A szótárak külön telepíthetők, és nem részei a firmware-nek."
+                   : "Dictionaries are installed separately and are not part of the firmware.");
+    drawWrapped(UI_12_FONT_ID,
+                hu ? "Támogatott formátum: szabványos StarDict szótárak"
+                   : "Supported format: standard StarDict dictionaries");
+    y += bodyLineHeight;
+    drawSection(hu ? "Javított magyar szótárkezelés" : "Improved Hungarian dictionary handling",
+                hu ? "A továbbfejlesztett szótárkezelés a ragozott és toldalékolt szóalakok esetén is segíti a megfelelő szótári címszó megtalálását."
+                   : "Improved dictionary handling helps find the appropriate headword for inflected and suffixed Hungarian word forms.");
+    drawSection(hu ? "Magyar szótövezés" : "Hungarian stemming",
+                hu ? "357 egyedi szóalak-kezelési kiegészítés a pontosabb címszókereséshez."
+                   : "357 unique word-form handling additions for more accurate headword lookup.");
+  } else if (currentPage == 2) {
+    drawWrapped(UI_12_FONT_ID, hu ? "Magyar elválasztás" : "Hungarian hyphenation", true);
+    y += bodyLineHeight;
+    drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
+                hu ? "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, saját kiegészítésekkel és továbbfejlesztésekkel."
+                   : "Hungarian hyphenation is based on Bence Nagy's Huhyphn patterns, with custom additions and improvements.");
+    drawSection(hu ? "Dupla kettős mássalhangzók elválasztása" : "Long Hungarian multigraph consonants",
+                hu ? "A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
+                   : "Support for correct Hungarian hyphenation of long multigraph consonants.");
+    drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
+                hu ? "Az EPUB-ban beágyazott feltételes elválasztási pontok támogatása és megfelelő megjelenítése, opcionálisan aktiválható funkcióként."
+                   : "Support and correct display of conditional hyphenation points embedded in EPUB files, as an optional feature.");
+    drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
+                hu ? "Angol és magyar nyelvű elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
+                   : "English and Hungarian hyphenation are supported. The firmware contains no hyphenation patterns for other languages.");
   } else {
-    drawParagraph(StrId::STR_HYPHENATION_LANGUAGES, true);
-    drawParagraph(StrId::STR_HYPHENATION_LANGUAGES_NOTICE);
-    drawWrapped(UI_12_FONT_ID, I18N.get(StrId::STR_HYPHENATION_OTHER_LANGUAGES_NOTICE));
-    if (I18N.getLanguage() == Language::HU) {
-      y += bodyLineHeight;
-      drawWrapped(UI_12_FONT_ID,
-                  "A magyar elválasztás Nagy Bence Huhyphn elválasztási mintáira épül, amelyeket saját "
-                  "kiegészítéseinkkel és továbbfejlesztéseinkkel bővítettünk.");
-    }
+    drawWrapped(UI_12_FONT_ID, hu ? "Sorkizárás és tipográfia" : "Justification and typography", true);
+    y += bodyLineHeight;
+    drawSection(hu ? "Javított sorkizárt szedés" : "Improved justified text",
+                hu ? "A sorkizárt szöveg egyenletesebb megjelenítése, a túl nagy szóközök csökkentésével."
+                   : "More even justified text by reducing excessively large word spaces.");
+    drawSection(hu ? "Betűköz-korrekció" : "Letter-spacing correction",
+                hu ? "A túl nagy szóközök mérséklése a betűköz finom növelésével. A korrekció mértéke az olvasó beállításaiban szabályozható."
+                   : "Reduces excessive word spacing by subtly increasing letter spacing. The correction level is adjustable in reader settings.");
+    drawSection(hu ? "Minimális szóköz" : "Minimum word spacing",
+                hu ? "A sorkizárás során alkalmazható legkisebb szóköz 50–100% között állítható."
+                   : "The minimum word spacing used for justification can be adjusted between 50–100%.");
+    drawSection(hu ? "Párbeszédköz javítása" : "Dialogue spacing correction",
+                hu ? "A párbeszédjeleket követő hiányzó vagy túl nagy szóközök automatikus korrekciója."
+                   : "Automatically corrects missing or excessive spacing after dialogue marks.");
+    drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
+                hu ? "A bekezdések közötti térköz növelése a szöveg tagoltabb megjelenítéséhez."
+                   : "Increases spacing between paragraphs for clearer text structure.");
+    drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
+                hu ? "Az írásjelek optikai margóba helyezésével egyenletesebb szövegszél alakítható ki."
+                   : "Places punctuation into the optical margin for a more even text edge.");
   }
 
   const auto labels =
