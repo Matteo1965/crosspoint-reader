@@ -1,0 +1,3 @@
+CPHUN-260828-32
+Four-page version information
+Tracking scale: 10%=500, 20%=450, 30%=400, 40%=350, 50%=300, 60%=250, 70%=200
