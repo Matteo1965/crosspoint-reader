@@ -214,9 +214,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fontPointSize = storedFontSize;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
   softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
-  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint8_t)0;
+  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
   if (letterSpacingLimitPercent != 0 &&
-      (letterSpacingLimitPercent < 120 || letterSpacingLimitPercent > 240 || letterSpacingLimitPercent % 20 != 0)) {
+      (letterSpacingLimitPercent < 180 || letterSpacingLimitPercent > 360 || letterSpacingLimitPercent % 30 != 0)) {
     letterSpacingLimitPercent = 0;
     needsResave = true;
   }

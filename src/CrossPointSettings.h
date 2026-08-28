@@ -246,8 +246,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
   uint8_t fixedDialogueSpacing = 0;
   // 0 disables the post-layout +1 px letter-spacing correction; otherwise the
-  // value is the word-space stretch threshold in percent (120..240).
-  uint8_t letterSpacingLimitPercent = 0;
+  // value is the word-space stretch threshold in percent (180..360).
+  uint16_t letterSpacingLimitPercent = 0;
   // Minimum natural word-space width in justified text: 50..100 percent.
   uint8_t minimumSpacePercent = 100;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.

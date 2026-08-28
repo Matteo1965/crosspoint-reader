@@ -429,17 +429,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       break;
     }
     case LayoutRow::LetterSpacingCorrection: {
-      // CPHUN-260827-27: expose correction strength in the intuitive direction:
-      // higher UI percentage means more lines are eligible for +1 px tracking.
-      // Internally we keep the proven CPHUN-26 activation thresholds unchanged.
+      // CPHUN-260828-28: gentler production scale. Higher UI percentage still
+      // means more lines are eligible, but thresholds now span 360% down to 180%.
       const char* options[] = {tr(STR_STATE_OFF), "10%", "20%", "30%", "40%", "50%", "60%", "70%"};
       int cur = 0;
-      if (SETTINGS.letterSpacingLimitPercent >= 120 && SETTINGS.letterSpacingLimitPercent <= 240) {
-        cur = 1 + (240 - SETTINGS.letterSpacingLimitPercent) / 20;
+      if (SETTINGS.letterSpacingLimitPercent >= 180 && SETTINGS.letterSpacingLimitPercent <= 360 &&
+          SETTINGS.letterSpacingLimitPercent % 30 == 0) {
+        cur = 1 + (360 - SETTINGS.letterSpacingLimitPercent) / 30;
       }
       optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",
                         options, 8, cur, [](int idx) {
-                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint8_t>(260 - idx * 20);
+                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint16_t>(390 - idx * 30);
                           SETTINGS.saveToFile();
                         });
       requestUpdate();
@@ -487,8 +487,9 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::HangingPunctuation:
       return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::LetterSpacingCorrection:
-      if (SETTINGS.letterSpacingLimitPercent >= 120 && SETTINGS.letterSpacingLimitPercent <= 240) {
-        return std::to_string((260 - SETTINGS.letterSpacingLimitPercent) / 2) + "%";
+      if (SETTINGS.letterSpacingLimitPercent >= 180 && SETTINGS.letterSpacingLimitPercent <= 360 &&
+          SETTINGS.letterSpacingLimitPercent % 30 == 0) {
+        return std::to_string((390 - SETTINGS.letterSpacingLimitPercent) / 3) + "%";
       }
       return tr(STR_STATE_OFF);
     case LayoutRow::FixedDialogueSpacing:

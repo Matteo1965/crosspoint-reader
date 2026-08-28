@@ -46,7 +46,9 @@ namespace {
 //      Betűköz korrekció invalidates cached layout and rebuilds affected sections.
 // v52: TextBlock serialization stores the exact letterSpacingPx value instead of
 //      reducing every non-zero tracking value to a one-bit +1 px flag.
-constexpr uint8_t SECTION_FILE_VERSION = 52;
+// v53: letterSpacingLimitPercent widened from uint8_t to uint16_t so the
+//      production correction scale can use thresholds above 255%.
+constexpr uint8_t SECTION_FILE_VERSION = 53;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -66,7 +68,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) +
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t);
 }  // namespace
@@ -175,7 +177,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint8_t fileHangingPunctuationLimitPx;
     bool fileFixedDialogueSpacing;
     uint8_t fileMinimumSpacePercent;
-    uint8_t fileLetterSpacingLimitPercent;
+    uint16_t fileLetterSpacingLimitPercent;
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
