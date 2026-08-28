@@ -141,6 +141,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     const bool hu = I18N.getLanguage() == Language::HU;
     const char* extraFeatures[] = {
         hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
+        hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
         hu ? "Javított sorkizárt szedés" : "Improved justified text layout",
         hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
         hu ? "Min. szóköz: 50–100%" : "Minimum word spacing: 50–100%",

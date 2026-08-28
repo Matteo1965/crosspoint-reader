@@ -429,11 +429,11 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       break;
     }
     case LayoutRow::LetterSpacingCorrection: {
-      // CPHUN-260828-29: widen the low-strength range for font-sensitive faces.
-      // Higher UI percentage means stronger/more frequent correction; the internal
-      // activation threshold therefore decreases monotonically from 600% to 180%.
+      // CPHUN-260828-31: production scale after the parser threshold was widened
+      // to uint16_t end-to-end. Higher UI percentage means stronger/more frequent
+      // correction; the internal threshold decreases monotonically from 360% to 180%.
       const char* options[] = {tr(STR_STATE_OFF), "10%", "20%", "30%", "40%", "50%", "60%", "70%"};
-      constexpr uint16_t thresholds[] = {0, 600, 500, 420, 360, 300, 240, 180};
+      constexpr uint16_t thresholds[] = {0, 360, 330, 300, 270, 240, 210, 180};
       int cur = 0;
       for (int i = 1; i < 8; ++i) {
         if (SETTINGS.letterSpacingLimitPercent == thresholds[i]) {
@@ -443,7 +443,7 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       }
       optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",
                         options, 8, cur, [](int idx) {
-                          constexpr uint16_t thresholds[] = {0, 600, 500, 420, 360, 300, 240, 180};
+                          constexpr uint16_t thresholds[] = {0, 360, 330, 300, 270, 240, 210, 180};
                           SETTINGS.letterSpacingLimitPercent = thresholds[idx];
                           SETTINGS.saveToFile();
                         });
@@ -492,7 +492,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::HangingPunctuation:
       return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::LetterSpacingCorrection: {
-      constexpr uint16_t thresholds[] = {600, 500, 420, 360, 300, 240, 180};
+      constexpr uint16_t thresholds[] = {360, 330, 300, 270, 240, 210, 180};
       for (int i = 0; i < 7; ++i) {
         if (SETTINGS.letterSpacingLimitPercent == thresholds[i]) return std::to_string((i + 1) * 10) + "%";
       }
