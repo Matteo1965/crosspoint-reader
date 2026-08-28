@@ -215,8 +215,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
   softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
   letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
-  if (letterSpacingLimitPercent != 0 &&
-      (letterSpacingLimitPercent < 180 || letterSpacingLimitPercent > 360 || letterSpacingLimitPercent % 30 != 0)) {
+  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 180 && letterSpacingLimitPercent != 240 &&
+      letterSpacingLimitPercent != 300 && letterSpacingLimitPercent != 360 && letterSpacingLimitPercent != 420 &&
+      letterSpacingLimitPercent != 500 && letterSpacingLimitPercent != 600) {
     letterSpacingLimitPercent = 0;
     needsResave = true;
   }
