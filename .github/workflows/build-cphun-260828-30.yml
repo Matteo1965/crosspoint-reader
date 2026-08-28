@@ -1,0 +1,94 @@
+name: Build CPHUN-260828-30 Parser Threshold Uint16 Fix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - tools/cphun_30_tracking_parser_uint16_fix.py
+      - .github/workflows/build-cphun-260828-30.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260828-30
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout typography branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-29 baseline
+        run: |
+          set -euo pipefail
+          grep -q '0, 600, 500, 420, 360, 300, 240, 180' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' src/CrossPointSettings.h
+          grep -q 'uint16_t letterSpacingLimitPercent = 0' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'uint16_t letterSpacingLimitPercent;' lib/Epub/Epub/ParsedText.h
+          grep -q 'uint8_t letterSpacingLimitPercent;' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          grep -q 'const bool fixedDialogueSpacing, const uint8_t letterSpacingLimitPercent' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+
+      - name: Apply parser uint16 threshold fix
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_30_tracking_parser_uint16_fix.py
+          git diff --check
+          grep -q 'uint16_t letterSpacingLimitPercent;' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          grep -q 'const bool fixedDialogueSpacing, const uint16_t letterSpacingLimitPercent' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          ! grep -q 'uint8_t letterSpacingLimitPercent;' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          ! grep -q 'const bool fixedDialogueSpacing, const uint8_t letterSpacingLimitPercent' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          grep -q 'letterSpacingPx = 1' lib/Epub/Epub/ParsedText.cpp
+          ! grep -q 'letterSpacingPx = 2' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit validated CPHUN-260828-30 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Matteo"
+          git config user.email "atafoto@gmail.com"
+          git add lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-260828-30: preserve uint16 tracking threshold in parser"
+            git push origin HEAD:agent/cphun-260827-19-typography
+          fi
+
+      - name: Upload CPHUN-260828-30 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260828-30-Parser-Threshold-Uint16-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
