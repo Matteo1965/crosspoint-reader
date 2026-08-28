@@ -1,0 +1,72 @@
+name: Build CPHUN-260828-33 Publication Candidate
+
+on:
+  push:
+    branches:
+      - agent/cphun-260827-19-typography
+    paths:
+      - .github/build-triggers/cphun-260828-33.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260828-33
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout typography branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260827-19-typography
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-33 source
+        run: |
+          set -euo pipefail
+          grep -q 'constexpr int PAGE_COUNT = 4' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'CPHUN-260828-33' src/CPHUNBuildId.h
+          grep -q '0, 500, 450, 400, 350, 300, 250, 200' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'A Hungarian Edition fő fejlesztései:' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása.' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Szó- és párbeszédközök' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Extra bekezdésköz' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Optikai margó (Hanging punctuation)' src/activities/settings/CrossPointVersionActivity.cpp
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Upload CPHUN-260828-33 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260828-33-Publication-Candidate-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
