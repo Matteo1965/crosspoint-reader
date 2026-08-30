@@ -30,9 +30,6 @@ jobs:
       - name: Apply CPHUN-34 compound-boundary correction
         run: python tools/cphun_34_hungarian_compound_hyphenation.py
 
-      - name: Format changed C++ sources
-        run: ./bin/clang-format-fix -g
-
       - name: Verify CPHUN-34 source
         run: |
           set -euo pipefail
