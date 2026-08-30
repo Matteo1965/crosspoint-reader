@@ -1,0 +1,2 @@
+CPHUN-260830-34
+Hungarian compound-boundary hyphenation regression build.
