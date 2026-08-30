@@ -11,55 +11,80 @@ on:
 permissions:
   contents: write
 
+env:
+  CPHUN_BUILD_ID: CPHUN-260830-35
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test-build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Checkout CPHUN-35 branch
         uses: actions/checkout@v4
         with:
           ref: agent/cphun-260830-35-rossz-hyphenation
+          submodules: recursive
           fetch-depth: 0
 
       - name: Apply CPHUN-35 rossz compound correction
-        run: python3 tools/cphun_35_rossz_compound_hyphenation.py
+        run: |
+          python tools/cphun_35_rossz_compound_hyphenation.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("test/hyphenation_eval/HyphenationEvaluationTest.cpp")
+          path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8")
+          PY
 
       - name: Verify CPHUN-35 source
         run: |
-          grep -F 'CPHUN-260830-35' src/CPHUNBuildId.h
-          grep -F '{U"rossz", U"indulat"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
-          grep -F '{U"rossz", U"íz"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
-          grep -F 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -F 'HungarianRosszInflectionControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          set -euo pipefail
+          grep -q 'CPHUN-260830-35' src/CPHUNBuildId.h
+          grep -q 'U"rossz", U"indulat"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'U"rossz", U"íz"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'HungarianRosszInflectionControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'HungarianCompoundBoundaryCorrections' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'HungarianGenuineDoubledDigraphsRemainExtended' test/hyphenation_eval/HyphenationEvaluationTest.cpp
           git diff --check
 
       - name: Configure unit tests
-        run: cmake -S test -B test/build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
 
       - name: Build unit tests
-        run: cmake --build test/build --parallel 2
+        run: cmake --build build/test -j2
 
       - name: Run unit tests
-        run: ctest --test-dir test/build --output-on-failure
+        run: ctest --test-dir build/test --output-on-failure -j2
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
 
       - name: Install PlatformIO Core
-        run: uv tool install platformio
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
       - name: Build X4 firmware
-        run: pio run -e gh_release_rc
+        run: .venv/bin/pio run -e gh_release_rc
 
       - name: Commit verified CPHUN-35 source
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add lib/Epub/Epub/hyphenation/Hyphenator.cpp test/hyphenation_eval/HyphenationEvaluationTest.cpp src/CPHUNBuildId.h
-          git commit -m 'Fix rossz compound-boundary hyphenation (CPHUN-35)'
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+                  test/hyphenation_eval/HyphenationEvaluationTest.cpp \
+                  src/CPHUNBuildId.h
+          git commit -m "Fix rossz compound-boundary hyphenation (CPHUN-35)"
           git push origin HEAD:agent/cphun-260830-35-rossz-hyphenation
+          echo "CPHUN35_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
-      - name: Upload firmware
+      - name: Upload CPHUN-260830-35 firmware
         uses: actions/upload-artifact@v4
         with:
           name: CPHUN-260830-35-Rossz-Hyphenation-FW
