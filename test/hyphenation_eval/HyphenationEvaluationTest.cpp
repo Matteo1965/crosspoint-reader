@@ -290,6 +290,11 @@ TEST(HyphenationEval, HungarianRosszCompoundBoundaries) {
     ASSERT_NE(it, breaks.end()) << "Missing rossz compound boundary for " << tc.word;
     EXPECT_TRUE(it->requiresInsertedHyphen) << tc.word;
     EXPECT_EQ(it->replacement, Hyphenator::Replacement::None) << "Replacement break leaked into " << tc.word;
+    const auto internalReplacement = std::find_if(
+        breaks.begin(), breaks.end(), [expectedOffset](const Hyphenator::BreakInfo& info) {
+          return info.byteOffset < expectedOffset && info.replacement != Hyphenator::Replacement::None;
+        });
+    EXPECT_EQ(internalReplacement, breaks.end()) << "Unexpected internal replacement break in rossz compound " << tc.word;
   }
 
   Hyphenator::setHungarianExtended(false);

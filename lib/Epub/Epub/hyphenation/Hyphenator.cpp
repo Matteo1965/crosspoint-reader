@@ -270,6 +270,16 @@ bool isHungarianCompoundBoundary(const std::vector<CodepointInfo>& cps, const si
   return false;
 }
 
+bool isInsideHungarianCompoundLeft(const std::vector<CodepointInfo>& cps, const size_t split) {
+  for (const auto& rule : kHungarianCompoundStemRules) {
+    const size_t leftLength = utf32Length(rule.left);
+    if (split >= leftLength) continue;
+    if (!matchesHungarianStem(cps, 0, rule.left)) continue;
+    if (matchesHungarianStem(cps, leftLength, rule.rightStem)) return true;
+  }
+  return false;
+}
+
 void appendHungarianCompoundBoundaryBreaks(const std::vector<CodepointInfo>& cps,
                                             std::vector<Hyphenator::BreakInfo>& outBreaks) {
   for (size_t split = 1; split < cps.size(); ++split) {
@@ -361,7 +371,7 @@ void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
       if (split == 0 || split >= cps.size()) continue;
       // A verified compound boundary at the same compact spelling is a normal
       // hyphenation point, not a doubled-digraph replacement break.
-      if (isHungarianCompoundBoundary(cps, split)) continue;
+      if (isHungarianCompoundBoundary(cps, split) || isInsideHungarianCompoundLeft(cps, split)) continue;
       // Secondary readability guard: both rendered word parts must contain a vowel.
       if (!hasHungarianVowel(cps, 0, split) || !hasHungarianVowel(cps, split, cps.size())) continue;
       outBreaks.push_back({byteOffsetForIndex(cps, split), true, rule.replacement});
