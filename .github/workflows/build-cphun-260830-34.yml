@@ -28,7 +28,13 @@ jobs:
           fetch-depth: 0
 
       - name: Apply CPHUN-34 compound-boundary correction
-        run: python tools/cphun_34_hungarian_compound_hyphenation.py
+        run: |
+          python tools/cphun_34_hungarian_compound_hyphenation.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("test/hyphenation_eval/HyphenationEvaluationTest.cpp")
+          path.write_text(path.read_text(encoding="utf-8").rstrip() + "\n", encoding="utf-8")
+          PY
 
       - name: Verify CPHUN-34 source
         run: |
