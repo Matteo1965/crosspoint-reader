@@ -1,0 +1,68 @@
+name: Build CPHUN-260830-35 Rossz Hyphenation Fix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260830-35-rossz-hyphenation
+    paths:
+      - '.github/build-triggers/cphun-260830-35.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CPHUN-35 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260830-35-rossz-hyphenation
+          fetch-depth: 0
+
+      - name: Apply CPHUN-35 rossz compound correction
+        run: python3 tools/cphun_35_rossz_compound_hyphenation.py
+
+      - name: Verify CPHUN-35 source
+        run: |
+          grep -F 'CPHUN-260830-35' src/CPHUNBuildId.h
+          grep -F '{U"rossz", U"indulat"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -F '{U"rossz", U"íz"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -F 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -F 'HungarianRosszNonCompoundControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B test/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build test/build --parallel 2
+
+      - name: Run unit tests
+        run: ctest --test-dir test/build --output-on-failure
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install PlatformIO Core
+        run: uv tool install platformio
+
+      - name: Build X4 firmware
+        run: pio run -e gh_release_rc
+
+      - name: Commit verified CPHUN-35 source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/hyphenation/Hyphenator.cpp test/hyphenation_eval/HyphenationEvaluationTest.cpp src/CPHUNBuildId.h
+          git commit -m 'Fix rossz compound-boundary hyphenation (CPHUN-35)'
+          git push origin HEAD:agent/cphun-260830-35-rossz-hyphenation
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260830-35-Rossz-Hyphenation-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
