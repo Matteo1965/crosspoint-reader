@@ -243,6 +243,7 @@ static constexpr HungarianCompoundStemRule kHungarianCompoundStemRules[] = {
     {U"cipős", U"szekrény"},  {U"hús", U"szelet"},      {U"ideg", U"gyógyász"},
     {U"gyors", U"szolgálat"}, {U"okos", U"szemüveg"},    {U"nyolc", U"csillag"},
     {U"arc", U"csont"},       {U"szín", U"nyom"},        {U"tánc", U"csoport"},
+    {U"rossz", U"indulat"},    {U"rossz", U"íz"},
 };
 
 size_t utf32Length(const char32_t* text) {

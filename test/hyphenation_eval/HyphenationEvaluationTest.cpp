@@ -267,6 +267,63 @@ TEST(HyphenationEval, HungarianCompoundBoundaryCorrections) {
   Hyphenator::setHungarianExtended(false);
 }
 
+
+TEST(HyphenationEval, HungarianRosszCompoundBoundaries) {
+  struct CompoundCase {
+    const char* word;
+    const char* left;
+  };
+  static constexpr CompoundCase cases[] = {
+      {"rosszindulatú", "rossz"},
+      {"rosszízű", "rossz"},
+  };
+
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  for (const auto& tc : cases) {
+    const size_t expectedOffset = std::string(tc.left).size();
+    const auto breaks = Hyphenator::breakOffsets(tc.word, false);
+    const auto it = std::find_if(breaks.begin(), breaks.end(), [expectedOffset](const Hyphenator::BreakInfo& info) {
+      return info.byteOffset == expectedOffset;
+    });
+    ASSERT_NE(it, breaks.end()) << "Missing rossz compound boundary for " << tc.word;
+    EXPECT_TRUE(it->requiresInsertedHyphen) << tc.word;
+    EXPECT_EQ(it->replacement, Hyphenator::Replacement::None) << "Replacement break leaked into " << tc.word;
+  }
+
+  Hyphenator::setHungarianExtended(false);
+}
+
+TEST(HyphenationEval, HungarianRosszInflectionControls) {
+  struct InflectedCase {
+    const char* word;
+    const char* left;
+  };
+  static constexpr InflectedCase cases[] = {
+      {"rossznak", "rossz"},
+      {"rosszból", "rossz"},
+      {"rossztól", "rossz"},
+      {"rosszban", "rossz"},
+  };
+
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  for (const auto& tc : cases) {
+    const size_t expectedOffset = std::string(tc.left).size();
+    const auto breaks = Hyphenator::breakOffsets(tc.word, false);
+    const auto it = std::find_if(breaks.begin(), breaks.end(), [expectedOffset](const Hyphenator::BreakInfo& info) {
+      return info.byteOffset == expectedOffset;
+    });
+    ASSERT_NE(it, breaks.end()) << "Missing normal inflection break for " << tc.word;
+    EXPECT_TRUE(it->requiresInsertedHyphen) << tc.word;
+    EXPECT_EQ(it->replacement, Hyphenator::Replacement::None) << "Unexpected replacement break in " << tc.word;
+  }
+
+  Hyphenator::setHungarianExtended(false);
+}
+
 TEST(HyphenationEval, HungarianGenuineDoubledDigraphsRemainExtended) {
   struct DoubledCase {
     const char* word;
