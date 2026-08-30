@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -234,3 +235,60 @@ TEST(HyphenationEval, Spanish) { runLanguageEval("spanish", "es", "spanish_hyphe
 TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphenation_tests.txt", 98.99); }
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
+
+TEST(HyphenationEval, HungarianCompoundBoundaryCorrections) {
+  struct CompoundCase {
+    const char* word;
+    const char* left;
+  };
+  static constexpr CompoundCase cases[] = {
+      {"meggyullad", "meg"},       {"meggyón", "meg"},          {"meggyőz", "meg"},
+      {"meggyaláz", "meg"},       {"kisszék", "kis"},          {"kisszoba", "kis"},
+      {"kisszekrény", "kis"},     {"ruhásszekrény", "ruhás"}, {"vasszeg", "vas"},
+      {"cipősszekrény", "cipős"}, {"hússzelet", "hús"},       {"ideggyógyász", "ideg"},
+      {"gyorsszolgálat", "gyors"}, {"okosszemüveg", "okos"},   {"nyolccsillagos", "nyolc"},
+      {"arccsont", "arc"},         {"színnyomás", "szín"},      {"tánccsoport", "tánc"},
+  };
+
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  for (const auto& tc : cases) {
+    const size_t expectedOffset = std::string(tc.left).size();
+    const auto breaks = Hyphenator::breakOffsets(tc.word, false);
+    const auto it = std::find_if(breaks.begin(), breaks.end(), [expectedOffset](const Hyphenator::BreakInfo& info) {
+      return info.byteOffset == expectedOffset;
+    });
+    ASSERT_NE(it, breaks.end()) << "Missing compound boundary for " << tc.word;
+    EXPECT_TRUE(it->requiresInsertedHyphen) << tc.word;
+    EXPECT_EQ(it->replacement, Hyphenator::Replacement::None) << "Replacement break leaked into " << tc.word;
+  }
+
+  Hyphenator::setHungarianExtended(false);
+}
+
+TEST(HyphenationEval, HungarianGenuineDoubledDigraphsRemainExtended) {
+  struct DoubledCase {
+    const char* word;
+    size_t expectedOffset;
+  };
+  static constexpr DoubledCase cases[] = {
+      {"meggyes", 3},
+      {"asszony", 2},
+      {"hosszú", 3},
+  };
+
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  for (const auto& tc : cases) {
+    const auto breaks = Hyphenator::breakOffsets(tc.word, false);
+    const auto it = std::find_if(breaks.begin(), breaks.end(), [&tc](const Hyphenator::BreakInfo& info) {
+      return info.byteOffset == tc.expectedOffset;
+    });
+    ASSERT_NE(it, breaks.end()) << "Missing doubled-digraph break for " << tc.word;
+    EXPECT_NE(it->replacement, Hyphenator::Replacement::None) << "Compound correction overmatched " << tc.word;
+  }
+
+  Hyphenator::setHungarianExtended(false);
+}

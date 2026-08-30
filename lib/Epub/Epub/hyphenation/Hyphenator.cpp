@@ -228,6 +228,56 @@ uint32_t asciiLower(const uint32_t cp) {
   return (cp >= 'A' && cp <= 'Z') ? cp + ('a' - 'A') : cp;
 }
 
+struct HungarianCompoundStemRule {
+  const char32_t* left;
+  const char32_t* rightStem;
+};
+
+// Hungarian compound boundaries cannot be inferred safely from compact doubled
+// digraph spellings alone (e.g. meggy is a genuine doubled gy). These stem pairs
+// cover verified compound families while allowing inflected/derived right parts.
+static constexpr HungarianCompoundStemRule kHungarianCompoundStemRules[] = {
+    {U"meg", U"gyull"},       {U"meg", U"gyón"},         {U"meg", U"győz"},
+    {U"meg", U"gyaláz"},      {U"kis", U"szék"},         {U"kis", U"szoba"},
+    {U"kis", U"szekrény"},    {U"ruhás", U"szekrény"},   {U"vas", U"szeg"},
+    {U"cipős", U"szekrény"},  {U"hús", U"szelet"},      {U"ideg", U"gyógyász"},
+    {U"gyors", U"szolgálat"}, {U"okos", U"szemüveg"},    {U"nyolc", U"csillag"},
+    {U"arc", U"csont"},       {U"szín", U"nyom"},        {U"tánc", U"csoport"},
+};
+
+size_t utf32Length(const char32_t* text) {
+  size_t length = 0;
+  while (text[length] != U'\0') ++length;
+  return length;
+}
+
+bool matchesHungarianStem(const std::vector<CodepointInfo>& cps, const size_t start, const char32_t* stem) {
+  for (size_t i = 0; stem[i] != U'\0'; ++i) {
+    if (start + i >= cps.size()) return false;
+    if (toLowerLatin(cps[start + i].value) != static_cast<uint32_t>(stem[i])) return false;
+  }
+  return true;
+}
+
+bool isHungarianCompoundBoundary(const std::vector<CodepointInfo>& cps, const size_t split) {
+  for (const auto& rule : kHungarianCompoundStemRules) {
+    const size_t leftLength = utf32Length(rule.left);
+    if (split != leftLength) continue;
+    if (!matchesHungarianStem(cps, 0, rule.left)) continue;
+    if (matchesHungarianStem(cps, split, rule.rightStem)) return true;
+  }
+  return false;
+}
+
+void appendHungarianCompoundBoundaryBreaks(const std::vector<CodepointInfo>& cps,
+                                            std::vector<Hyphenator::BreakInfo>& outBreaks) {
+  for (size_t split = 1; split < cps.size(); ++split) {
+    if (isHungarianCompoundBoundary(cps, split)) {
+      outBreaks.push_back({byteOffsetForIndex(cps, split), true});
+    }
+  }
+}
+
 // Returns the number of Unicode codepoints occupied by one Hungarian consonant
 // grapheme starting at `start`. Multi-letter consonants (cs, dz, dzs, gy, ly,
 // ny, sz, ty, zs) count as one phonological consonant for syllable boundaries.
@@ -308,6 +358,9 @@ void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
 
       const size_t split = i + 1;
       if (split == 0 || split >= cps.size()) continue;
+      // A verified compound boundary at the same compact spelling is a normal
+      // hyphenation point, not a doubled-digraph replacement break.
+      if (isHungarianCompoundBoundary(cps, split)) continue;
       // Secondary readability guard: both rendered word parts must contain a vowel.
       if (!hasHungarianVowel(cps, 0, split) || !hasHungarianVowel(cps, split, cps.size())) continue;
       outBreaks.push_back({byteOffsetForIndex(cps, split), true, rule.replacement});
@@ -427,6 +480,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   std::vector<Hyphenator::BreakInfo> breaks;
   if (preferredLanguageIsHungarian_ && hyphenator) {
     appendHungarianSingleLetterPrefixBreak(cps, *hyphenator, breaks);
+    appendHungarianCompoundBoundaryBreaks(cps, breaks);
   }
   if (useHungarianExtended) {
     appendHungarianExtendedBreaks(cps, breaks);
