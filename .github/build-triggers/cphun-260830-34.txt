@@ -1,2 +1,3 @@
 CPHUN-260830-34
 Hungarian compound-boundary hyphenation regression build.
+Attempt 2: CI formatter compatibility fix.
