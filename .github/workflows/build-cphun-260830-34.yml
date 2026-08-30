@@ -1,0 +1,88 @@
+name: Build CPHUN-260830-34 Hungarian Hyphenation Fix
+
+on:
+  push:
+    branches:
+      - agent/cphun-260830-34-hyphenation-fix
+    paths:
+      - .github/build-triggers/cphun-260830-34.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260830-34
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout CPHUN-34 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260830-34-hyphenation-fix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-34 compound-boundary correction
+        run: python tools/cphun_34_hungarian_compound_hyphenation.py
+
+      - name: Format changed C++ sources
+        run: ./bin/clang-format-fix -g
+
+      - name: Verify CPHUN-34 source
+        run: |
+          set -euo pipefail
+          grep -q 'CPHUN-260830-34' src/CPHUNBuildId.h
+          grep -q 'HungarianCompoundStemRule' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'HungarianCompoundBoundaryCorrections' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'HungarianGenuineDoubledDigraphsRemainExtended' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'U"meg", U"gyull"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'U"szín", U"nyom"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Commit verified CPHUN-34 source
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+                  test/hyphenation_eval/HyphenationEvaluationTest.cpp \
+                  src/CPHUNBuildId.h
+          git commit -m "Fix Hungarian compound-boundary hyphenation (CPHUN-34)"
+          git push origin HEAD:agent/cphun-260830-34-hyphenation-fix
+          echo "CPHUN34_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Upload CPHUN-260830-34 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260830-34-Hungarian-Compound-Hyphenation-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
