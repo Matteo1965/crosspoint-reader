@@ -30,7 +30,8 @@ jobs:
           grep -F '{U"rossz", U"indulat"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -F '{U"rossz", U"íz"}' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -F 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -F 'HungarianRosszNonCompoundControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -F 'HungarianRosszInflectionControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -F 'HungarianRosszDoubledSszControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
           git diff --check
 
       - name: Configure unit tests
