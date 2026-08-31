@@ -21,7 +21,11 @@ constexpr ReaderAction ACTIONS[] = {
     ReaderAction::ToggleSoftHyphen, ReaderAction::ToggleParagraphAlignment, ReaderAction::RotateOrientation,
     ReaderAction::ForceRefresh, ReaderAction::Screenshot, ReaderAction::GoHome,
 };
-}
+constexpr int kPromptRow = 0;
+constexpr int kFirstMappingRow = 1;
+constexpr int kMappingCount = 12;
+constexpr int kHelpRow = 13;
+}  // namespace
 
 ButtonFunctionsActivity::ButtonFunctionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("ButtonFunctions", renderer, mappedInput) {}
@@ -84,31 +88,48 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
 }
 
 void ButtonFunctionsActivity::rebuildRows() {
-  labels_.resize(12);
-  values_.resize(12);
-  rows_.resize(12);
-  for (int row = 0; row < 12; ++row) {
-    const int button = row % 4 + 1;
-    const int group = row / 4;
-    const char* prefix = "";
-    if (row % 4 == 0) {
-      if (group == 0) prefix = "1×:   ";
-      else if (group == 1) prefix = "2×:   ";
-      else prefix = I18N.getLanguage() == Language::HU ? "Tart:  " : "Hold:  ";
-    } else {
-      prefix = "      ";
+  labels_.assign(14, std::string{});
+  values_.assign(14, std::string{});
+  rows_.resize(14);
+
+  labels_[kPromptRow] = I18N.getLanguage() == Language::HU ? "Nyomd meg a cserélendő gombot!" : "Select the button to change.";
+  rows_[kPromptRow].label = labels_[kPromptRow].c_str();
+  rows_[kPromptRow].value = "";
+  rows_[kPromptRow].actionValue = kPromptRow;
+
+  for (int mappingRow = 0; mappingRow < kMappingCount; ++mappingRow) {
+    const int screenRow = kFirstMappingRow + mappingRow;
+    const int button = mappingRow % 4 + 1;
+    const int group = mappingRow / 4;
+
+    if (mappingRow % 4 == 0) {
+      if (group == 0) labels_[screenRow] = "1×:";
+      else if (group == 1) labels_[screenRow] = "2×:";
+      else labels_[screenRow] = I18N.getLanguage() == Language::HU ? "Tart:" : "Hold:";
     }
-    labels_[row] = std::string(prefix) + std::to_string(button) + ". gomb";
-    values_[row] = std::string("[") + actionLabel(READER_BUTTONS.get(buttonForRow(row), gestureForRow(row))) + "]";
-    rows_[row].label = labels_[row].c_str();
-    rows_[row].value = values_[row].c_str();
-    rows_[row].actionValue = static_cast<int16_t>(row);
+
+    // The numbered button text is always in the value column. This makes the
+    // first digit start at exactly the same X coordinate on all 12 rows; the
+    // Tart: / Hold: 1st-row value column is the reference coordinate.
+    values_[screenRow] = std::to_string(button) + ". gomb   [" +
+                         actionLabel(READER_BUTTONS.get(buttonForRow(mappingRow), gestureForRow(mappingRow))) + "]";
+    rows_[screenRow].label = labels_[screenRow].c_str();
+    rows_[screenRow].value = values_[screenRow].c_str();
+    rows_[screenRow].actionValue = static_cast<int16_t>(screenRow);
   }
+
+  labels_[kHelpRow] = I18N.getLanguage() == Language::HU
+                          ? "Válassz egy sort, majd állítsd be a kívánt funkciót."
+                          : "Select a row, then choose the desired action.";
+  rows_[kHelpRow].label = labels_[kHelpRow].c_str();
+  rows_[kHelpRow].value = "";
+  rows_[kHelpRow].actionValue = kHelpRow;
 }
 
 void ButtonFunctionsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+  // Keep one full blank row below the title before the prompt/list starts.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.listRowHeight), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   rebuildRows();
   fui::ListProps props;
@@ -130,7 +151,10 @@ bool ButtonFunctionsActivity::handleCustomInput() {
   });
 }
 
-void ButtonFunctionsActivity::activateIndex(const int index) { openActionPicker(index); }
+void ButtonFunctionsActivity::activateIndex(const int index) {
+  if (index < kFirstMappingRow || index >= kFirstMappingRow + kMappingCount) return;
+  openActionPicker(index - kFirstMappingRow);
+}
 
 void ButtonFunctionsActivity::openActionPicker(const int row) {
   const ReaderAction selected = READER_BUTTONS.get(buttonForRow(row), gestureForRow(row));
@@ -146,7 +170,7 @@ void ButtonFunctionsActivity::openActionPicker(const int row) {
   optionPtrs.reserve(options.size());
   for (const auto& option : options) optionPtrs.push_back(option.c_str());
 
-  const std::string title = labels_[row];
+  const std::string title = std::to_string(row % 4 + 1) + ". gomb";
   optionPopup_.show(title.c_str(), optionPtrs.data(), static_cast<int>(optionPtrs.size()), current,
                     [this, row](int idx) {
                       READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), ACTIONS[idx]);
