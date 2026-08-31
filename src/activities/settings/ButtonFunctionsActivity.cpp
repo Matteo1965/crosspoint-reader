@@ -4,6 +4,7 @@
 
 #include "ReaderButtonProfileStore.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 
 namespace fui = freeink::ui;
 
@@ -21,10 +22,14 @@ constexpr ReaderAction ACTIONS[] = {
     ReaderAction::ToggleSoftHyphen, ReaderAction::ToggleParagraphAlignment, ReaderAction::RotateOrientation,
     ReaderAction::ForceRefresh, ReaderAction::Screenshot, ReaderAction::GoHome,
 };
-constexpr int kPromptRow = 0;
-constexpr int kFirstMappingRow = 1;
+
 constexpr int kMappingCount = 12;
-constexpr int kHelpRow = 13;
+constexpr int kReferenceWidth = 480;
+constexpr int kGestureX = 40;
+constexpr int kButtonX = 145;
+constexpr int kActionX = 285;
+
+int scaledX(const int x, const int width) { return x * width / kReferenceWidth; }
 }  // namespace
 
 ButtonFunctionsActivity::ButtonFunctionsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -77,7 +82,7 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
     case ReaderAction::ScreenMarginDown: return hu ? "Margó −" : "Margin -";
     case ReaderAction::ToggleNightMode: return hu ? "Éjszakai mód" : "Night mode";
     case ReaderAction::ToggleHyphenation: return hu ? "Elválasztás" : "Hyphenation";
-    case ReaderAction::ToggleSoftHyphen: return hu ? "Soft Hyphen" : "Soft Hyphen";
+    case ReaderAction::ToggleSoftHyphen: return "Soft Hyphen";
     case ReaderAction::ToggleParagraphAlignment: return hu ? "Igazítás váltás" : "Toggle alignment";
     case ReaderAction::RotateOrientation: return hu ? "Képernyő forgatás" : "Rotate screen";
     case ReaderAction::ForceRefresh: return hu ? "Képernyőfrissítés" : "Screen refresh";
@@ -88,60 +93,74 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
 }
 
 void ButtonFunctionsActivity::rebuildRows() {
-  labels_.assign(14, std::string{});
-  values_.assign(14, std::string{});
-  rows_.resize(14);
+  labels_.resize(kMappingCount);
+  values_.resize(kMappingCount);
+  rows_.resize(kMappingCount);
 
-  labels_[kPromptRow] = I18N.getLanguage() == Language::HU ? "Nyomd meg a cserélendő gombot!" : "Select the button to change.";
-  rows_[kPromptRow].label = labels_[kPromptRow].c_str();
-  rows_[kPromptRow].value = "";
-  rows_[kPromptRow].actionValue = kPromptRow;
+  for (int row = 0; row < kMappingCount; ++row) {
+    labels_[row] = std::to_string(row % 4 + 1) + ". gomb";
+    values_[row] = std::string("[") + actionLabel(READER_BUTTONS.get(buttonForRow(row), gestureForRow(row))) + "]";
 
-  for (int mappingRow = 0; mappingRow < kMappingCount; ++mappingRow) {
-    const int screenRow = kFirstMappingRow + mappingRow;
-    const int button = mappingRow % 4 + 1;
-    const int group = mappingRow / 4;
-
-    if (mappingRow % 4 == 0) {
-      if (group == 0) labels_[screenRow] = "1×:";
-      else if (group == 1) labels_[screenRow] = "2×:";
-      else labels_[screenRow] = I18N.getLanguage() == Language::HU ? "Tart:" : "Hold:";
-    }
-
-    // The numbered button text is always in the value column. This makes the
-    // first digit start at exactly the same X coordinate on all 12 rows; the
-    // Tart: / Hold: 1st-row value column is the reference coordinate.
-    values_[screenRow] = std::to_string(button) + ". gomb   [" +
-                         actionLabel(READER_BUTTONS.get(buttonForRow(mappingRow), gestureForRow(mappingRow))) + "]";
-    rows_[screenRow].label = labels_[screenRow].c_str();
-    rows_[screenRow].value = values_[screenRow].c_str();
-    rows_[screenRow].actionValue = static_cast<int16_t>(screenRow);
+    // The FreeInk list owns navigation, selection highlighting and hit boxes,
+    // but text is drawn below in fixed columns. Empty item strings prevent the
+    // proportional list layout from moving columns according to text width.
+    rows_[row].label = "";
+    rows_[row].value = "";
+    rows_[row].actionValue = static_cast<int16_t>(row);
   }
-
-  labels_[kHelpRow] = I18N.getLanguage() == Language::HU
-                          ? "Válassz egy sort, majd állítsd be a kívánt funkciót."
-                          : "Select a row, then choose the desired action.";
-  rows_[kHelpRow].label = labels_[kHelpRow].c_str();
-  rows_[kHelpRow].value = "";
-  rows_[kHelpRow].actionValue = kHelpRow;
 }
 
 void ButtonFunctionsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  // Keep one full blank row below the title before the prompt/list starts.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.listRowHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  // Keep one full blank row below the title. There is deliberately no prompt
+  // row: all available vertical space belongs to the 12 mappings.
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.listRowHeight), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+
   rebuildRows();
   fui::ListProps props;
   props.items = rows_.data();
   props.count = static_cast<uint16_t>(rows_.size());
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;
-  props.valueInset = 4;
   props.labelText = screen.theme().smallText;
   props.valueText = screen.theme().smallText;
   syncListViewport(screen, props);
   screen.list(props);
+}
+
+void ButtonFunctionsActivity::drawFooter() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int width = renderer.getScreenWidth();
+  const int rowHeight = metrics.listRowHeight;
+  const int listTop = metrics.topPadding + metrics.headerHeight + rowHeight;
+  const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+  const int firstVisible = activeNav().top;
+  const int selected = activeNav().selected;
+
+  const int gestureX = scaledX(kGestureX, width);
+  const int buttonX = scaledX(kButtonX, width);
+  const int actionX = scaledX(kActionX, width);
+
+  for (int row = firstVisible; row < kMappingCount; ++row) {
+    const int visualRow = row - firstVisible;
+    const int rowTop = listTop + visualRow * rowHeight;
+    if (rowTop + rowHeight > renderer.getScreenHeight() - metrics.buttonHintsHeight) break;
+
+    const int textY = rowTop + std::max(0, (rowHeight - textHeight) / 2);
+    const bool black = row != selected;
+
+    if (row % 4 == 0) {
+      const int group = row / 4;
+      const char* gesture = group == 0 ? "1×:" : (group == 1 ? "2×:" : (I18N.getLanguage() == Language::HU ? "Tart:" : "Hold:"));
+      renderer.drawText(SMALL_FONT_ID, gestureX, textY, gesture, black);
+    }
+    renderer.drawText(SMALL_FONT_ID, buttonX, textY, labels_[row].c_str(), black);
+    renderer.drawText(SMALL_FONT_ID, actionX, textY, values_[row].c_str(), black);
+  }
+
+  UiListActivity::drawFooter();
 }
 
 bool ButtonFunctionsActivity::handleCustomInput() {
@@ -152,8 +171,8 @@ bool ButtonFunctionsActivity::handleCustomInput() {
 }
 
 void ButtonFunctionsActivity::activateIndex(const int index) {
-  if (index < kFirstMappingRow || index >= kFirstMappingRow + kMappingCount) return;
-  openActionPicker(index - kFirstMappingRow);
+  if (index < 0 || index >= kMappingCount) return;
+  openActionPicker(index);
 }
 
 void ButtonFunctionsActivity::openActionPicker(const int row) {
@@ -170,7 +189,7 @@ void ButtonFunctionsActivity::openActionPicker(const int row) {
   optionPtrs.reserve(options.size());
   for (const auto& option : options) optionPtrs.push_back(option.c_str());
 
-  const std::string title = std::to_string(row % 4 + 1) + ". gomb";
+  const std::string title = labels_[row];
   optionPopup_.show(title.c_str(), optionPtrs.data(), static_cast<int>(optionPtrs.size()), current,
                     [this, row](int idx) {
                       READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), ACTIONS[idx]);
