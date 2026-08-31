@@ -1,0 +1,75 @@
+name: Build CPHUN-260901-44 Hyphen Microspacing 4px
+
+on:
+  push:
+    branches: [agent/cphun-260831-36-button-functions-menu]
+    paths: ['.github/build-triggers/cphun-260901-44.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260901-44
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260831-36-button-functions-menu
+          submodules: recursive
+          fetch-depth: 0
+      - run: python3 tools/cphun_37_full_button_functions.py
+      - run: python3 tools/cphun_39_button_ui_and_double_fallback.py
+      - run: python3 tools/cphun_40_button_ui_row_geometry.py
+      - run: python3 tools/cphun_36_double_click_v2.py
+      - run: python3 tools/cphun_41_configurable_gestures.py
+      - run: python3 tools/cphun_36_margin_profile.py
+      - run: python3 tools/cphun_37_button_functions_foundation.py
+      - run: python3 tools/cphun_42_button_config_fix.py
+      - run: python3 tools/cphun_43_final_bundle.py
+      - run: python3 tools/cphun_44_hyphen_microspacing_4px.py
+      - name: Promote build identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/CPHUNBuildId.h'); s=p.read_text()
+          s=s.replace('#define CPHUN_BUILD_ID "CPHUN-260831-37"','#define CPHUN_BUILD_ID "CPHUN-260901-44"')
+          p.write_text(s)
+          PY
+      - name: Verify CPHUN-44
+        run: |
+          set -euo pipefail
+          grep -q 'CPHUN-260901-44' src/CPHUNBuildId.h
+          grep -q 'kGestureX = 40' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'kButtonX = 135' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'kActionX = 250' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'configured == ReaderAction::ReaderBack' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'hyphenMicroOpportunityCount' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'hyphenMicroOpportunityCount) \* 4' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'std::min(4, hyphenMicroRemaining)' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'paragraphOverrideEnabled = extraParagraphSpacing != 255' lib/Epub/Epub/ParsedText.cpp
+          git diff --check
+      - run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/test -j2
+      - run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - run: .venv/bin/pio run -e gh_release_rc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260901-44-Hyphen-Microspacing-4px-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
