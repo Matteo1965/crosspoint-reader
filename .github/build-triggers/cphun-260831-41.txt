@@ -1,4 +1,6 @@
-CPHUN-260831-41
-Configurable 1x / 2x / Hosszú reader button gesture test.
-UI: button column X=125; extended hyphenation user-facing label.
-Preserve device-confirmed Power and side-button paths.
+CPHUN-260831-41 final test bundle
+Trigger: 2026-08-31 corrected rebuild
+1. bool gesture-lambda return fix
+2. bottom-button geometry: X=125, exact row stride
+3. paragraph mode: KI preserves CSS; enabled 0% = zero spacing + zero indent
+4. explicit-hyphen compounds: component-wise Liang/Hypher break opportunities verified
