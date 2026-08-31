@@ -1,0 +1,6 @@
+CPHUN-260901-43
+Approved bundle:
+- action column X=250
+- approved 12-action picker
+- factory 1x reader behavior restored/stabilized
+- explicit-hyphen justification microspacing +2/+2 px
