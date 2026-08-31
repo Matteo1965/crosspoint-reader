@@ -1,0 +1,125 @@
+name: Build CPHUN-260831-39 Button UI and 2x Recovery
+
+on:
+  push:
+    branches:
+      - agent/cphun-260831-36-button-functions-menu
+    paths:
+      - '.github/build-triggers/cphun-260831-39.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260831-39
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout CPHUN-39 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260831-36-button-functions-menu
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Prepare CPHUN-37 configurable button integration
+        run: python3 tools/cphun_37_full_button_functions.py
+
+      - name: Apply CPHUN-39 button UI and safe 2x fallback
+        run: python3 tools/cphun_39_button_ui_and_double_fallback.py
+
+      - name: Apply device-confirmed safe CPHUN-36 v2 input integration
+        run: python3 tools/cphun_36_double_click_v2.py
+
+      - name: Apply device-confirmed refined margin profile
+        run: python3 tools/cphun_36_margin_profile.py
+
+      - name: Apply CPHUN-37 configurable button foundation
+        run: python3 tools/cphun_37_button_functions_foundation.py
+
+      - name: Promote build identity to CPHUN-39
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/CPHUNBuildId.h')
+          s = p.read_text(encoding='utf-8')
+          old = '#define CPHUN_BUILD_ID "CPHUN-260831-37"'
+          new = '#define CPHUN_BUILD_ID "CPHUN-260831-39"'
+          if old not in s:
+              raise SystemExit('CPHUN-37 build-id anchor missing')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Verify CPHUN-39 input safety, 2x fallback and UI layout
+        run: |
+          set -euo pipefail
+          grep -q 'CPHUN-260831-39' src/CPHUNBuildId.h
+          grep -q 'READER_BUTTONS.loadFromFile();' src/main.cpp
+          grep -q 'READER_BUTTONS.get(physical, ReaderButtonGesture::Double)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Compatibility fallback' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'cphun36OpenSettings(); return;' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'cphun36OpenLayout(); return;' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'constexpr int kButtonX = 105;' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'constexpr int kActionX = 235;' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Alsó gombkiosztás' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Hosszan:' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Button::Power' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageBack' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageForward' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'ReaderUtils::detectPageTurn(mappedInput)' src/activities/reader/EpubReaderActivity.cpp
+          ! grep -q 'Suppress the legacy press path' src/activities/reader/EpubReaderActivity.cpp
+          ! grep -q 'if (const auto pressed = asPhysicalButton(mappedInput.getPressedFrontButton()))' src/activities/reader/EpubReaderActivity.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          reader = Path('src/activities/reader/EpubReaderActivity.cpp').read_text(encoding='utf-8')
+          for marker in (
+              'const int cphun36PressedRaw = mappedInput.getPressedFrontButton();',
+              'READER_BUTTONS.get(physical, ReaderButtonGesture::Double)',
+              'Compatibility fallback',
+              'Button::Power', 'Button::PageBack', 'Button::PageForward'):
+              if marker not in reader:
+                  raise SystemExit(f'CPHUN-39 reader invariant missing: {marker}')
+          ui = Path('src/activities/settings/ButtonFunctionsActivity.cpp').read_text(encoding='utf-8')
+          for marker in ('kButtonX = 105', 'kActionX = 235', 'Alsó gombkiosztás', 'Hosszan:', '+ 10;'):
+              if marker not in ui:
+                  raise SystemExit(f'CPHUN-39 UI invariant missing: {marker}')
+          print('CPHUN-39 input/UI invariants verified')
+          PY
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Upload CPHUN-39 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260831-39-Button-UI-2x-Recovery-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
