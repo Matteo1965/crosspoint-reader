@@ -1,4 +1,4 @@
-name: Build CPHUN-260830-36 Recovery Baseline
+name: Build CPHUN-260830-36 2x Button Test v2
 
 on:
   push:
@@ -27,7 +27,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Verify CPHUN-36 recovery baseline
+      - name: Apply safe CPHUN-36 2x v2 integration
+        run: python3 tools/cphun_36_double_click_v2.py
+
+      - name: Verify CPHUN-36 v2 scope and input safety
         run: |
           set -euo pipefail
           grep -q 'CPHUN-260830-36' src/CPHUNBuildId.h
@@ -35,7 +38,14 @@ jobs:
           grep -q 'U"rossz", U"íz"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
           grep -q 'HungarianCompoundBoundaryCorrections' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          ! grep -q 'CPHUN-36 2x front-button test' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CPHUN-36 2x front-button test v2' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'cphun36OpenSettings' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'TextSettingsActivity::Tab::Layout' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SCREEN_MARGIN_STEP' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::Power' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageBack' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageForward' src/activities/reader/EpubReaderActivity.cpp
+          ! grep -q 'Suppress the legacy press path' src/activities/reader/EpubReaderActivity.cpp
           git diff --check
 
       - name: Configure unit tests
@@ -62,10 +72,10 @@ jobs:
       - name: Build X4 firmware
         run: .venv/bin/pio run -e gh_release_rc
 
-      - name: Upload CPHUN-260830-36 recovery firmware
+      - name: Upload CPHUN-260830-36 2x v2 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260830-36-Recovery-Baseline-FW
+          name: CPHUN-260830-36-2x-Button-Test-v2-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
