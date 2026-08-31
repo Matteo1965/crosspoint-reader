@@ -20,7 +20,7 @@ p.write_text(t,encoding='utf-8')
 
 # Hungarian labels: menu row and shorter remap prompt.
 p=Path('lib/I18n/translations/hungarian.yaml'); t=p.read_text(encoding='utf-8')
-t=t.replace('STR_REMAP_PROMPT: "Nyomj meg egy alsó gombot a cseréhez"','STR_REMAP_PROMPT: "Nyomd meg a cserélendő gombot."')
+t=t.replace('STR_REMAP_PROMPT: "Nyomj meg egy alsó gombot a cseréhez"','STR_REMAP_PROMPT: "Nyomd meg a cserélendő gombot!"')
 t=t.replace('STR_REMAP_FRONT_BUTTONS: "Alsó gombok átállítása"','STR_REMAP_FRONT_BUTTONS: "Alsó gombok"')
 p.write_text(t,encoding='utf-8')
 
