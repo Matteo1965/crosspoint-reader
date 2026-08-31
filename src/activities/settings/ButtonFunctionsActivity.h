@@ -14,11 +14,12 @@ class ButtonFunctionsActivity final : public UiListActivity {
   void onEnter() override;
 
  protected:
-  int listCount() const override { return 14; }
+  int listCount() const override { return 12; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   bool handleCustomInput() override;
   const char* headerTitle() const override;
+  void drawFooter() override;
 
  private:
   static ReaderPhysicalButton buttonForRow(int row);
