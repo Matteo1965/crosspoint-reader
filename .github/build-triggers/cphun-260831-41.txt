@@ -1,0 +1,4 @@
+CPHUN-260831-41
+Configurable 1x / 2x / Hosszú reader button gesture test.
+UI: button column X=125; extended hyphenation user-facing label.
+Preserve device-confirmed Power and side-button paths.
