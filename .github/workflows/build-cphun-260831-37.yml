@@ -1,0 +1,83 @@
+name: Build CPHUN-260831-37 Button Functions Foundation
+
+on:
+  push:
+    branches:
+      - agent/cphun-260831-36-button-functions-menu
+    paths:
+      - '.github/build-triggers/cphun-260831-37.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260831-37
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout CPHUN-37 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260831-36-button-functions-menu
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply device-confirmed CPHUN-36 2x input integration
+        run: python3 tools/cphun_36_double_click_v2.py
+
+      - name: Apply device-confirmed refined margin profile
+        run: python3 tools/cphun_36_refined_margins.py
+
+      - name: Apply CPHUN-37 button-functions foundation
+        run: python3 tools/cphun_37_button_functions_foundation.py
+
+      - name: Verify CPHUN-37 foundation and regression baseline
+        run: |
+          set -euo pipefail
+          grep -q 'CPHUN-260831-37' src/CPHUNBuildId.h
+          grep -q 'READER_BUTTONS.loadFromFile();' src/main.cpp
+          grep -q '/.crosspoint/reader-buttons.json' src/ReaderButtonProfileStore.h
+          grep -q 'READER_BUTTON_ACTION_SLOT_COUNT' src/ReaderButtonProfile.h
+          grep -q 'CPHUN-36 2x front-button test v2' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SCREEN_MARGIN_MIN = 10' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_MAX = 24' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_STEP = 2' src/CrossPointSettings.h
+          ! grep -q 'Suppress the legacy press path' src/activities/reader/EpubReaderActivity.cpp
+          git diff --check
+
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build unit tests
+        run: cmake --build build/test -j2
+
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Upload CPHUN-37 foundation firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260831-37-Button-Functions-Foundation-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
