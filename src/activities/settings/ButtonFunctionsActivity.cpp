@@ -133,19 +133,25 @@ bool ButtonFunctionsActivity::handleCustomInput() {
 void ButtonFunctionsActivity::activateIndex(const int index) { openActionPicker(index); }
 
 void ButtonFunctionsActivity::openActionPicker(const int row) {
+  const ReaderAction selected = READER_BUTTONS.get(buttonForRow(row), gestureForRow(row));
+  int current = 0;
   std::vector<std::string> options;
   options.reserve(std::size(ACTIONS));
-  int current = 0;
-  const ReaderAction selected = READER_BUTTONS.get(buttonForRow(row), gestureForRow(row));
   for (int i = 0; i < static_cast<int>(std::size(ACTIONS)); ++i) {
     options.emplace_back(actionLabel(ACTIONS[i]));
     if (ACTIONS[i] == selected) current = i;
   }
+
+  std::vector<const char*> optionPtrs;
+  optionPtrs.reserve(options.size());
+  for (const auto& option : options) optionPtrs.push_back(option.c_str());
+
   const std::string title = labels_[row];
-  optionPopup_.show(title.c_str(), options, current, [this, row](int idx) {
-    READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), ACTIONS[idx]);
-    READER_BUTTONS.saveToFile();
-    rebuildRows();
-  });
+  optionPopup_.show(title.c_str(), optionPtrs.data(), static_cast<int>(optionPtrs.size()), current,
+                    [this, row](int idx) {
+                      READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), ACTIONS[idx]);
+                      READER_BUTTONS.saveToFile();
+                      rebuildRows();
+                    });
   requestUpdate();
 }
