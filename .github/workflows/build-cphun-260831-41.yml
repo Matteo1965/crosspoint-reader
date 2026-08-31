@@ -1,4 +1,4 @@
-name: Build CPHUN-260831-41 Configurable Gestures
+name: Build CPHUN-260831-41 Final Test Bundle
 
 on:
   push:
@@ -43,6 +43,8 @@ jobs:
           set -euo pipefail
           grep -q 'CPHUN-260831-41' src/CPHUNBuildId.h
           grep -q 'kButtonX = 125' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Hosszú:' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'const int rowStep = rowHeight + rowGap;' src/activities/settings/ButtonFunctionsActivity.cpp
           grep -q 'Kiterjesztett elválasztás' src/activities/settings/ButtonFunctionsActivity.cpp
           grep -q 'ReaderButtonGesture::Single' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'ReaderButtonGesture::Double' src/activities/reader/EpubReaderActivity.cpp
@@ -50,6 +52,22 @@ jobs:
           grep -q 'Button::Power' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Button::PageBack' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Button::PageForward' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'extraParagraphSpacingEnabled ? extraParagraphSpacing : static_cast<uint8_t>(255)' src/CrossPointSettings.cpp
+          grep -q 'paragraphOverrideEnabled = extraParagraphSpacing != 255' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'extraParagraphSpacing > 0 && extraParagraphSpacing <= 100' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'appendSegmentPatternBreaks(cps, \*hyphenator, /\*includeFallback=\*/false, explicitBreakInfos)' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          r=Path('src/activities/reader/EpubReaderActivity.cpp').read_text(encoding='utf-8')
+          a=r.index('  const auto cphun36GestureAction')
+          b=r.index('  const auto cphun36LegacyShort', a)
+          block=r[a:b]
+          if 'return;' in block:
+              raise SystemExit('No-value return survived in bool gesture dispatcher')
+          if '-> bool' not in block:
+              raise SystemExit('Gesture dispatcher lost explicit bool return type')
+          print('CPHUN-41 bool/input/render/hyphen invariants verified')
+          PY
           git diff --check
       - run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/test -j2
@@ -65,7 +83,7 @@ jobs:
       - run: .venv/bin/pio run -e gh_release_rc
       - uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260831-41-Configurable-Gestures-FW
+          name: CPHUN-260831-41-Final-Test-Bundle-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
