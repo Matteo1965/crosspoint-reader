@@ -11,14 +11,16 @@ def replace_once(path, old, new):
 p=Path('src/activities/settings/SettingsActivity.cpp'); t=p.read_text(encoding='utf-8')
 t=t.replace('#include "ButtonRemapActivity.h"\n', '#include "ButtonFunctionsActivity.h"\n#include "ButtonRemapActivity.h"\n',1)
 t=t.replace('''    } else if (setting.category == StrId::STR_CAT_CONTROLS) {\n      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&''','''    } else if (setting.category == StrId::STR_CAT_CONTROLS) {\n      if (!BoardConfig::hasTouch() &&\n          (setting.valuePtr == &CrossPointSettings::longPressButtonBehavior ||\n           setting.valuePtr == &CrossPointSettings::longPressMenuFunction ||\n           setting.valuePtr == &CrossPointSettings::backShortToFileBrowser)) {\n        continue;\n      }\n      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&''',1)
-t=t.replace('''    controlsSettings.insert(controlsSettings.begin(),\n                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));''','''    controlsSettings.insert(controlsSettings.begin(),\n                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));\n    controlsSettings.insert(controlsSettings.begin(),\n                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::ButtonFunctions));''',1)
+# Replace the legacy menu entry with the new configurable bottom-button screen.
+# The old ButtonRemapActivity implementation remains compiled for compatibility,
+# but is no longer exposed as a second Controller-menu row.
+t=t.replace('''    controlsSettings.insert(controlsSettings.begin(),\n                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));''','''    controlsSettings.insert(controlsSettings.begin(),\n                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::ButtonFunctions));''',1)
 t=t.replace('''      case SettingAction::RemapFrontButtons:\n        startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);\n        break;''','''      case SettingAction::RemapFrontButtons:\n        startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);\n        break;\n      case SettingAction::ButtonFunctions:\n        startActivityForResult(std::make_unique<ButtonFunctionsActivity>(renderer, mappedInput), resultHandler);\n        break;''',1)
 p.write_text(t,encoding='utf-8')
 
 # Hungarian labels: menu row and shorter remap prompt.
 p=Path('lib/I18n/translations/hungarian.yaml'); t=p.read_text(encoding='utf-8')
 t=t.replace('STR_REMAP_PROMPT: "Nyomj meg egy alsó gombot a cseréhez"','STR_REMAP_PROMPT: "Nyomd meg a cserélendő gombot."')
-# The first occurrence is used by the new action too; keep legacy remap wording distinct via activity title later.
 t=t.replace('STR_REMAP_FRONT_BUTTONS: "Alsó gombok átállítása"','STR_REMAP_FRONT_BUTTONS: "Alsó gombok"')
 p.write_text(t,encoding='utf-8')
 
