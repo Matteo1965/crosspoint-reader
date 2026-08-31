@@ -1,0 +1,7 @@
+Trigger CPHUN-260831-38 Input Recovery build.
+
+Purpose:
+- apply the CPHUN-37 configurable-button extension before the proven CPHUN-36 v2 input patch is materialized into EpubReaderActivity.cpp;
+- preserve Power and side-button legacy input paths;
+- reject the old front-button press-frame early-return regression;
+- verify the configured double-click dispatcher is present in the compiled reader source.
