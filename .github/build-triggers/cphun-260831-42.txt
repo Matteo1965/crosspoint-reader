@@ -1,0 +1,8 @@
+CPHUN-260831-42 button configuration test build
+Trigger: 2026-08-31
+1. bottom-button UI font: UI_12_FONT_ID
+2. column geometry: X=40 / X=135 / X=255
+3. visible 12-action picker for all 12 gesture slots
+4. generic dispatcher reads Single/Double/Hold correctly
+5. legacy hard-wired shortcuts limited to real double-click fallback
+6. preserve CPHUN-41 paragraph and compound-hyphen fixes
