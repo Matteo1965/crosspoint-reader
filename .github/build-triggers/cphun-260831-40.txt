@@ -1,0 +1,8 @@
+Trigger CPHUN-260831-40.
+
+Purpose:
+- change Hungarian gesture label from Hosszan: to Hosszú:
+- move the numbered button column +10 px right (X=115)
+- remove the old fixed +10 px vertical text offset
+- make custom fixed-column text use the same row stride as FreeInk selection geometry: listRowHeight + listRowGap
+- preserve the device-confirmed Power, side-button and 2x recovery behavior from CPHUN-39
