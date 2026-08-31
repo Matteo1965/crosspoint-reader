@@ -1,4 +1,4 @@
-name: Build CPHUN-260830-36 2x Button Test
+name: Build CPHUN-260830-36 Recovery Baseline
 
 on:
   push:
@@ -27,21 +27,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply CPHUN-36 2x button test integration
-        run: python3 tools/cphun_36_double_click_test.py
-
-      - name: Verify CPHUN-36 baseline and test scope
+      - name: Verify CPHUN-36 recovery baseline
         run: |
           set -euo pipefail
           grep -q 'CPHUN-260830-36' src/CPHUNBuildId.h
           grep -q 'U"rossz", U"indulat"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'U"rossz", U"íz"' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'HungarianRosszCompoundBoundaries' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -q 'HungarianRosszInflectionControls' test/hyphenation_eval/HyphenationEvaluationTest.cpp
           grep -q 'HungarianCompoundBoundaryCorrections' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -q 'HungarianGenuineDoubledDigraphsRemainExtended' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -q 'CPHUN-36 2x front-button test' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'getReleasedFrontButton' src/MappedInputManager.cpp
+          ! grep -q 'CPHUN-36 2x front-button test' src/activities/reader/EpubReaderActivity.cpp
           git diff --check
 
       - name: Configure unit tests
@@ -68,10 +62,10 @@ jobs:
       - name: Build X4 firmware
         run: .venv/bin/pio run -e gh_release_rc
 
-      - name: Upload CPHUN-260830-36 test firmware
+      - name: Upload CPHUN-260830-36 recovery firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260830-36-2x-Button-Test-FW
+          name: CPHUN-260830-36-Recovery-Baseline-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
