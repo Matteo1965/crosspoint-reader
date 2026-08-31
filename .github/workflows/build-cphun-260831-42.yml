@@ -1,0 +1,99 @@
+name: Build CPHUN-260831-42 Button Configuration Fix
+
+on:
+  push:
+    branches: [agent/cphun-260831-36-button-functions-menu]
+    paths: ['.github/build-triggers/cphun-260831-42.txt']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260831-42
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-260831-36-button-functions-menu
+          submodules: recursive
+          fetch-depth: 0
+      - run: python3 tools/cphun_37_full_button_functions.py
+      - run: python3 tools/cphun_39_button_ui_and_double_fallback.py
+      - run: python3 tools/cphun_40_button_ui_row_geometry.py
+      - run: python3 tools/cphun_36_double_click_v2.py
+      - run: python3 tools/cphun_41_configurable_gestures.py
+      - run: python3 tools/cphun_36_margin_profile.py
+      - run: python3 tools/cphun_37_button_functions_foundation.py
+      - run: python3 tools/cphun_42_button_config_fix.py
+      - name: Promote build identity
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/CPHUNBuildId.h'); s=p.read_text()
+          s=s.replace('#define CPHUN_BUILD_ID "CPHUN-260831-37"','#define CPHUN_BUILD_ID "CPHUN-260831-42"')
+          p.write_text(s)
+          PY
+      - name: Verify CPHUN-42
+        run: |
+          set -euo pipefail
+          grep -q 'CPHUN-260831-42' src/CPHUNBuildId.h
+          grep -q 'kGestureX = 40' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'kButtonX = 135' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'kActionX = 255' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'getTextHeight(UI_12_FONT_ID)' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'drawText(UI_12_FONT_ID, gestureX' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'drawText(UI_12_FONT_ID, buttonX' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'drawText(UI_12_FONT_ID, actionX' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'optionPopup_.render(renderer)' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Kiterjesztett elválasztás KI/BE' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'READER_BUTTONS.get(physical, gesture)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'gesture != ReaderButtonGesture::Double' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::Power' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageBack' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Button::PageForward' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'extraParagraphSpacingEnabled ? extraParagraphSpacing : static_cast<uint8_t>(255)' src/CrossPointSettings.cpp
+          grep -q 'paragraphOverrideEnabled = extraParagraphSpacing != 255' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'extraParagraphSpacing > 0 && extraParagraphSpacing <= 100' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -q 'appendSegmentPatternBreaks(cps, \*hyphenator, /\*includeFallback=\*/false, explicitBreakInfos)' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          ui=Path('src/activities/settings/ButtonFunctionsActivity.cpp').read_text(encoding='utf-8')
+          a=ui.index('constexpr ReaderAction ACTIONS[] = {')
+          b=ui.index('};', a)
+          if ui[a:b].count('ReaderAction::') != 12:
+              raise SystemExit('Button picker must expose exactly 12 actions')
+          r=Path('src/activities/reader/EpubReaderActivity.cpp').read_text(encoding='utf-8')
+          a=r.index('  const auto cphun36GestureAction')
+          b=r.index('  const auto cphun36LegacyShort', a)
+          block=r[a:b]
+          if 'return;' in block:
+              raise SystemExit('No-value return survived in bool gesture dispatcher')
+          if 'READER_BUTTONS.get(physical, gesture)' not in block:
+              raise SystemExit('Gesture dispatcher still uses a fixed gesture slot')
+          print('CPHUN-42 button UI/config/input invariants verified')
+          PY
+          git diff --check
+      - run: cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build/test -j2
+      - run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - run: .venv/bin/pio run -e gh_release_rc
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260831-42-Button-Configuration-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
