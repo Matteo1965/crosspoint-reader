@@ -31,7 +31,7 @@ jobs:
         run: python3 tools/cphun_36_double_click_v2.py
 
       - name: Apply device-confirmed refined margin profile
-        run: python3 tools/cphun_36_refined_margins.py
+        run: python3 tools/cphun_36_margin_profile.py
 
       - name: Apply CPHUN-37 button-functions foundation
         run: python3 tools/cphun_37_button_functions_foundation.py
