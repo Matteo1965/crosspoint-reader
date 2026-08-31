@@ -14,7 +14,7 @@ class ButtonFunctionsActivity final : public UiListActivity {
   void onEnter() override;
 
  protected:
-  int listCount() const override { return 12; }
+  int listCount() const override { return 14; }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   bool handleCustomInput() override;
