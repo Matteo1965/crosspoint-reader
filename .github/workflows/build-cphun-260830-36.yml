@@ -1,4 +1,4 @@
-name: Build CPHUN-260830-36 2x Button Test v2
+name: Build CPHUN-260830-36 2x + Refined Margins Test
 
 on:
   push:
@@ -30,7 +30,10 @@ jobs:
       - name: Apply safe CPHUN-36 2x v2 integration
         run: python3 tools/cphun_36_double_click_v2.py
 
-      - name: Verify CPHUN-36 v2 scope and input safety
+      - name: Apply refined CPHUN-36 margin profile
+        run: python3 tools/cphun_36_margin_profile.py
+
+      - name: Verify CPHUN-36 input safety and refined margins
         run: |
           set -euo pipefail
           grep -q 'CPHUN-260830-36' src/CPHUNBuildId.h
@@ -41,7 +44,11 @@ jobs:
           grep -q 'CPHUN-36 2x front-button test v2' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'cphun36OpenSettings' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'TextSettingsActivity::Tab::Layout' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'SCREEN_MARGIN_STEP' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SCREEN_MARGIN_MIN = 10' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_MAX = 24' src/CrossPointSettings.h
+          grep -q 'SCREEN_MARGIN_STEP = 2' src/CrossPointSettings.h
+          grep -q 'verticalScreenMargin' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'static_cast<int>(SETTINGS.screenMargin) - 4' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Button::Power' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Button::PageBack' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Button::PageForward' src/activities/reader/EpubReaderActivity.cpp
@@ -72,10 +79,10 @@ jobs:
       - name: Build X4 firmware
         run: .venv/bin/pio run -e gh_release_rc
 
-      - name: Upload CPHUN-260830-36 2x v2 firmware
+      - name: Upload CPHUN-260830-36 refined margins firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260830-36-2x-Button-Test-v2-FW
+          name: CPHUN-260830-36-2x-Refined-Margins-Test-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
