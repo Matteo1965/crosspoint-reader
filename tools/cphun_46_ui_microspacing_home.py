@@ -55,7 +55,7 @@ if anchor not in r:
     raise SystemExit('CPHUN-46 reader action anchor missing')
 insert = anchor + '''    if (configured == ReaderAction::OpenSettings) { cphun36OpenSettings(); return true; }
     if (configured == ReaderAction::OpenChapterSelection) {
-      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::CHAPTER_SELECTION);
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER);
       return true;
     }
 '''
@@ -190,6 +190,7 @@ assert 'GoHome = 32' in action and 'OpenSettings = 33' in action
 reader = Path('src/activities/reader/EpubReaderActivity.cpp').read_text(encoding='utf-8')
 assert 'configured == ReaderAction::OpenSettings' in reader
 assert 'configured == ReaderAction::OpenChapterSelection' in reader
+assert 'EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER' in reader
 
 popup = Path('src/components/OptionPopup.h').read_text(encoding='utf-8')
 assert 'compact16 = count == MAX_OPTIONS' in popup
