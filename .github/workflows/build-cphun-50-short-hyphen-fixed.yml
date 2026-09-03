@@ -1,0 +1,111 @@
+name: Build CPHUN-50 Short Hyphen Fixed
+
+on:
+  push:
+    branches: [agent/cphun-49-short-hyphen-fixed]
+    paths: ['.github/workflows/build-cphun-50-short-hyphen-fixed.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260903-50
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-49-short-hyphen-fixed
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Reconstruct proven CPHUN-49 baseline
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_37_full_button_functions.py
+          python3 tools/cphun_39_button_ui_and_double_fallback.py
+          python3 tools/cphun_40_button_ui_row_geometry.py
+          python3 tools/cphun_36_double_click_v2.py
+          python3 tools/cphun_41_configurable_gestures.py
+          python3 tools/cphun_36_margin_profile.py
+          python3 tools/cphun_37_button_functions_foundation.py
+          python3 tools/cphun_42_button_config_fix.py
+          python3 tools/cphun_43_final_bundle.py
+          python3 tools/cphun_44_hyphen_microspacing_4px.py
+          python3 tools/cphun_45_buttons_and_punctuation_microspacing.py
+          python3 tools/cphun_46_ui_microspacing_home.py
+          python3 tools/cphun_47_home_offset_version_text.py
+          python3 tools/cphun_48_home_toc_files.py
+          python3 tools/cphun_49_dash_attached_hyphenation.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/CPHUNBuildId.h'); s=p.read_text()
+          s=s.replace('CPHUN-260831-37','CPHUN-260903-50').replace('CPHUN-260901-49','CPHUN-260903-50')
+          p.write_text(s)
+          PY
+          git diff --check
+
+      - name: Snapshot CPHUN-49 reconstructed source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'CPHUN-50: reconstruct proven CPHUN-49 baseline'
+
+      - name: Apply renderer-only Short Hyphen feature
+        run: |
+          set -euo pipefail
+          git cherry-pick -X theirs 519a51ba0aacffa3aba7857066c16548f0d25487
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('lib/Epub/Epub/Section.cpp')
+          s=p.read_text()
+          s=re.sub(r'constexpr uint8_t SECTION_FILE_VERSION = \d+;', 'constexpr uint8_t SECTION_FILE_VERSION = 54;', s, count=1)
+          p.write_text(s)
+          PY
+          grep -q 'CPHUN-260903-50' src/CPHUNBuildId.h
+          grep -q 'CPHUN-49: dialogue/narrative dashes' lib/Epub/Epub/hyphenation/HyphenationCommon.cpp
+          grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'shortHyphen' src/CrossPointSettings.h
+          grep -q 'shortHyphen' lib/Epub/Epub/ReaderRenderSpec.h
+          grep -q 'SHORT_HYPHEN_UTF8' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'Rövid elválasztójel' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'letterSpacingLimitPercent' lib/Epub/Epub/Section.cpp
+          git diff --check
+          git add lib/Epub/Epub/Section.cpp src/CPHUNBuildId.h
+          git commit --amend --no-edit
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-49-short-hyphen-fixed
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260903-50-Short-Hyphen-Fixed-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
