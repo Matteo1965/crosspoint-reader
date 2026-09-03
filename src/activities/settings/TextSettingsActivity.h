@@ -37,6 +37,7 @@ class TextSettingsActivity final : public UiTabListActivity {
     LetterSpacingCorrection,
     ScreenMargin,
     HangingPunctuation,
+    ShortHyphen,
     FixedDialogueSpacing,
     Count
   };

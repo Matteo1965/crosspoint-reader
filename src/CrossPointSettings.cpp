@@ -92,6 +92,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["fontFamily"] = fontFamily;
   doc["fontSize"] = fontPointSize;
   doc["hangingPunctuation"] = hangingPunctuation;
+  doc["shortHyphen"] = shortHyphen;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
   doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
   doc["softHyphenEnabled"] = softHyphenEnabled;
@@ -220,6 +221,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
   fontPointSize = storedFontSize;
+  shortHyphen = (doc["shortHyphen"] | (uint8_t)0) ? 1 : 0;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
   softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
   letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
@@ -308,8 +310,12 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
-  spec.softHyphenEnabled = softHyphenEnabled != 0;
-  spec.hangingPunctuationLimitPx = hangingPunctuation && screenMargin > 0 ? static_cast<uint8_t>(screenMargin - 1) : 0;
+  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.
+  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
+  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
+  spec.hangingPunctuationLimitPx =
+      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0));
+  spec.shortHyphen = shortHyphen != 0;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
   spec.minimumSpacePercent = minimumSpacePercent;

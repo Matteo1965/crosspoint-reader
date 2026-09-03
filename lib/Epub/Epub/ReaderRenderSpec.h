@@ -22,6 +22,7 @@ struct ReaderRenderSpec {
   bool softHyphenEnabled = false;
   // 0 disables hanging punctuation; otherwise maximum overhang into the physical margin.
   uint8_t hangingPunctuationLimitPx = 0;
+  bool shortHyphen = false;
   bool fixedDialogueSpacing = false;
   uint16_t letterSpacingLimitPercent = 0;
   uint8_t minimumSpacePercent = 100;
