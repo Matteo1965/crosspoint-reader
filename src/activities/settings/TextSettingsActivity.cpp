@@ -114,6 +114,8 @@ void TextSettingsActivity::rebuildRowItems() {
           item.label = I18N.get(StrId::STR_SCREEN_MARGIN);
         } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
           item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";
+        } else if (i == static_cast<int>(LayoutRow::ShortHyphen)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Rövid elválasztójel" : "Short hyphen";
         } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
           item.label = I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing";
         } else {
@@ -429,6 +431,11 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
+    case LayoutRow::ShortHyphen:
+      SETTINGS.shortHyphen = !SETTINGS.shortHyphen;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
     case LayoutRow::FixedDialogueSpacing:
       SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;
       SETTINGS.saveToFile();
@@ -470,6 +477,8 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
       return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);
+    case LayoutRow::ShortHyphen:
+      return SETTINGS.shortHyphen ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::FixedDialogueSpacing:
       return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
 

@@ -18,12 +18,16 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 uint8_t ParsedText::minimumSpacePercent_ = 100;
+bool ParsedText::shortHyphenEnabled_ = false;
 
 namespace {
 
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
+// UTF-8 for U+2011 NON-BREAKING HYPHEN. Used only as the visible glyph
+// for a synthetic hyphenation break when the Short Hyphen option is enabled.
+constexpr char SHORT_HYPHEN_UTF8[] = "\xE2\x80\x91";
 // Paragraph-level direction: scan the first N words to find base direction.
 constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
@@ -192,7 +196,9 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   return allowedOffsets;
 }
 
-bool isHangingPunctuation(const uint32_t cp) { return cp == '-'; }
+bool isHangingPunctuation(const uint32_t cp) {
+  return cp == '-' || (ParsedText::isShortHyphenEnabled() && cp == 0x2011);
+}
 
 struct HangingAdvanceCacheEntry {
   int fontId = -1;
@@ -283,7 +289,11 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
     stripSoftHyphensInPlace(sanitized);
   }
   if (appendHyphen) {
-    sanitized.push_back('-');
+    if (ParsedText::isShortHyphenEnabled()) {
+      sanitized += SHORT_HYPHEN_UTF8;
+    } else {
+      sanitized.push_back('-');
+    }
   }
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
@@ -779,6 +789,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
     renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+    if (hyphenationEnabled && shortHyphenEnabled_) {
+      renderer.ensureSdCardFontReady(fontId, SHORT_HYPHEN_UTF8, styleMask);
+    }
   }
 
   const int pageWidth = viewportWidth;
@@ -1309,7 +1322,11 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
       break;
   }
   if (chosenNeedsHyphen) {
-    words[wordIndex].push_back('-');
+    if (shortHyphenEnabled_) {
+      words[wordIndex] += SHORT_HYPHEN_UTF8;
+    } else {
+      words[wordIndex].push_back('-');
+    }
   }
 
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.

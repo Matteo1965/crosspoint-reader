@@ -243,6 +243,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t paragraphAlignment = JUSTIFIED;
   // Optical margin / floating hyphenation percentage: 0, 20, 40, 60, 80 or 100.
   uint8_t hangingPunctuation = 100;
+  // Replace only synthetic line-end hyphens with U+2011 at layout/render time.
+  uint8_t shortHyphen = 0;
   // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
   uint8_t fixedDialogueSpacing = 0;
   // Minimum natural word-space width in justified text: 50..100 percent.
