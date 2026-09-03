@@ -1,0 +1,254 @@
+name: Build CPHUN short hyphen test
+
+'on':
+  push:
+    branches: [agent/hungarian-v1.6.0rc-short-hyphen]
+    paths:
+      - '.github/workflows/build-cphun-short-hyphen-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out Hungarian typography baseline
+        uses: actions/checkout@v4
+        with:
+          ref: agent/hungarian-v1.6.0rc-short-hyphen
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Add renderer-only short hyphen option
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          def ro(path, old, new):
+              p = Path(path)
+              t = p.read_text(encoding='utf-8')
+              n = t.count(old)
+              if n != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, got {n}: {old[:120]!r}')
+              p.write_text(t.replace(old, new, 1), encoding='utf-8')
+
+          # Persistent setting. OFF keeps the original U+002D behavior.
+          ro('src/CrossPointSettings.h',
+             '  // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.\n  uint8_t fixedDialogueSpacing = 0;\n',
+             '  // Replace only synthetic line-end hyphens with U+2011 at layout/render time.\n  uint8_t shortHyphen = 0;\n  // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.\n  uint8_t fixedDialogueSpacing = 0;\n')
+
+          ro('src/CrossPointSettings.cpp',
+             '  doc["hangingPunctuation"] = hangingPunctuation;\n  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;\n',
+             '  doc["hangingPunctuation"] = hangingPunctuation;\n  doc["shortHyphen"] = shortHyphen;\n  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;\n')
+          ro('src/CrossPointSettings.cpp',
+             '  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n',
+             '  shortHyphen = (doc["shortHyphen"] | (uint8_t)0) ? 1 : 0;\n  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;\n')
+          ro('src/CrossPointSettings.cpp',
+             '  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n',
+             '  spec.shortHyphen = shortHyphen != 0;\n  spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;\n')
+
+          # Render spec: participates in section-cache validation so toggling the
+          # option rebuilds layout with the correct hyphen width.
+          ro('lib/Epub/Epub/ReaderRenderSpec.h',
+             '  uint8_t hangingPunctuationLimitPx = 0;\n  bool fixedDialogueSpacing = false;\n',
+             '  uint8_t hangingPunctuationLimitPx = 0;\n  bool shortHyphen = false;\n  bool fixedDialogueSpacing = false;\n')
+
+          # ParsedText owns synthetic hyphen creation. Source EPUB text is never rewritten.
+          ro('lib/Epub/Epub/ParsedText.h',
+             'class ParsedText {\n  static uint8_t minimumSpacePercent_;\n',
+             'class ParsedText {\n  static uint8_t minimumSpacePercent_;\n  static bool shortHyphenEnabled_;\n')
+          ro('lib/Epub/Epub/ParsedText.h',
+             ' public:\n  static void setMinimumSpacePercent(uint8_t percent) { minimumSpacePercent_ = percent; }\n',
+             ' public:\n  static void setMinimumSpacePercent(uint8_t percent) { minimumSpacePercent_ = percent; }\n  static void setShortHyphenEnabled(bool enabled) { shortHyphenEnabled_ = enabled; }\n  static bool isShortHyphenEnabled() { return shortHyphenEnabled_; }\n')
+
+          pc = Path('lib/Epub/Epub/ParsedText.cpp')
+          t = pc.read_text(encoding='utf-8')
+          old = 'constexpr int MAX_COST = std::numeric_limits<int>::max();\nuint8_t ParsedText::minimumSpacePercent_ = 100;\n'
+          new = ('constexpr int MAX_COST = std::numeric_limits<int>::max();\n'
+                 'uint8_t ParsedText::minimumSpacePercent_ = 100;\n'
+                 'bool ParsedText::shortHyphenEnabled_ = false;\n')
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: static setting anchor not found exactly once')
+          t = t.replace(old, new, 1)
+
+          old = 'constexpr size_t SOFT_HYPHEN_BYTES = 2;\n'
+          new = ('constexpr size_t SOFT_HYPHEN_BYTES = 2;\n'
+                 '// UTF-8 for U+2011 NON-BREAKING HYPHEN. Used only as the visible glyph\n'
+                 '// for a synthetic hyphenation break when the Short Hyphen option is enabled.\n'
+                 'constexpr char SHORT_HYPHEN_UTF8[] = "\\xE2\\x80\\x91";\n')
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: soft-hyphen constant anchor not found exactly once')
+          t = t.replace(old, new, 1)
+
+          old = "bool isHangingPunctuation(const uint32_t cp) { return cp == '-'; }"
+          new = ("bool isHangingPunctuation(const uint32_t cp) {\n"
+                 "  return cp == '-' || (ParsedText::isShortHyphenEnabled() && cp == 0x2011);\n"
+                 "}")
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: hanging punctuation helper anchor not found exactly once')
+          t = t.replace(old, new, 1)
+
+          old = "  if (appendHyphen) {\n    sanitized.push_back('-');\n  }\n"
+          new = ("  if (appendHyphen) {\n"
+                 "    if (ParsedText::isShortHyphenEnabled()) {\n"
+                 "      sanitized += SHORT_HYPHEN_UTF8;\n"
+                 "    } else {\n"
+                 "      sanitized.push_back('-');\n"
+                 "    }\n"
+                 "  }\n")
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: measured synthetic hyphen anchor not found exactly once')
+          t = t.replace(old, new, 1)
+
+          old = "  if (chosenNeedsHyphen) {\n    words[wordIndex].push_back('-');\n  }\n"
+          new = ("  if (chosenNeedsHyphen) {\n"
+                 "    if (shortHyphenEnabled_) {\n"
+                 "      words[wordIndex] += SHORT_HYPHEN_UTF8;\n"
+                 "    } else {\n"
+                 "      words[wordIndex].push_back('-');\n"
+                 "    }\n"
+                 "  }\n")
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: rendered synthetic hyphen anchor not found exactly once')
+          t = t.replace(old, new, 1)
+
+          old = '    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);\n'
+          new = (old +
+                 '    if (hyphenationEnabled && shortHyphenEnabled_) {\n'
+                 '      renderer.ensureSdCardFontReady(fontId, SHORT_HYPHEN_UTF8, styleMask);\n'
+                 '    }\n')
+          if t.count(old) != 1:
+              raise SystemExit('ParsedText.cpp: SD-font prewarm anchor not found exactly once')
+          t = t.replace(old, new, 1)
+          pc.write_text(t, encoding='utf-8')
+
+          # Section cache: add the setting to the cache key and bump the file version.
+          sec = Path('lib/Epub/Epub/Section.cpp')
+          s = sec.read_text(encoding='utf-8')
+          m = re.search(r'constexpr uint8_t SECTION_FILE_VERSION = (\d+);', s)
+          if not m:
+              raise SystemExit('Section.cpp: SECTION_FILE_VERSION not found')
+          oldver = int(m.group(1))
+          s = s[:m.start()] + f'constexpr uint8_t SECTION_FILE_VERSION = {oldver + 1};' + s[m.end():]
+
+          anchor = 'constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) +'
+          if s.count(anchor) != 1:
+              raise SystemExit('Section.cpp: HEADER_SIZE anchor not found exactly once')
+          s = s.replace(anchor, 'constexpr uint32_t HEADER_SIZE = sizeof(bool) + sizeof(uint8_t) +', 1)
+
+          def sr(old, new, label):
+              nonlocal_s = None
+              return
+
+          pairs = [
+            ('                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.fixedDialogueSpacing) +\n',
+             '                                   sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.shortHyphen) +\n                                   sizeof(spec.fixedDialogueSpacing) +\n', 'static_assert'),
+            ('  serialization::writePod(file, spec.hangingPunctuationLimitPx);\n  serialization::writePod(file, spec.fixedDialogueSpacing);\n',
+             '  serialization::writePod(file, spec.hangingPunctuationLimitPx);\n  serialization::writePod(file, spec.shortHyphen);\n  serialization::writePod(file, spec.fixedDialogueSpacing);\n', 'write'),
+            ('    uint8_t fileHangingPunctuationLimitPx;\n    bool fileFixedDialogueSpacing;\n',
+             '    uint8_t fileHangingPunctuationLimitPx;\n    bool fileShortHyphen;\n    bool fileFixedDialogueSpacing;\n', 'declare'),
+            ('    serialization::readPod(file, fileHangingPunctuationLimitPx);\n    serialization::readPod(file, fileFixedDialogueSpacing);\n',
+             '    serialization::readPod(file, fileHangingPunctuationLimitPx);\n    serialization::readPod(file, fileShortHyphen);\n    serialization::readPod(file, fileFixedDialogueSpacing);\n', 'read'),
+            ('        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx ||\n        spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||\n',
+             '        spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.shortHyphen != fileShortHyphen ||\n        spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||\n', 'compare'),
+            ('  ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);\n',
+             '  ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);\n  ParsedText::setShortHyphenEnabled(spec.shortHyphen);\n', 'setter'),
+          ]
+          for old, new, label in pairs:
+              if s.count(old) != 1:
+                  raise SystemExit(f'Section.cpp: {label} anchor count={s.count(old)}')
+              s = s.replace(old, new, 1)
+          sec.write_text(s, encoding='utf-8')
+
+          # Text settings menu: Optikai margó -> Rövid elválasztójel -> Fix párbeszédköz.
+          ro('src/activities/settings/TextSettingsActivity.h',
+             '    HangingPunctuation,\n    FixedDialogueSpacing,\n',
+             '    HangingPunctuation,\n    ShortHyphen,\n    FixedDialogueSpacing,\n')
+
+          ta = Path('src/activities/settings/TextSettingsActivity.cpp')
+          u = ta.read_text(encoding='utf-8')
+          old = ('        } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {\n'
+                 '          item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";\n'
+                 '        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {\n')
+          new = ('        } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {\n'
+                 '          item.label = I18N.getLanguage() == Language::HU ? "Optikai margó" : "Hanging punctuation";\n'
+                 '        } else if (i == static_cast<int>(LayoutRow::ShortHyphen)) {\n'
+                 '          item.label = I18N.getLanguage() == Language::HU ? "Rövid elválasztójel" : "Short hyphen";\n'
+                 '        } else if (i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {\n')
+          if u.count(old) != 1:
+              raise SystemExit('TextSettingsActivity.cpp: menu label anchor not found exactly once')
+          u = u.replace(old, new, 1)
+
+          old = ('    case LayoutRow::FixedDialogueSpacing:\n'
+                 '      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;\n')
+          new = ('    case LayoutRow::ShortHyphen:\n'
+                 '      SETTINGS.shortHyphen = !SETTINGS.shortHyphen;\n'
+                 '      SETTINGS.saveToFile();\n'
+                 '      requestUpdate();\n'
+                 '      break;\n'
+                 '    case LayoutRow::FixedDialogueSpacing:\n'
+                 '      SETTINGS.fixedDialogueSpacing = !SETTINGS.fixedDialogueSpacing;\n')
+          if u.count(old) != 1:
+              raise SystemExit('TextSettingsActivity.cpp: toggle anchor not found exactly once')
+          u = u.replace(old, new, 1)
+
+          old = ('    case LayoutRow::HangingPunctuation:\n'
+                 '      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);\n'
+                 '    case LayoutRow::FixedDialogueSpacing:\n')
+          new = ('    case LayoutRow::HangingPunctuation:\n'
+                 '      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);\n'
+                 '    case LayoutRow::ShortHyphen:\n'
+                 '      return SETTINGS.shortHyphen ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);\n'
+                 '    case LayoutRow::FixedDialogueSpacing:\n')
+          if u.count(old) != 1:
+              raise SystemExit('TextSettingsActivity.cpp: value-text anchor not found exactly once')
+          u = u.replace(old, new, 1)
+          ta.write_text(u, encoding='utf-8')
+          PY
+
+          git diff --check
+
+      - name: Commit short-hyphen source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp \
+                  src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp \
+                  lib/Epub/Epub/ReaderRenderSpec.h lib/Epub/Epub/Section.cpp \
+                  lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp
+          git commit -m 'feat: add renderer-only short hyphen toggle'
+          git push origin HEAD:agent/hungarian-v1.6.0rc-short-hyphen
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Build X4 release-candidate firmware
+        run: pio run -e gh_release_rc
+
+      - name: Upload short-hyphen X4 firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: crosspoint-hungarian-short-hyphen-x4
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
