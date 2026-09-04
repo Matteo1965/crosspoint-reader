@@ -1,0 +1,132 @@
+name: Build CPHUN-56 Render Shift + Vertical Margin
+
+on:
+  push:
+    branches: [agent/cphun-56-render-shift-vertical-margin]
+    paths: ['.github/workflows/build-cphun-56-render-shift-vertical-margin.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-56
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-56-render-shift-vertical-margin
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-56 rendering and vertical viewport corrections
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Render-only U+2011 ink alignment. Keep CPHUN-54 layout/justification unchanged.
+          p = Path('lib/Epub/Epub/blocks/TextBlock.cpp')
+          s = p.read_text()
+
+          inc_old = '#include "../../../../src/fontIds.h"\n'
+          inc_new = '#include "../../../../src/fontIds.h"\n#include "../ParsedText.h"\n'
+          if inc_old not in s:
+              raise SystemExit('TextBlock include anchor not found')
+          s = s.replace(inc_old, inc_new, 1)
+
+          helper_old = '''void drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x, const int y, const char* text,\n                     const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,\n                     const uint8_t letterSpacingPx) {\n  if (letterSpacingPx == 0 || text == nullptr || *text == '\\0') {\n    renderer.drawText(fontId, x, y, text, true, style, baseDir);\n    return;\n  }\n'''
+          helper_new = '''constexpr char SHORT_HYPHEN_UTF8[] = "\\xE2\\x80\\x91";\nconstexpr size_t SHORT_HYPHEN_BYTES = 3;\n\nbool endsWithShortHyphen(const char* text) {\n  if (text == nullptr) return false;\n  const size_t len = strlen(text);\n  return len >= SHORT_HYPHEN_BYTES &&\n         memcmp(text + len - SHORT_HYPHEN_BYTES, SHORT_HYPHEN_UTF8, SHORT_HYPHEN_BYTES) == 0;\n}\n\nint trailingShortHyphenInkShift(const GfxRenderer& renderer, const int fontId,\n                                const EpdFontFamily::Style style) {\n  const auto it = renderer.getFontMap().find(fontId);\n  if (it == renderer.getFontMap().end()) return 0;\n  const EpdGlyph* glyph = it->second.getGlyph(0x2011, style);\n  if (!glyph) return 0;\n  int renderedLeft = glyph->left;\n  if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) renderedLeft /= 2;\n  // CPHUN-54 places the U+2011 pen origin on the optical boundary.\n  // Shift only the glyph bitmap by -left so its visible bitmap starts on that\n  // boundary. Layout widths, justification gaps and every word X stay unchanged.\n  return -renderedLeft;\n}\n\nvoid drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x, const int y, const char* text,\n                     const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,\n                     const uint8_t letterSpacingPx, const bool alignTrailingShortHyphenInk) {\n  if (text == nullptr || *text == '\\0') return;\n\n  const bool adjustTrailingHyphen = alignTrailingShortHyphenInk && endsWithShortHyphen(text);\n  if (letterSpacingPx == 0) {\n    if (!adjustTrailingHyphen) {\n      renderer.drawText(fontId, x, y, text, true, style, baseDir);\n      return;\n    }\n\n    const size_t len = strlen(text);\n    const std::string prefix(text, len - SHORT_HYPHEN_BYTES);\n    if (!prefix.empty()) renderer.drawText(fontId, x, y, prefix.c_str(), true, style, baseDir);\n\n    const int fullAdvance = renderer.getTextAdvanceX(fontId, text, style);\n    const int hyphenAdvance = renderer.getTextAdvanceX(fontId, SHORT_HYPHEN_UTF8, style);\n    const int hyphenPenX = x + fullAdvance - hyphenAdvance;\n    renderer.drawText(fontId, hyphenPenX + trailingShortHyphenInkShift(renderer, fontId, style), y,\n                      SHORT_HYPHEN_UTF8, true, style, baseDir);\n    return;\n  }\n'''
+          if helper_old not in s:
+              raise SystemExit('drawTrackedText anchor not found')
+          s = s.replace(helper_old, helper_new, 1)
+
+          glyph_old = '''    renderer.drawText(fontId, penX, y, glyphText, true, style, baseDir);\n    penX += renderer.getTextAdvanceX(fontId, glyphText, style);\n    previous = cp;\n'''
+          glyph_new = '''    int glyphX = penX;\n    if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {\n      glyphX += trailingShortHyphenInkShift(renderer, fontId, style);\n    }\n    renderer.drawText(fontId, glyphX, y, glyphText, true, style, baseDir);\n    // Advance the logical pen exactly as before; the render-only shift must not\n    // alter word width or following positions.\n    penX += renderer.getTextAdvanceX(fontId, glyphText, style);\n    previous = cp;\n'''
+          if glyph_old not in s:
+              raise SystemExit('tracked glyph render anchor not found')
+          s = s.replace(glyph_old, glyph_new, 1)
+
+          simple_old = '''      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx);'''
+          simple_new = '''      const bool alignTrailingShortHyphenInk =\n          i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();\n      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx,\n                      alignTrailingShortHyphenInk);'''
+          if simple_old not in s:
+              raise SystemExit('simple render call anchor not found')
+          s = s.replace(simple_old, simple_new, 1)
+
+          complex_old = '''      drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx);'''
+          complex_new = '''      const bool alignTrailingShortHyphenInk =\n          i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();\n      drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx,\n                      alignTrailingShortHyphenInk);'''
+          if complex_old not in s:
+              raise SystemExit('complex render call anchor not found')
+          s = s.replace(complex_old, complex_new, 1)
+          p.write_text(s)
+
+          # 2) Make the vertical viewport visibly 4 px larger at BOTH edges than CPHUN-54.
+          #    Do this after the existing margin/status-bar calculations so a status-bar max()
+          #    cannot hide the requested bottom change.
+          p = Path('src/activities/reader/EpubReaderActivity.cpp')
+          s = p.read_text()
+
+          top_anchor = '''  orientedMarginTop += verticalScreenMargin;\n  orientedMarginLeft += SETTINGS.screenMargin;'''
+          top_repl = '''  orientedMarginTop += verticalScreenMargin;\n  // CPHUN-56: move the visible top text boundary 4 px upward relative to CPHUN-54.\n  orientedMarginTop = std::max(0, orientedMarginTop - 4);\n  orientedMarginLeft += SETTINGS.screenMargin;'''
+          if s.count(top_anchor) < 2:
+              raise SystemExit(f'Expected at least two top-margin anchors, found {s.count(top_anchor)}')
+          s = s.replace(top_anchor, top_repl)
+
+          bottom_anchor = '''  } else {\n    orientedMarginBottom += std::max(verticalScreenMargin, static_cast<int>(statusBarHeight));\n  }\n\n  const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;'''
+          bottom_repl = '''  } else {\n    orientedMarginBottom += std::max(verticalScreenMargin, static_cast<int>(statusBarHeight));\n  }\n  // CPHUN-56: move the visible bottom text boundary 4 px downward relative to CPHUN-54.\n  // Apply this after status-bar constraints so the 4 px expansion remains observable.\n  orientedMarginBottom = std::max(0, orientedMarginBottom - 4);\n\n  const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;'''
+          if bottom_anchor not in s:
+              raise SystemExit('Bottom-margin anchor not found')
+          s = s.replace(bottom_anchor, bottom_repl, 1)
+          p.write_text(s)
+
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260904-56"\n')
+          PY
+
+          grep -q 'return -renderedLeft' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'hyphenPenX + trailingShortHyphenInkShift' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'ParsedText::isOpticalMarginEnabled()' lib/Epub/Epub/blocks/TextBlock.cpp
+          test "$(grep -c 'orientedMarginTop = std::max(0, orientedMarginTop - 4)' src/activities/reader/EpubReaderActivity.cpp)" -ge 2
+          grep -q 'orientedMarginBottom = std::max(0, orientedMarginBottom - 4)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CPHUN-260904-56' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/blocks/TextBlock.cpp src/activities/reader/EpubReaderActivity.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-56: render-align short hyphen and expand vertical viewport'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-56-render-shift-vertical-margin
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-56-Render-Shift-Vertical-Margin-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
