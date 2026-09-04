@@ -1,0 +1,78 @@
+name: Build CPHUN-51 Layout Menu Fix
+
+on:
+  push:
+    branches: [agent/cphun-49-short-hyphen-fixed]
+    paths: ['.github/workflows/build-cphun-51-layout-menu-fix.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-51
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-49-short-hyphen-fixed
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply Layout menu regression fix
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_50_letter_spacing_menu_fix.py
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('src/CPHUNBuildId.h')
+          s=p.read_text().replace('CPHUN-260903-50','CPHUN-260904-51')
+          p.write_text(s)
+          PY
+          grep -q 'case LayoutRow::LetterSpacingCorrection' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '"10%", "20%", "30%", "40%", "50%", "60%", "70%"' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'props.rowHeight = 26;' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Rövid elválasztójel' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
+          git diff --check
+
+      - name: Commit staged source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/activities/settings/TextSettingsActivity.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-51: restore letter spacing picker and compact Layout rows'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-49-short-hyphen-fixed
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-51-Layout-Menu-Fix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
