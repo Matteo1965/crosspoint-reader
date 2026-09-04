@@ -1402,7 +1402,16 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
 
   // Update cached widths to reflect the new prefix/remainder pairing.
-  wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
+  // With Optical margin ON, breakpoint selection may have used U+002D deliberately
+  // even though Short Hyphen renders U+2011. Once the break is fixed, bookkeeping
+  // must switch to the actual rendered prefix width or justification will reserve
+  // space for the wrong glyph and the short hyphens will not start on one margin line.
+  if (shortHyphenEnabled_ && opticalMarginEnabled_ && chosenNeedsHyphen) {
+    wordWidths[wordIndex] = measureFocusWordWidth(renderer, fontId, words[wordIndex], wordStyles[wordIndex],
+                                                  wordFocusBoundary[wordIndex]);
+  } else {
+    wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
+  }
   const uint16_t remainderWidth =
       measureFocusWordWidth(renderer, fontId, remainder, style, wordFocusBoundary[wordIndex + 1]);
   wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
