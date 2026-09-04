@@ -1,0 +1,81 @@
+name: Build CPHUN-52 Regression Repair
+
+on:
+  push:
+    branches: [agent/cphun-49-short-hyphen-fixed]
+    paths: ['.github/workflows/build-cphun-52-regression-repair.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-52
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-49-short-hyphen-fixed
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-52 regression repairs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('tools/cphun_52_regression_bundle.py')
+          s=p.read_text()
+          s=s.replace("r'CPHUN-\\\\d{6}-\\\\d+'", "r'CPHUN-\\d{6}-\\d+'")
+          p.write_text(s)
+          PY
+          python3 tools/cphun_52_regression_bundle.py
+          grep -q 'verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF)' src/activities/settings/TextSettingsActivity.cpp
+          grep -q "cp == '.' || cp == ',' || cp == ':' || cp == ';'" lib/Epub/Epub/ParsedText.cpp
+          grep -q 'setOpticalMarginEnabled(spec.hangingPunctuationLimitPx > 0)' lib/Epub/Epub/Section.cpp
+          grep -q 'isShortHyphenEnabled() && !ParsedText::isOpticalMarginEnabled()' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CPHUN-260904-52' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.cpp src/activities/settings/TextSettingsActivity.cpp src/activities/reader/EpubReaderActivity.cpp lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/Section.cpp src/CPHUNBuildId.h tools/cphun_52_regression_bundle.py
+          git commit -m 'CPHUN-52: repair margins optical punctuation and short hyphen interaction'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-49-short-hyphen-fixed
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-52-Regression-Repair-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
