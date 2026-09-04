@@ -96,6 +96,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
   doc["softHyphenEnabled"] = softHyphenEnabled;
   doc["minimumSpacePercent"] = minimumSpacePercent;
+  doc["extraParagraphSpacingEnabled"] = extraParagraphSpacingEnabled;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -175,6 +176,13 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       }
       s.*(info.valuePtr) = v;
     }
+  }
+
+  if (doc["extraParagraphSpacingEnabled"].isNull()) {
+    extraParagraphSpacingEnabled = extraParagraphSpacing == 0 ? 0 : 1;
+    needsResave = true;
+  } else {
+    extraParagraphSpacingEnabled = (doc["extraParagraphSpacingEnabled"] | (uint8_t)0) ? 1 : 0;
   }
 
   if (extraParagraphSpacing == 1) {
@@ -294,7 +302,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
-  spec.extraParagraphSpacing = extraParagraphSpacing;
+  spec.extraParagraphSpacing = extraParagraphSpacingEnabled ? extraParagraphSpacing : static_cast<uint8_t>(255);
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;

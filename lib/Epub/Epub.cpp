@@ -453,6 +453,13 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     tocParsed = parseTocNcxFile();
   }
 
+  if (bookMetadataCache->getTocCount() <= 1 && bookMetadataCache->getSpineCount() > 1) {
+    LOG_DBG("EBP", "Weak TOC (%d entry), trying file-based automatic TOC from spine", bookMetadataCache->getTocCount());
+    if (bookMetadataCache->replaceTocWithSpineFiles()) {
+      tocParsed = true;
+    }
+  }
+
   if (!tocParsed) {
     LOG_ERR("EBP", "Warning: Could not parse any TOC format");
     // Continue anyway - book will work without TOC

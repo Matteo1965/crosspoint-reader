@@ -392,3 +392,11 @@ int MappedInputManager::getPressedFrontButton() const {
   }
   return -1;
 }
+
+int MappedInputManager::getReleasedFrontButton() const {
+  if (gpio.wasReleased(HalGPIO::BTN_BACK)) return HalGPIO::BTN_BACK;
+  if (gpio.wasReleased(HalGPIO::BTN_CONFIRM)) return HalGPIO::BTN_CONFIRM;
+  if (gpio.wasReleased(HalGPIO::BTN_LEFT)) return HalGPIO::BTN_LEFT;
+  if (gpio.wasReleased(HalGPIO::BTN_RIGHT)) return HalGPIO::BTN_RIGHT;
+  return -1;
+}

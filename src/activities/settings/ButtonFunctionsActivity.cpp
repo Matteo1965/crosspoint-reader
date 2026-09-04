@@ -10,24 +10,29 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr ReaderAction ACTIONS[] = {
-    ReaderAction::None,          ReaderAction::ReaderBack,          ReaderAction::PreviousPage,
-    ReaderAction::NextPage,      ReaderAction::PreviousChapter,     ReaderAction::NextChapter,
-    ReaderAction::OpenReaderMenu, ReaderAction::OpenDictionary,      ReaderAction::OpenBookmarks,
-    ReaderAction::ToggleBookmark, ReaderAction::OpenChapterSelection, ReaderAction::OpenGoToPercent,
-    ReaderAction::OpenTextSettings, ReaderAction::OpenFontMenu,       ReaderAction::OpenFontSizeMenu,
-    ReaderAction::OpenLayoutMenu, ReaderAction::OpenStyleMenu,       ReaderAction::FontNext,
-    ReaderAction::FontPrevious,  ReaderAction::FontSizeUp,           ReaderAction::FontSizeDown,
-    ReaderAction::LineSpacingNext, ReaderAction::LineSpacingPrevious, ReaderAction::ScreenMarginUp,
-    ReaderAction::ScreenMarginDown, ReaderAction::ToggleNightMode,    ReaderAction::ToggleHyphenation,
-    ReaderAction::ToggleSoftHyphen, ReaderAction::ToggleParagraphAlignment, ReaderAction::RotateOrientation,
-    ReaderAction::ForceRefresh, ReaderAction::Screenshot, ReaderAction::GoHome,
+    ReaderAction::None,
+    ReaderAction::PreviousPage,
+    ReaderAction::NextPage,
+    ReaderAction::OpenReaderMenu,
+    ReaderAction::OpenTextSettings,
+    ReaderAction::OpenDictionary,
+    ReaderAction::GoHome,
+    ReaderAction::ScreenMarginDown,
+    ReaderAction::ScreenMarginUp,
+    ReaderAction::ToggleBookmark,
+    ReaderAction::OpenBookmarks,
+    ReaderAction::ReaderBack,
+    ReaderAction::FontSizeDown,
+    ReaderAction::FontSizeUp,
+    ReaderAction::OpenSettings,
+    ReaderAction::OpenChapterSelection,
 };
 
 constexpr int kMappingCount = 12;
 constexpr int kReferenceWidth = 480;
 constexpr int kGestureX = 40;
-constexpr int kButtonX = 145;
-constexpr int kActionX = 285;
+constexpr int kButtonX = 135;
+constexpr int kActionX = 248;
 
 int scaledX(const int x, const int width) { return x * width / kReferenceWidth; }
 }  // namespace
@@ -41,7 +46,7 @@ void ButtonFunctionsActivity::onEnter() {
 }
 
 const char* ButtonFunctionsActivity::headerTitle() const {
-  return I18N.getLanguage() == Language::HU ? "Alsó gombok" : "Bottom buttons";
+  return I18N.getLanguage() == Language::HU ? "Alsó gombkiosztás" : "Bottom button mapping";
 }
 
 ReaderPhysicalButton ButtonFunctionsActivity::buttonForRow(const int row) {
@@ -61,33 +66,34 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
     case ReaderAction::NextPage: return hu ? "Következő oldal" : "Next page";
     case ReaderAction::PreviousChapter: return hu ? "Előző fejezet" : "Previous chapter";
     case ReaderAction::NextChapter: return hu ? "Következő fejezet" : "Next chapter";
-    case ReaderAction::OpenReaderMenu: return hu ? "Olvasómenü" : "Reader menu";
-    case ReaderAction::OpenDictionary: return hu ? "Szótár" : "Dictionary";
+    case ReaderAction::OpenReaderMenu: return hu ? "Olvasó menü" : "Reader menu";
+    case ReaderAction::OpenDictionary: return hu ? "Keresés / Szótár" : "Search / Dictionary";
     case ReaderAction::OpenBookmarks: return hu ? "Könyvjelzők" : "Bookmarks";
-    case ReaderAction::ToggleBookmark: return hu ? "Könyvjelző váltás" : "Toggle bookmark";
+    case ReaderAction::ToggleBookmark: return hu ? "Könyvjelző hozzáadása" : "Add bookmark";
     case ReaderAction::OpenChapterSelection: return hu ? "Fejezetválasztás" : "Chapter selection";
     case ReaderAction::OpenGoToPercent: return hu ? "Ugrás %-ra" : "Go to %";
     case ReaderAction::OpenTextSettings: return hu ? "Szövegbeállítások" : "Text settings";
     case ReaderAction::OpenFontMenu: return hu ? "Betű" : "Font";
     case ReaderAction::OpenFontSizeMenu: return hu ? "Méret" : "Size";
-    case ReaderAction::OpenLayoutMenu: return hu ? "Rendez." : "Layout";
+    case ReaderAction::OpenLayoutMenu: return hu ? "Képernyőelrendezés" : "Screen layout";
     case ReaderAction::OpenStyleMenu: return hu ? "Stílus" : "Style";
     case ReaderAction::FontNext: return hu ? "Következő betű" : "Next font";
     case ReaderAction::FontPrevious: return hu ? "Előző betű" : "Previous font";
     case ReaderAction::FontSizeUp: return hu ? "Betűméret +" : "Font size +";
     case ReaderAction::FontSizeDown: return hu ? "Betűméret −" : "Font size -";
-    case ReaderAction::LineSpacingNext: return hu ? "Sorköz +" : "Line spacing +";
-    case ReaderAction::LineSpacingPrevious: return hu ? "Sorköz −" : "Line spacing -";
-    case ReaderAction::ScreenMarginUp: return hu ? "Margó +" : "Margin +";
-    case ReaderAction::ScreenMarginDown: return hu ? "Margó −" : "Margin -";
-    case ReaderAction::ToggleNightMode: return hu ? "Éjszakai mód" : "Night mode";
-    case ReaderAction::ToggleHyphenation: return hu ? "Elválasztás" : "Hyphenation";
-    case ReaderAction::ToggleSoftHyphen: return "Soft Hyphen";
+    case ReaderAction::LineSpacingNext: return hu ? "Soremelés +" : "Line spacing +";
+    case ReaderAction::LineSpacingPrevious: return hu ? "Soremelés −" : "Line spacing -";
+    case ReaderAction::ScreenMarginUp: return hu ? "Margó növelése" : "Increase margin";
+    case ReaderAction::ScreenMarginDown: return hu ? "Margó csökkentése" : "Decrease margin";
+    case ReaderAction::ToggleNightMode: return hu ? "Éjszakai mód KI/BE" : "Night mode on/off";
+    case ReaderAction::ToggleHyphenation: return hu ? "Elválasztás KI/BE" : "Hyphenation on/off";
+    case ReaderAction::ToggleSoftHyphen: return hu ? "Kiterjesztett elválasztás KI/BE" : "Extended hyphenation on/off";
     case ReaderAction::ToggleParagraphAlignment: return hu ? "Igazítás váltás" : "Toggle alignment";
     case ReaderAction::RotateOrientation: return hu ? "Képernyő forgatás" : "Rotate screen";
     case ReaderAction::ForceRefresh: return hu ? "Képernyőfrissítés" : "Screen refresh";
     case ReaderAction::Screenshot: return hu ? "Képernyőkép" : "Screenshot";
-    case ReaderAction::GoHome: return hu ? "Főoldal" : "Home";
+    case ReaderAction::GoHome: return hu ? "Kezdőképernyő" : "Home";
+    case ReaderAction::OpenSettings: return hu ? "Beállítások" : "Settings";
     default: return hu ? "Nincs" : "None";
   }
 }
@@ -99,7 +105,7 @@ void ButtonFunctionsActivity::rebuildRows() {
 
   for (int row = 0; row < kMappingCount; ++row) {
     labels_[row] = std::to_string(row % 4 + 1) + ". gomb";
-    values_[row] = std::string("[") + actionLabel(READER_BUTTONS.get(buttonForRow(row), gestureForRow(row))) + "]";
+    values_[row] = actionLabel(READER_BUTTONS.get(buttonForRow(row), gestureForRow(row)));
 
     // The FreeInk list owns navigation, selection highlighting and hit boxes,
     // but text is drawn below in fixed columns. Empty item strings prevent the
@@ -134,8 +140,10 @@ void ButtonFunctionsActivity::drawFooter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
   const int rowHeight = metrics.listRowHeight;
+  const int rowGap = metrics.listRowGap;
+  const int rowStep = rowHeight + rowGap;
   const int listTop = metrics.topPadding + metrics.headerHeight + rowHeight;
-  const int textHeight = renderer.getTextHeight(SMALL_FONT_ID);
+  const int textHeight = renderer.getTextHeight(UI_12_FONT_ID);
   const int firstVisible = activeNav().top;
   const int selected = activeNav().selected;
 
@@ -145,22 +153,27 @@ void ButtonFunctionsActivity::drawFooter() {
 
   for (int row = firstVisible; row < kMappingCount; ++row) {
     const int visualRow = row - firstVisible;
-    const int rowTop = listTop + visualRow * rowHeight;
+    // Use the exact same vertical stride as FreeInk's List: row height + theme gap.
+    // Using rowHeight alone caused cumulative drift of the selection pill on RoundedRaff
+    // (42 px row + 6 px gap): the pill moved 48 px while custom text moved only 42 px.
+    const int rowTop = listTop + visualRow * rowStep;
     if (rowTop + rowHeight > renderer.getScreenHeight() - metrics.buttonHintsHeight) break;
 
+    // Centre custom text inside the same row rectangle used by the FreeInk selection pill.
     const int textY = rowTop + std::max(0, (rowHeight - textHeight) / 2);
     const bool black = row != selected;
 
     if (row % 4 == 0) {
       const int group = row / 4;
-      const char* gesture = group == 0 ? "1×:" : (group == 1 ? "2×:" : (I18N.getLanguage() == Language::HU ? "Tart:" : "Hold:"));
-      renderer.drawText(SMALL_FONT_ID, gestureX, textY, gesture, black);
+      const char* gesture = group == 0 ? "1×:" : (group == 1 ? "2×:" : (I18N.getLanguage() == Language::HU ? "Hosszú:" : "Hold:"));
+      renderer.drawText(UI_12_FONT_ID, gestureX, textY, gesture, black);
     }
-    renderer.drawText(SMALL_FONT_ID, buttonX, textY, labels_[row].c_str(), black);
-    renderer.drawText(SMALL_FONT_ID, actionX, textY, values_[row].c_str(), black);
+    renderer.drawText(UI_12_FONT_ID, buttonX, textY, labels_[row].c_str(), black);
+    renderer.drawText(UI_12_FONT_ID, actionX, textY, values_[row].c_str(), black);
   }
 
   UiListActivity::drawFooter();
+  if (optionPopup_.isActive()) optionPopup_.render(renderer);
 }
 
 bool ButtonFunctionsActivity::handleCustomInput() {

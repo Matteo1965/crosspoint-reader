@@ -52,9 +52,64 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   if (title == nullptr) return;
   if (rect.height == RoundedRaffMetrics::values.homeTopPadding - RoundedRaffMetrics::values.topPadding) {
     const int maxWidth = rect.width - 2 * RoundedRaffMetrics::values.headerSidePadding;
-    const std::string homeTitle = renderer.truncatedText(kTitleFontId, title, maxWidth, EpdFontFamily::BOLD);
-    renderer.drawText(kTitleFontId, rect.x + RoundedRaffMetrics::values.headerSidePadding, rect.y, homeTitle.c_str(),
-                      true, EpdFontFamily::BOLD);
+    const int lineHeight = renderer.getLineHeight(kTitleFontId);
+    std::string first;
+    std::string second;
+    std::string input(title);
+    size_t pos = 0;
+    while (pos < input.size()) {
+      while (pos < input.size() && input[pos] == ' ') ++pos;
+      if (pos >= input.size()) break;
+      const size_t start = pos;
+      while (pos < input.size() && input[pos] != ' ') ++pos;
+      const std::string word = input.substr(start, pos - start);
+      std::string& line = second.empty() ? first : second;
+      const std::string candidate = line.empty() ? word : line + " " + word;
+      if (renderer.getTextAdvanceX(kTitleFontId, candidate.c_str(), EpdFontFamily::BOLD) <= maxWidth) {
+        line = candidate;
+      } else if (second.empty()) {
+        second = word;
+      } else {
+        second = renderer.truncatedText(kTitleFontId, (second + " " + word).c_str(), maxWidth, EpdFontFamily::BOLD);
+        break;
+      }
+    }
+    // Avoid an orphan single word on line 2 for titles with at least four words.
+    size_t wordCount = 0;
+    bool inWord = false;
+    for (const char c : input) {
+      if (c == ' ') {
+        inWord = false;
+      } else if (!inWord) {
+        ++wordCount;
+        inWord = true;
+      }
+    }
+    if (wordCount >= 4 && !second.empty() && second.find(' ') == std::string::npos) {
+      const size_t split = first.rfind(' ');
+      if (split != std::string::npos) {
+        const std::string candidate = first.substr(split + 1) + " " + second;
+        if (renderer.getTextAdvanceX(kTitleFontId, candidate.c_str(), EpdFontFamily::BOLD) <= maxWidth) {
+          second = candidate;
+          first.erase(split);
+        }
+      }
+    }
+
+    // If the title fits on one line, use the otherwise-empty second line for the author.
+    if (second.empty() && subtitle != nullptr && subtitle[0] != '\0') {
+      second = renderer.truncatedText(kTitleFontId, subtitle, maxWidth, EpdFontFamily::BOLD);
+    }
+
+    const int lines = second.empty() ? 1 : 2;
+    int textY = rect.y + std::max(0, (rect.height - lines * lineHeight) / 2) + 4;
+    for (const std::string* line : {&first, &second}) {
+      if (line->empty()) continue;
+      const int textW = renderer.getTextWidth(kTitleFontId, line->c_str(), EpdFontFamily::BOLD);
+      renderer.drawText(kTitleFontId, rect.x + (rect.width - textW) / 2, textY, line->c_str(), true,
+                        EpdFontFamily::BOLD);
+      textY += lineHeight;
+    }
     return;
   }
   BaseTheme::drawHeader(renderer, rect, title, subtitle);
@@ -112,7 +167,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
   if (coverWidth == 0) {
     coverWidth = RoundedRaffMetrics::values.homeCoverHeight * 0.6;
   }
-  const int imgY = tileY + (tileHeight - RoundedRaffMetrics::values.homeCoverHeight) / 2;
+  const int imgY = tileY + (tileHeight - RoundedRaffMetrics::values.homeCoverHeight) / 2 + 14;
   const int tileX = RoundedRaffMetrics::values.contentSidePadding;
 
   // Draw book card regardless, fill with message based on `hasContinueReading`
@@ -149,7 +204,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       // Draw either way
       renderer.drawRoundedRect(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
-                               RoundedRaffMetrics::values.homeCoverHeight, 1, kCoverRadius, true);
+                               RoundedRaffMetrics::values.homeCoverHeight, 2, kCoverRadius, true);
 
       if (!hasCover) {
         // Render empty cover
@@ -165,15 +220,6 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
     }
 
-    renderer.fillRoundedRect(tileX, tileY, tileWidth, imgY - tileY, kRowRadius, true, true, false, false,
-                             Color::LightGray);
-    renderer.fillRectDither(tileX, imgY, (tileWidth - coverWidth) / 2, RoundedRaffMetrics::values.homeCoverHeight,
-                            Color::LightGray);
-    renderer.fillRectDither(tileX + (tileWidth + coverWidth) / 2, imgY, (tileWidth - coverWidth) / 2,
-                            RoundedRaffMetrics::values.homeCoverHeight, Color::LightGray);
-    renderer.fillRoundedRect(tileX, imgY + RoundedRaffMetrics::values.homeCoverHeight, tileWidth,
-                             tileHeight - (imgY - tileY + RoundedRaffMetrics::values.homeCoverHeight), kRowRadius,
-                             false, false, true, true, Color::LightGray);
   } else {
     renderer.fillRoundedRect(tileX, tileY, tileWidth, tileHeight, kRowRadius, Color::LightGray);
     renderer.drawCenteredText(kTitleFontId, rect.y + rect.height / 2 - renderer.getLineHeight(kTitleFontId) / 2,

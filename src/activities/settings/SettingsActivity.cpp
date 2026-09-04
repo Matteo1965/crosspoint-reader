@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "ButtonFunctionsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
@@ -69,6 +70,12 @@ void SettingsActivity::rebuildSettingsLists() {
       if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
+      if (!BoardConfig::hasTouch() &&
+          (setting.valuePtr == &CrossPointSettings::longPressButtonBehavior ||
+           setting.valuePtr == &CrossPointSettings::longPressMenuFunction ||
+           setting.valuePtr == &CrossPointSettings::backShortToFileBrowser)) {
+        continue;
+      }
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
@@ -82,7 +89,7 @@ void SettingsActivity::rebuildSettingsLists() {
   // Append device-only ACTION items
   if (!BoardConfig::hasTouch()) {
     controlsSettings.insert(controlsSettings.begin(),
-                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::ButtonFunctions));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
@@ -318,6 +325,9 @@ void SettingsActivity::toggleCurrentSetting() {
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::ButtonFunctions:
+        startActivityForResult(std::make_unique<ButtonFunctionsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);

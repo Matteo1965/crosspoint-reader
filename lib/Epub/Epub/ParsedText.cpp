@@ -295,6 +295,23 @@ bool endsWithBreakableHyphen(const std::string& token) {
   return TokenBoundary::allowsBreakAfterExplicitHyphen(lastCodepoint(token));
 }
 
+bool isStandaloneExplicitHyphenToken(const std::string& token) { return token.size() == 1 && token[0] == '-'; }
+
+bool isStandalonePunctuationMicroToken(const std::string& token) {
+  if (token.size() != 1) return false;
+  switch (token[0]) {
+    case '.':
+    case ',':
+    case ';':
+    case ':':
+    case '!':
+    case '?':
+      return true;
+    default:
+      return false;
+  }
+}
+
 // Focus Reading renders the first `focusBoundary` bytes of a token bold and the rest at the
 // token's own style; 0 means no emphasis. The bold run is at most 9 codepoints (see addWord),
 // so it is copied to a stack buffer rather than a substring: this runs once per word during
@@ -734,13 +751,16 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
   }
+  // CPHUN-41: 255 is the renderer-only sentinel for KI. Enabled 0% is a
+  // real override state and therefore suppresses the book/default indent.
+  const bool paragraphOverrideEnabled = extraParagraphSpacing != 255;
   if (blockStyle.textIndentDefined) {
-    if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
+    if (blockStyle.textIndent < 0 || !paragraphOverrideEnabled) {
       return blockStyle.textIndent;
     }
     return 0;
   }
-  if (!extraParagraphSpacing) {
+  if (!paragraphOverrideEnabled) {
     return renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * 3;
   }
   return 0;
@@ -1475,6 +1495,23 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int spareSpace =
       effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
 
+  // CPHUN-44/45: independent render-only microspacing on justified LTR non-last lines.
+  // Explicit ASCII hyphen: up to +6 px at each adjacent token boundary.
+  // . , ; : ! ? punctuation: up to +2 px at each adjacent token boundary.
+  size_t hyphenMicroOpportunityCount = 0;
+  size_t punctuationMicroOpportunityCount = 0;
+  if (effectiveAlignment == CssTextAlign::Justify && !isLastLine && !blockStyle.isRtl && spareSpace > 0) {
+    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
+      if (isStandaloneExplicitHyphenToken(lineWords[wordIdx]) ||
+          isStandaloneExplicitHyphenToken(lineWords[wordIdx - 1])) ++hyphenMicroOpportunityCount;
+      if (isStandalonePunctuationMicroToken(lineWords[wordIdx]) ||
+          isStandalonePunctuationMicroToken(lineWords[wordIdx - 1])) ++punctuationMicroOpportunityCount;
+    }
+  }
+  const int hyphenMicroTotal = std::min<int>(spareSpace, static_cast<int>(hyphenMicroOpportunityCount) * 6);
+  const int punctuationMicroTotal =
+      std::min<int>(std::max(0, spareSpace - hyphenMicroTotal), static_cast<int>(punctuationMicroOpportunityCount) * 2);
+
   uint8_t letterSpacingPx = 0;
   int trackingExtraTotal = 0;
   const bool lineHasRubyAnnotation =
@@ -1506,7 +1543,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
     }
   }
-  const int adjustedSpareSpace = spareSpace - (letterSpacingPx ? trackingExtraTotal : 0);
+  const int adjustedSpareSpace = spareSpace - hyphenMicroTotal - punctuationMicroTotal - (letterSpacingPx ? trackingExtraTotal : 0);
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                ? computeJustifyExtra(adjustedSpareSpace, actualGapCount)
                                : 0;
@@ -1731,7 +1768,23 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
 
       size_t justifyGapIndex = 0;
+      int hyphenMicroRemaining = hyphenMicroTotal;
+      int punctuationMicroRemaining = punctuationMicroTotal;
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+        if (wordIdx > 0 && hyphenMicroRemaining > 0 &&
+            (isStandaloneExplicitHyphenToken(lineWords[wordIdx]) ||
+             isStandaloneExplicitHyphenToken(lineWords[wordIdx - 1]))) {
+          const int micro = std::min(6, hyphenMicroRemaining);
+          xpos += micro;
+          hyphenMicroRemaining -= micro;
+        }
+        if (wordIdx > 0 && punctuationMicroRemaining > 0 &&
+            (isStandalonePunctuationMicroToken(lineWords[wordIdx]) ||
+             isStandalonePunctuationMicroToken(lineWords[wordIdx - 1]))) {
+          const int micro = std::min(2, punctuationMicroRemaining);
+          xpos += micro;
+          punctuationMicroRemaining -= micro;
+        }
         lineXPos.push_back(static_cast<int16_t>(xpos));
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];

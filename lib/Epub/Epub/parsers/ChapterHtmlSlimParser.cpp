@@ -1923,7 +1923,8 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   // Extra paragraph spacing: 100% equals the legacy lineHeight/2 behavior.
-  if (extraParagraphSpacing) {
+  // 255 is CPHUN-41's renderer-only KI sentinel: preserve CSS margins/indent and add nothing.
+  if (extraParagraphSpacing > 0 && extraParagraphSpacing <= 100) {
     const int extraBase = lineHeight / 2;
     currentPageNextY += (extraBase * extraParagraphSpacing + 50) / 100;
   }

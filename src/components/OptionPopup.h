@@ -187,9 +187,12 @@ class OptionPopup {
     props.titleText.bold = true;
     props.titleText.align = fui::TextAlign::Center;
     props.buttonText.font = fui::GfxRendererTarget::FONT_BODY;
-    const int16_t innerPadding = static_cast<int16_t>(metrics.optionPopupInnerPadding);
+    const bool compact16 = count == MAX_OPTIONS;
+    const int16_t innerPadding = static_cast<int16_t>(compact16 ? std::max(0, metrics.optionPopupInnerPadding - 4)
+                                                               : metrics.optionPopupInnerPadding);
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
-    props.gap = static_cast<int16_t>(metrics.optionPopupItemSpacing);
+    props.gap = static_cast<int16_t>(compact16 ? std::max(0, metrics.optionPopupItemSpacing - 2)
+                                                    : metrics.optionPopupItemSpacing);
     // defaultPopupStyles() (the fallback fui::optionDialog uses when styles is
     // left unset) has no border, so the dialog frame drawn by the old
     // BaseTheme::drawOptionPopup outline is opted back in explicitly here,
@@ -203,7 +206,8 @@ class OptionPopup {
     props.styles.active = props.styles.normal;
     props.styles.disabled = props.styles.normal;
     props.buttonHeight =
-        fui::clampI16(target.lineHeight(fui::GfxRendererTarget::FONT_BODY) + metrics.optionPopupSelectionVPadding * 2);
+        fui::clampI16(target.lineHeight(fui::GfxRendererTarget::FONT_BODY) +
+                      std::max(0, metrics.optionPopupSelectionVPadding - (compact16 ? 3 : 0)) * 2);
 
     // Fixed fraction of the screen, clamped by the theme's side margins; the
     // old max-text-width sizing is gone, long labels wrap inside the buttons.

@@ -71,7 +71,7 @@ replace_once(
 replace_once(
     "src/activities/reader/EpubReaderActivity.cpp",
     '#include "activities/settings/TextSettingsActivity.h"\n',
-    '#include "activities/settings/SettingsActivity.h"\n#include "activities/settings/TextSettingsActivity.h"\n',
+    '#include "ReaderButtonProfileStore.h"\n#include "activities/settings/SettingsActivity.h"\n#include "activities/settings/TextSettingsActivity.h"\n',
 )
 
 anchor = "  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);\n\n"
@@ -139,6 +139,54 @@ block = r'''  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mapp
 
   const auto cphun36DoubleAction = [this, &cphun36OpenSettings, &cphun36OpenLayout, &cphun36RebuildReader](
                                       const int raw) {
+    ReaderPhysicalButton physical = ReaderPhysicalButton::Back;
+    if (raw == HalGPIO::BTN_CONFIRM) physical = ReaderPhysicalButton::Confirm;
+    else if (raw == HalGPIO::BTN_LEFT) physical = ReaderPhysicalButton::Left;
+    else if (raw == HalGPIO::BTN_RIGHT) physical = ReaderPhysicalButton::Right;
+    const ReaderAction configured = READER_BUTTONS.get(physical, ReaderButtonGesture::Double);
+    if (configured == ReaderAction::None) {
+      // Compatibility fallback: preserve the four device-confirmed CPHUN-36 v2
+      // double-click shortcuts until the user assigns an explicit 2x mapping.
+      if (raw == HalGPIO::BTN_BACK) { cphun36OpenSettings(); return; }
+      if (raw == HalGPIO::BTN_CONFIRM) { cphun36OpenLayout(); return; }
+      if (raw == HalGPIO::BTN_LEFT) {
+        if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
+          SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN,
+                                                SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+          SETTINGS.saveToFile(); cphun36RebuildReader();
+        }
+        return;
+      }
+      if (raw == HalGPIO::BTN_RIGHT && SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
+        SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX,
+                                              SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return;
+    }
+    if (configured == ReaderAction::OpenTextSettings) { cphun36OpenLayout(); return; }
+    if (configured == ReaderAction::OpenLayoutMenu) { cphun36OpenLayout(); return; }
+    if (configured == ReaderAction::ScreenMarginDown) {
+      if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
+        SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN, SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return;
+    }
+    if (configured == ReaderAction::ScreenMarginUp) {
+      if (SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
+        SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX, SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return;
+    }
+    if (configured == ReaderAction::GoHome) { onGoHome(); return; }
+    if (configured == ReaderAction::OpenReaderMenu) { openReaderMenu(); return; }
+    if (configured == ReaderAction::ToggleNightMode) { SETTINGS.screenInverted = !SETTINGS.screenInverted; SETTINGS.saveToFile(); requestUpdate(); return; }
+    if (configured == ReaderAction::ToggleHyphenation) { SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled; SETTINGS.saveToFile(); cphun36RebuildReader(); return; }
+    if (configured == ReaderAction::ToggleSoftHyphen) { SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled; SETTINGS.saveToFile(); cphun36RebuildReader(); return; }
+    // Temporary fallback for actions not yet specialized in this integration: preserve known v2 test behavior.
+
     if (raw == HalGPIO::BTN_BACK) {
       cphun36OpenSettings();
       return;

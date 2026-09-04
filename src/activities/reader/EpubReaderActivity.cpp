@@ -32,9 +32,12 @@
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
+#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "ReaderButtonProfileStore.h"
+#include "activities/settings/SettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -280,7 +283,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
+  const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
+  orientedMarginTop += verticalScreenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
@@ -368,6 +372,292 @@ void EpubReaderActivity::loop() {
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
 
+  // CPHUN-36 2x front-button test v2.
+  // IMPORTANT: never return merely because a front button was pressed. Side
+  // buttons, Power and all legacy hold processing must continue through this
+  // reader loop. Only the four front buttons' SHORT actions are deferred.
+  struct Cphun36DoubleState {
+    int raw = -1;
+    unsigned long firstReleaseMs = 0;
+    bool waitingSecond = false;
+  };
+  static Cphun36DoubleState cphun36;
+  constexpr unsigned long CPHUN36_DOUBLE_MS = 400;
+
+  const int cphun36PressedRaw = mappedInput.getPressedFrontButton();
+  const int cphun36ReleasedRaw = mappedInput.getReleasedFrontButton();
+  const unsigned long cphun36HeldMs = mappedInput.getHeldTime();
+
+  const auto cphun36RebuildReader = [this]() {
+    RenderLock lock;
+    if (section) {
+      rememberCurrentContentOffset();
+      cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = section->pageCount;
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+    requestUpdate();
+  };
+
+  const auto cphun36OpenSettings = [this]() {
+    startActivityForResult(std::make_unique<SettingsActivity>(renderer, mappedInput),
+                           [this](const ActivityResult&) {
+                             RenderLock lock;
+                             if (section) {
+                               rememberCurrentContentOffset();
+                               cachedSpineIndex = currentSpineIndex;
+                               cachedChapterTotalPageCount = section->pageCount;
+                               nextPageNumber = section->currentPage;
+                             }
+                             section.reset();
+                             requestUpdate();
+                           });
+  };
+
+  const auto cphun36OpenLayout = [this]() {
+    startActivityForResult(
+        std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                               TextSettingsActivity::Tab::Layout),
+        [this](const ActivityResult&) {
+          RenderLock lock;
+          if (section) {
+            rememberCurrentContentOffset();
+            cachedSpineIndex = currentSpineIndex;
+            cachedChapterTotalPageCount = section->pageCount;
+            nextPageNumber = section->currentPage;
+          }
+          section.reset();
+          requestUpdate();
+        });
+  };
+
+  const auto cphun36GestureAction = [this, &cphun36OpenSettings, &cphun36OpenLayout, &cphun36RebuildReader](
+                                      const int raw, const ReaderButtonGesture gesture) -> bool {
+    ReaderPhysicalButton physical = ReaderPhysicalButton::Back;
+    if (raw == HalGPIO::BTN_CONFIRM) physical = ReaderPhysicalButton::Confirm;
+    else if (raw == HalGPIO::BTN_LEFT) physical = ReaderPhysicalButton::Left;
+    else if (raw == HalGPIO::BTN_RIGHT) physical = ReaderPhysicalButton::Right;
+    const ReaderAction configured = READER_BUTTONS.get(physical, gesture);
+    if (configured == ReaderAction::None) {
+      if (gesture != ReaderButtonGesture::Double) return false;
+      // Compatibility fallback: preserve the four device-confirmed CPHUN-36 v2
+      // double-click shortcuts until the user assigns an explicit 2x mapping.
+      if (raw == HalGPIO::BTN_BACK) { cphun36OpenSettings(); return true; }
+      if (raw == HalGPIO::BTN_CONFIRM) { cphun36OpenLayout(); return true; }
+      if (raw == HalGPIO::BTN_LEFT) {
+        if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
+          SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN,
+                                                SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+          SETTINGS.saveToFile(); cphun36RebuildReader();
+        }
+        return true;
+      }
+      if (raw == HalGPIO::BTN_RIGHT && SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
+        SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX,
+                                              SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return true;
+    }
+    if (configured == ReaderAction::ReaderBack) {
+      if (footnoteDepth > 0) restoreSavedPosition();
+      else if (SETTINGS.backShortToFileBrowser) activityManager.goToFileBrowser(bookPath);
+      else onGoHome();
+      return true;
+    }
+    if (configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage) {
+      const bool previous = configured == ReaderAction::PreviousPage;
+      const bool next = configured == ReaderAction::NextPage;
+      if (handleEndOfBookPageTurn(previous, next)) return true;
+      constexpr unsigned long kCphun43MinTurnGapMs = 200;
+      if (RenderLock::peek() || (millis() - lastPageTurnTime) < kCphun43MinTurnGapMs) {
+        pendingManualTurn = previous ? -1 : 1;
+        return true;
+      }
+      if (!section) { requestUpdate(); return true; }
+      pageTurn(next);
+      requestUpdate();
+      return true;
+    }
+    if (configured == ReaderAction::OpenDictionary) { openDictionaryWordSelect(); return true; }
+    if (configured == ReaderAction::OpenSettings) { cphun36OpenSettings(); return true; }
+    if (configured == ReaderAction::OpenChapterSelection) {
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER);
+      return true;
+    }
+    if (configured == ReaderAction::FontSizeUp || configured == ReaderAction::FontSizeDown) {
+      const auto points = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
+      if (!points.empty()) {
+        const uint8_t current = snapToNearestPointSize(points, SETTINGS.fontPointSize);
+        auto it = std::find(points.begin(), points.end(), current);
+        size_t idx = it == points.end() ? 0 : static_cast<size_t>(std::distance(points.begin(), it));
+        if (configured == ReaderAction::FontSizeUp) idx = (idx + 1) % points.size();
+        else idx = (idx + points.size() - 1) % points.size();
+        {
+          RenderLock lock;
+          SETTINGS.fontPointSize = points[idx];
+          sdFontSystem.ensureLoaded(renderer);
+        }
+        SETTINGS.saveToFile();
+        cphun36RebuildReader();
+      }
+      return true;
+    }
+    if (configured == ReaderAction::LineSpacingNext || configured == ReaderAction::LineSpacingPrevious) {
+      constexpr uint8_t kLineSpacingCount = 4;
+      const uint8_t current = SETTINGS.lineSpacing < kLineSpacingCount ? SETTINGS.lineSpacing : 1;
+      SETTINGS.lineSpacing = configured == ReaderAction::LineSpacingNext
+                                 ? static_cast<uint8_t>((current + 1) % kLineSpacingCount)
+                                 : static_cast<uint8_t>((current + kLineSpacingCount - 1) % kLineSpacingCount);
+      SETTINGS.saveToFile();
+      cphun36RebuildReader();
+      return true;
+    }
+    if (configured == ReaderAction::ToggleBookmark) { addBookmark(); return true; }
+    if (configured == ReaderAction::OpenBookmarks) {
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKMARKS);
+      return true;
+    }
+    if (configured == ReaderAction::Screenshot) {
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SCREENSHOT);
+      return true;
+    }
+    if (configured == ReaderAction::OpenTextSettings) { cphun36OpenLayout(); return true; }
+    if (configured == ReaderAction::OpenLayoutMenu) { cphun36OpenLayout(); return true; }
+    if (configured == ReaderAction::ScreenMarginDown) {
+      if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
+        SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN, SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return true;
+    }
+    if (configured == ReaderAction::ScreenMarginUp) {
+      if (SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
+        SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX, SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile(); cphun36RebuildReader();
+      }
+      return true;
+    }
+    if (configured == ReaderAction::GoHome) { onGoHome(); return true; }
+    if (configured == ReaderAction::OpenReaderMenu) { openReaderMenu(); return true; }
+    if (configured == ReaderAction::ToggleNightMode) { SETTINGS.screenInverted = !SETTINGS.screenInverted; SETTINGS.saveToFile(); requestUpdate(); return true; }
+    if (configured == ReaderAction::ToggleHyphenation) { SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled; SETTINGS.saveToFile(); cphun36RebuildReader(); return true; }
+    if (configured == ReaderAction::ToggleSoftHyphen) { SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled; SETTINGS.saveToFile(); cphun36RebuildReader(); return true; }
+    // Temporary fallback for actions not yet specialized in this integration: preserve known v2 test behavior.
+
+    if (raw == HalGPIO::BTN_BACK) {
+      cphun36OpenSettings();
+      return true;
+    }
+    if (raw == HalGPIO::BTN_CONFIRM) {
+      cphun36OpenLayout();
+      return true;
+    }
+    if (raw == HalGPIO::BTN_LEFT) {
+      if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
+        SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN,
+                                              SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+        SETTINGS.saveToFile();
+        cphun36RebuildReader();
+      }
+      return true;
+    }
+    if (raw == HalGPIO::BTN_RIGHT && SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
+      SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX,
+                                            SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
+      SETTINGS.saveToFile();
+      cphun36RebuildReader();
+    }
+    return true;
+  };
+
+  const auto cphun36LegacyShort = [this, &cphun36GestureAction](const int raw) {
+    if (cphun36GestureAction(raw, ReaderButtonGesture::Single)) return;
+    if (raw == SETTINGS.frontButtonBack) {
+      if (footnoteDepth > 0) {
+        restoreSavedPosition();
+      } else if (SETTINGS.backShortToFileBrowser) {
+        activityManager.goToFileBrowser(bookPath);
+      } else {
+        onGoHome();
+      }
+      return;
+    }
+    if (raw == SETTINGS.frontButtonConfirm) {
+      openReaderMenu();
+      return;
+    }
+
+    bool previous = raw == SETTINGS.frontButtonLeft;
+    bool next = raw == SETTINGS.frontButtonRight;
+    if (!previous && !next) return;
+    if (mappedInput.isNavDirectionSwapped()) std::swap(previous, next);
+    if (handleEndOfBookPageTurn(previous, next)) return;
+    constexpr unsigned long kCphun36MinTurnGapMs = 200;
+    if (RenderLock::peek() || (millis() - lastPageTurnTime) < kCphun36MinTurnGapMs) {
+      pendingManualTurn = previous ? -1 : 1;
+      return;
+    }
+    if (!section) {
+      requestUpdate();
+      return;
+    }
+    pageTurn(next);
+    requestUpdate();
+  };
+
+  // A completed first short release is held for 400 ms. A matching second
+  // short release runs the 2x action. Long releases are never consumed here.
+  bool cphun36ConsumeFrontShort = false;
+  if (cphun36ReleasedRaw >= 0) {
+    bool legacyHold = false;
+    if (cphun36ReleasedRaw == SETTINGS.frontButtonBack) {
+      legacyHold = cphun36HeldMs >= ReaderUtils::GO_BACK_OR_HOME_MS;
+    } else if (cphun36ReleasedRaw == SETTINGS.frontButtonConfirm) {
+      switch (SETTINGS.longPressMenuFunction) {
+        case CrossPointSettings::LP_MENU_BOOKMARK:
+        case CrossPointSettings::LP_MENU_DICTIONARY:
+          legacyHold = cphun36HeldMs >= ReaderUtils::BOOKMARK_HOLD_MS;
+          break;
+        case CrossPointSettings::LP_MENU_KOSYNC:
+          legacyHold = cphun36HeldMs >= ReaderUtils::GO_HOME_MS;
+          break;
+        default:
+          break;
+      }
+    } else if ((cphun36ReleasedRaw == SETTINGS.frontButtonLeft ||
+                cphun36ReleasedRaw == SETTINGS.frontButtonRight) &&
+               SETTINGS.longPressButtonBehavior != SETTINGS.OFF) {
+      legacyHold = cphun36HeldMs > ReaderUtils::SKIP_HOLD_MS;
+    }
+
+    if (!legacyHold) {
+      cphun36ConsumeFrontShort = true;
+      if (cphun36.waitingSecond && cphun36.raw == cphun36ReleasedRaw &&
+          millis() - cphun36.firstReleaseMs <= CPHUN36_DOUBLE_MS) {
+        cphun36.waitingSecond = false;
+        cphun36GestureAction(cphun36ReleasedRaw, ReaderButtonGesture::Double);
+      } else {
+        if (cphun36.waitingSecond) cphun36LegacyShort(cphun36.raw);
+        cphun36.raw = cphun36ReleasedRaw;
+        cphun36.firstReleaseMs = millis();
+        cphun36.waitingSecond = true;
+      }
+    } else {
+      if (cphun36.waitingSecond && cphun36.raw == cphun36ReleasedRaw) cphun36.waitingSecond = false;
+      if (cphun36GestureAction(cphun36ReleasedRaw, ReaderButtonGesture::Hold)) {
+        cphun36ConsumeFrontShort = true;
+      }
+    }
+  }
+
+  if (cphun36.waitingSecond && millis() - cphun36.firstReleaseMs > CPHUN36_DOUBLE_MS) {
+    const int raw = cphun36.raw;
+    cphun36.waitingSecond = false;
+    cphun36LegacyShort(raw);
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
@@ -404,7 +694,7 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
-  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool confirmReleased = !cphun36ConsumeFrontShort && mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   if (confirmReleased) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
@@ -473,13 +763,13 @@ void EpubReaderActivity::loop() {
     openReaderMenu();
   }
 
-  if (footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!cphun36ConsumeFrontShort && footnoteDepth > 0 && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_BACK_OR_HOME_MS) {
     restoreSavedPosition();
     return;
   }
 
-  if (handleBackNavigation()) {
+  if (!cphun36ConsumeFrontShort && handleBackNavigation()) {
     return;
   }
 
@@ -521,6 +811,14 @@ void EpubReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  if (!fromTilt && (cphun36PressedRaw >= 0 || cphun36ConsumeFrontShort)) {
+    const bool sidePrev = mappedInput.wasReleased(MappedInputManager::Button::PageBack) ||
+                          mappedInput.wasPressed(MappedInputManager::Button::PageBack);
+    const bool sideNext = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                          mappedInput.wasPressed(MappedInputManager::Button::PageForward);
+    prevTriggered = sidePrev;
+    nextTriggered = sideNext;
+  }
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
@@ -1018,7 +1316,8 @@ void EpubReaderActivity::renderBook() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
+  const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
+  orientedMarginTop += verticalScreenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
 
@@ -1027,10 +1326,10 @@ void EpubReaderActivity::renderBook() {
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+        std::max(verticalScreenMargin,
+                 static_cast<int>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
   } else {
-    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+    orientedMarginBottom += std::max(verticalScreenMargin, static_cast<int>(statusBarHeight));
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;

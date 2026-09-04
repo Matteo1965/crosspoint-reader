@@ -216,7 +216,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   // Extra paragraph spacing percentage: 0, 25, 50, 75 or 100.
+  // Enabled is separate so Off and enabled 0% remain distinct across reboot.
   uint8_t extraParagraphSpacing = 100;
+  uint8_t extraParagraphSpacingEnabled = 1;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
@@ -259,9 +261,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t softHyphenEnabled = 0;
 
   // Reader screen margin settings
-  static constexpr uint8_t SCREEN_MARGIN_MIN = 8;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 36;
-  static constexpr uint8_t SCREEN_MARGIN_STEP = 4;
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 10;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 24;
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 2;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in

@@ -52,6 +52,7 @@ enum class ReaderAction : uint8_t {
   ForceRefresh = 30,
   Screenshot = 31,
   GoHome = 32,
+  OpenSettings = 33,
 
   COUNT
 };
@@ -82,6 +83,7 @@ constexpr ReaderActionGroup readerActionGroup(const ReaderAction action) {
     case ReaderAction::OpenFontSizeMenu:
     case ReaderAction::OpenLayoutMenu:
     case ReaderAction::OpenStyleMenu:
+    case ReaderAction::OpenSettings:
       return ReaderActionGroup::Menu;
 
     case ReaderAction::ToggleBookmark:

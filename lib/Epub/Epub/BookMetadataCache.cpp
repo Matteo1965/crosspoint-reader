@@ -6,12 +6,13 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <cctype>
 #include <deque>
 
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
+constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: generated TOC for weak single-entry EPUB TOCs
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -453,6 +454,88 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     writeTocEntry(tocFile, entry);
   }
   tocCount++;
+}
+
+
+bool BookMetadataCache::replaceTocWithSpineFiles() {
+  if (!buildMode || !tocFile || !spineFile) {
+    LOG_DBG("BMC", "replaceTocWithSpineFiles called but TOC pass is not active");
+    return false;
+  }
+
+  // Collect candidates first. createTocEntry seeks spineFile while mapping hrefs,
+  // so do not interleave candidate enumeration with TOC writes.
+  std::vector<std::string> hrefs;
+  hrefs.reserve(spineCount);
+  spineFile.seek(0);
+  for (int i = 0; i < spineCount; ++i) {
+    const auto entry = readSpineEntry(spineFile);
+    std::string lower = entry.href;
+    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    const auto hash = lower.find('#');
+    if (hash != std::string::npos) lower.erase(hash);
+    const auto query = lower.find('?');
+    if (query != std::string::npos) lower.erase(query);
+    const bool html = lower.size() >= 5 &&
+                      (lower.rfind(".html") == lower.size() - 5 ||
+                       lower.rfind(".xhtml") == lower.size() - 6 ||
+                       lower.rfind(".htm") == lower.size() - 4);
+    if (!html) continue;
+
+    const auto slash = lower.find_last_of('/');
+    const std::string base = slash == std::string::npos ? lower : lower.substr(slash + 1);
+    // Skip common package/navigation wrappers rather than presenting them as chapters.
+    if (base.find("cover") != std::string::npos || base == "nav.xhtml" || base == "nav.html" ||
+        base == "toc.xhtml" || base == "toc.html" || base == "toc.htm" ||
+        base.find("titlepage") != std::string::npos || base.find("title_page") != std::string::npos ||
+        base.find("copyright") != std::string::npos || base.find("colophon") != std::string::npos) {
+      continue;
+    }
+    hrefs.push_back(entry.href);
+  }
+
+  // One meaningful file cannot improve a one-entry TOC; leave the original untouched.
+  if (hrefs.size() <= 1) {
+    LOG_DBG("BMC", "Auto TOC: only %zu meaningful HTML spine file(s), keeping original TOC", hrefs.size());
+    return false;
+  }
+
+  // Replace the weak parsed TOC, rather than appending duplicate entries to it.
+  const bool flushed = !passOut || passOut->flush();
+  passOut.reset();
+  tocFile.close();
+  if (!flushed || !Storage.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
+    LOG_ERR("BMC", "Auto TOC: could not reset TOC temp file");
+    return false;
+  }
+  tocCount = 0;
+  passOut = makeUniqueNoThrow<serialization::BufferedFileWriter>(tocFile, BUILD_IO_BUFFER_SIZE);
+
+  int chapter = 1;
+  for (const auto& href : hrefs) {
+    std::string title = FsHelpers::decodeUriEscapes(href);
+    const auto hash = title.find('#');
+    if (hash != std::string::npos) title.erase(hash);
+    const auto query = title.find('?');
+    if (query != std::string::npos) title.erase(query);
+    const auto slash = title.find_last_of('/');
+    if (slash != std::string::npos) title.erase(0, slash + 1);
+    const auto dot = title.find_last_of('.');
+    if (dot != std::string::npos) title.erase(dot);
+    for (char& c : title) {
+      if (c == '_' || c == '-') c = ' ';
+    }
+    while (!title.empty() && title.front() == ' ') title.erase(title.begin());
+    while (!title.empty() && title.back() == ' ') title.pop_back();
+    if (title.empty()) title = "Fejezet " + std::to_string(chapter);
+
+    createTocEntry(title, href, "", 0);
+    ++chapter;
+  }
+
+  LOG_DBG("BMC", "Auto TOC: generated %zu entries from HTML/XHTML spine files", hrefs.size());
+  return tocCount > 1;
 }
 
 /* ============= READING / LOADING FUNCTIONS ================ */

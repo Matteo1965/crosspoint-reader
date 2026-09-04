@@ -386,11 +386,15 @@ void TextSettingsActivity::applySize(int listIndex) {
 void TextSettingsActivity::confirmLayoutRow(int row) {
   switch (static_cast<LayoutRow>(row)) {
     case LayoutRow::ParaSpacing: {
-      std::vector<std::string> options = {tr(STR_STATE_OFF), "25%", "50%", "75%", "100%"};
-      const int cur =
-          SETTINGS.extraParagraphSpacing == 0 ? 0 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25, 1, 4);
+      std::vector<std::string> options = {tr(STR_STATE_OFF), "0%", "25%", "50%", "75%", "100%"};
+      const int cur = !SETTINGS.extraParagraphSpacingEnabled
+                          ? 0
+                          : (SETTINGS.extraParagraphSpacing == 0
+                                 ? 1
+                                 : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25 + 1, 2, 5));
       optionPopup_.show(StrId::STR_EXTRA_SPACING, options, cur, [](int idx) {
-        SETTINGS.extraParagraphSpacing = static_cast<uint8_t>(idx * 25);
+        SETTINGS.extraParagraphSpacingEnabled = idx == 0 ? 0 : 1;
+        SETTINGS.extraParagraphSpacing = idx <= 1 ? 0 : static_cast<uint8_t>((idx - 1) * 25);
         SETTINGS.saveToFile();
       });
       requestUpdate();
@@ -480,7 +484,8 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
     }
     case LayoutRow::ParaSpacing:
-      return SETTINGS.extraParagraphSpacing ? std::to_string(SETTINGS.extraParagraphSpacing) + "%" : tr(STR_STATE_OFF);
+      return SETTINGS.extraParagraphSpacingEnabled ? std::to_string(SETTINGS.extraParagraphSpacing) + "%"
+                                                   : tr(STR_STATE_OFF);
     case LayoutRow::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
       return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);

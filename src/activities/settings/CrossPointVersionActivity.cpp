@@ -152,7 +152,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
                 hu ? "A továbbfejlesztett szótárkezelés a ragozott és toldalékolt szóalakok esetén is segíti a megfelelő szótári címszó megtalálását."
                    : "Improved dictionary handling helps find the appropriate headword for inflected and suffixed Hungarian word forms.");
     drawSection(hu ? "Magyar szótövezés" : "Hungarian stemming",
-                hu ? "357 egyedi szóalak-kezelési kiegészítés a pontosabb címszókereséshez."
+                hu ? "Közel 400 egyedi szóalak kezelési kiegészítés és nyelvtani szabály a pontosabb címszókereséshez."
                    : "357 unique word-form handling additions for more accurate headword lookup.");
   } else if (currentPage == 2) {
     drawWrapped(UI_12_FONT_ID, hu ? "Magyar elválasztás" : "Hungarian hyphenation", true);
@@ -160,7 +160,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
                 hu ? "Nagy Bence Huhyphn elválasztási mintái, saját kiegészítésekkel és továbbfejlesztésekkel. A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
                    : "Bence Nagy's Huhyphn patterns with custom additions and improvements, including correct Hungarian hyphenation of long multigraph consonants.");
-    drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
+    drawSection(hu ? "Beágyazott elválasztás - Soft hyphen" : "Embedded hyphenation (Soft hyphen)",
                 hu ? "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként."
                    : "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
     drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
@@ -181,8 +181,8 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
                 hu ? "A bekezdések közötti térköz növelése."
                    : "Increases spacing between paragraphs.");
-    drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
-                hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszél alakítható ki."
+    drawSection(hu ? "Optikai margó - Hanging punctuation" : "Hanging punctuation",
+                hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszélek."
                    : "Places punctuation into the margin for a more even text edge.");
   }
 

@@ -99,6 +99,10 @@ bool isPunctuation(const uint32_t cp) {
     case '(':
     case 0x00AB:  // «
     case 0x00BB:  // »
+    // CPHUN-49: dialogue/narrative dashes may be glued directly to a word in EPUB source
+    // (e.g. U+2013 + "incselkedett"). Trim them only from the hyphenation processing copy.
+    case 0x2013:  // – en dash
+    case 0x2014:  // — em dash
     case 0x2018:  // ‘
     case 0x2019:  // ’
     case 0x201A:  // ‚
