@@ -1,0 +1,112 @@
+name: Build CPHUN-57 Vertical Margin 6px
+
+on:
+  push:
+    branches: [agent/cphun-57-vertical-margin-6px]
+    paths: ['.github/workflows/build-cphun-57-vertical-margin-6px.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-57
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-57-vertical-margin-6px
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply 6px vertical viewport expansion
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/activities/reader/EpubReaderActivity.cpp')
+          s = p.read_text()
+
+          old_top_comment = '// CPHUN-56: move the visible top text boundary 4 px upward relative to CPHUN-54.'
+          new_top_comment = '// CPHUN-57: move the visible top text boundary 6 px upward relative to CPHUN-54.'
+          if old_top_comment not in s:
+              raise SystemExit('CPHUN-56 top-margin comment not found')
+          s = s.replace(old_top_comment, new_top_comment)
+
+          old_top = 'orientedMarginTop = std::max(0, orientedMarginTop - 4);'
+          new_top = 'orientedMarginTop = std::max(0, orientedMarginTop - 6);'
+          top_count = s.count(old_top)
+          if top_count < 2:
+              raise SystemExit(f'Expected at least two CPHUN-56 top-margin adjustments, found {top_count}')
+          s = s.replace(old_top, new_top)
+
+          old_bottom_comment = '// CPHUN-56: move the visible bottom text boundary 4 px downward relative to CPHUN-54.'
+          new_bottom_comment = '// CPHUN-57: move the visible bottom text boundary 6 px downward relative to CPHUN-54.'
+          if old_bottom_comment not in s:
+              raise SystemExit('CPHUN-56 bottom-margin comment not found')
+          s = s.replace(old_bottom_comment, new_bottom_comment, 1)
+
+          old_bottom_detail = '// Apply this after status-bar constraints so the 4 px expansion remains observable.'
+          new_bottom_detail = '// Apply this after status-bar constraints so the 6 px expansion remains observable.'
+          if old_bottom_detail not in s:
+              raise SystemExit('CPHUN-56 bottom-margin detail comment not found')
+          s = s.replace(old_bottom_detail, new_bottom_detail, 1)
+
+          old_bottom = 'orientedMarginBottom = std::max(0, orientedMarginBottom - 4);'
+          new_bottom = 'orientedMarginBottom = std::max(0, orientedMarginBottom - 6);'
+          if old_bottom not in s:
+              raise SystemExit('CPHUN-56 bottom-margin adjustment not found')
+          s = s.replace(old_bottom, new_bottom, 1)
+
+          p.write_text(s)
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260904-57"\n')
+          PY
+
+          # Preserve Build #56 short-hyphen rendering unchanged.
+          grep -q 'trailingShortHyphenInkShift' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'hyphenPenX + trailingShortHyphenInkShift' lib/Epub/Epub/blocks/TextBlock.cpp
+          test "$(grep -c 'orientedMarginTop = std::max(0, orientedMarginTop - 6)' src/activities/reader/EpubReaderActivity.cpp)" -ge 2
+          grep -q 'orientedMarginBottom = std::max(0, orientedMarginBottom - 6)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CPHUN-260904-57' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/activities/reader/EpubReaderActivity.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-57: expand vertical viewport to 6px'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-57-vertical-margin-6px
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-57-Vertical-Margin-6px-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
