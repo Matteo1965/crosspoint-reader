@@ -1,0 +1,82 @@
+name: Build CPHUN-55 Glyph Bearing Optical Margin
+
+on:
+  push:
+    branches: [agent/cphun-55-glyph-bearing-optical-margin]
+    paths: ['.github/workflows/build-cphun-55-glyph-bearing-optical-margin.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-55
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-55-glyph-bearing-optical-margin
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply glyph-bearing optical-margin alignment
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          old = '''  // For the synthetic short hyphen, hang by the glyph's standalone advance.\n  // The final word width already includes pair kerning; subtracting the standalone\n  // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the\n  // logical right margin, so every rendered short hyphen starts at the same X.\n  if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {\n    punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);\n  }'''
+          new = '''  // CPHUN-55: For the synthetic short hyphen, align the visible bitmap start\n  // rather than only the glyph origin. The active font/size/style supplies the\n  // actual U+2011 left bearing, so no font-specific pixel constant is needed.\n  // The word itself is not split or post-shifted: the extra allowance is fed\n  // into justification, preserving the letter-to-hyphen spacing while letting\n  // the complete final word move outward as one typographic unit.\n  if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {\n    const int standaloneAdvance =\n        cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);\n    int renderedLeftBearing = 0;\n    const auto fontIt = renderer.getFontMap().find(fontId);\n    if (fontIt != renderer.getFontMap().end()) {\n      const EpdGlyph* glyph = fontIt->second.getGlyph(punctuation, style);\n      if (glyph != nullptr) {\n        renderedLeftBearing = glyph->left;\n        if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {\n          renderedLeftBearing /= 2;\n        }\n      }\n    }\n    punctuationAdvance = std::max(0, standaloneAdvance - renderedLeftBearing);\n  }'''
+          if old not in s:
+              raise SystemExit('Expected CPHUN-54 short-hyphen block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260904-55"\n')
+          PY
+          grep -q 'CPHUN-55: For the synthetic short hyphen' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'standaloneAdvance - renderedLeftBearing' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'glyph->left' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'CPHUN-260904-55' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/ParsedText.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-55: align short-hyphen visible edge from glyph bearing'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-55-glyph-bearing-optical-margin
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-55-Glyph-Bearing-Optical-Margin-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
