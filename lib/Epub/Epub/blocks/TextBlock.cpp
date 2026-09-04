@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "../../../../src/fontIds.h"
+#include "../ParsedText.h"
 
 namespace {
 
@@ -24,11 +25,51 @@ uint32_t countCodepoints(const char* text) {
   return count;
 }
 
+constexpr char SHORT_HYPHEN_UTF8[] = "\xE2\x80\x91";
+constexpr size_t SHORT_HYPHEN_BYTES = 3;
+
+bool endsWithShortHyphen(const char* text) {
+  if (text == nullptr) return false;
+  const size_t len = strlen(text);
+  return len >= SHORT_HYPHEN_BYTES &&
+         memcmp(text + len - SHORT_HYPHEN_BYTES, SHORT_HYPHEN_UTF8, SHORT_HYPHEN_BYTES) == 0;
+}
+
+int trailingShortHyphenInkShift(const GfxRenderer& renderer, const int fontId,
+                                const EpdFontFamily::Style style) {
+  const auto it = renderer.getFontMap().find(fontId);
+  if (it == renderer.getFontMap().end()) return 0;
+  const EpdGlyph* glyph = it->second.getGlyph(0x2011, style);
+  if (!glyph) return 0;
+  int renderedLeft = glyph->left;
+  if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) renderedLeft /= 2;
+  // CPHUN-54 places the U+2011 pen origin on the optical boundary.
+  // Shift only the glyph bitmap by -left so its visible bitmap starts on that
+  // boundary. Layout widths, justification gaps and every word X stay unchanged.
+  return -renderedLeft;
+}
+
 void drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x, const int y, const char* text,
                      const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
-                     const uint8_t letterSpacingPx) {
-  if (letterSpacingPx == 0 || text == nullptr || *text == '\0') {
-    renderer.drawText(fontId, x, y, text, true, style, baseDir);
+                     const uint8_t letterSpacingPx, const bool alignTrailingShortHyphenInk) {
+  if (text == nullptr || *text == '\0') return;
+
+  const bool adjustTrailingHyphen = alignTrailingShortHyphenInk && endsWithShortHyphen(text);
+  if (letterSpacingPx == 0) {
+    if (!adjustTrailingHyphen) {
+      renderer.drawText(fontId, x, y, text, true, style, baseDir);
+      return;
+    }
+
+    const size_t len = strlen(text);
+    const std::string prefix(text, len - SHORT_HYPHEN_BYTES);
+    if (!prefix.empty()) renderer.drawText(fontId, x, y, prefix.c_str(), true, style, baseDir);
+
+    const int fullAdvance = renderer.getTextAdvanceX(fontId, text, style);
+    const int hyphenAdvance = renderer.getTextAdvanceX(fontId, SHORT_HYPHEN_UTF8, style);
+    const int hyphenPenX = x + fullAdvance - hyphenAdvance;
+    renderer.drawText(fontId, hyphenPenX + trailingShortHyphenInkShift(renderer, fontId, style), y,
+                      SHORT_HYPHEN_UTF8, true, style, baseDir);
     return;
   }
 
@@ -51,7 +92,13 @@ void drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x,
     char glyphText[5];
     memcpy(glyphText, glyphStart, glyphBytes);
     glyphText[glyphBytes] = '\0';
-    renderer.drawText(fontId, penX, y, glyphText, true, style, baseDir);
+    int glyphX = penX;
+    if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {
+      glyphX += trailingShortHyphenInkShift(renderer, fontId, style);
+    }
+    renderer.drawText(fontId, glyphX, y, glyphText, true, style, baseDir);
+    // Advance the logical pen exactly as before; the render-only shift must not
+    // alter word width or following positions.
     penX += renderer.getTextAdvanceX(fontId, glyphText, style);
     previous = cp;
   }
@@ -217,7 +264,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   if (simpleRender) {
     for (uint16_t i = 0; i < numWords; ++i) {
       const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
-      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx);
+      const bool alignTrailingShortHyphenInk =
+          i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();
+      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx,
+                      alignTrailingShortHyphenInk);
     }
     return;
   }
@@ -319,7 +369,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
     } else {
-      drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx);
+      const bool alignTrailingShortHyphenInk =
+          i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();
+      drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx,
+                      alignTrailingShortHyphenInk);
     }
 
     // Horizontal ruby text rendering
