@@ -68,7 +68,7 @@ replace_once(
 p = Path('src/CPHUNBuildId.h')
 s = p.read_text()
 import re
-s2, n = re.subn(r'CPHUN-\\d{6}-\\d+', 'CPHUN-260904-52', s, count=1)
+s2, n = re.subn(r'CPHUN-\d{6}-\d+', 'CPHUN-260904-52', s, count=1)
 if n != 1:
     raise SystemExit('CPHUN-52: build ID pattern not found')
 p.write_text(s2)

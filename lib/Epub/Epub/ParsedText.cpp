@@ -19,6 +19,7 @@
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 uint8_t ParsedText::minimumSpacePercent_ = 100;
 bool ParsedText::shortHyphenEnabled_ = false;
+bool ParsedText::opticalMarginEnabled_ = false;
 
 namespace {
 
@@ -197,7 +198,10 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
 }
 
 bool isHangingPunctuation(const uint32_t cp) {
-  return cp == '-' || (ParsedText::isShortHyphenEnabled() && cp == 0x2011);
+  // CPHUN approved optical-margin set: hyphen, period, comma, colon, semicolon.
+  // U+2011 participates only when Short Hyphen is enabled.
+  return cp == '-' || cp == '.' || cp == ',' || cp == ':' || cp == ';' ||
+         (ParsedText::isShortHyphenEnabled() && cp == 0x2011);
 }
 
 struct HangingAdvanceCacheEntry {
@@ -288,7 +292,11 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
     stripSoftHyphensInPlace(sanitized);
   }
   if (appendHyphen) {
-    if (ParsedText::isShortHyphenEnabled()) {
+    // With Optical margin ON, choose line breaks using the normal U+002D width,
+    // then substitute U+2011 only for rendering. This keeps Short Hyphen from
+    // changing pagination in optical-margin mode. With Optical margin OFF the
+    // shorter U+2011 width is intentionally allowed to affect line breaking.
+    if (ParsedText::isShortHyphenEnabled() && !ParsedText::isOpticalMarginEnabled()) {
       sanitized += SHORT_HYPHEN_UTF8;
     } else {
       sanitized.push_back('-');

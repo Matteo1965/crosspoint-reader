@@ -236,18 +236,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     minimumSpacePercent = 100;
     needsResave = true;
   }
-  const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)75;
-  if (storedHangingPunctuation == 1) {
-    // Migrate the previous On/Off implementation: On meant 50%.
-    hangingPunctuation = 50;
-    needsResave = true;
-  } else if (storedHangingPunctuation == 0 || storedHangingPunctuation == 25 || storedHangingPunctuation == 50 ||
-             storedHangingPunctuation == 75 || storedHangingPunctuation == 100) {
-    hangingPunctuation = storedHangingPunctuation;
-  } else {
-    hangingPunctuation = 75;
-    needsResave = true;
-  }
+  const uint8_t storedHangingPunctuation = doc["hangingPunctuation"] | (uint8_t)1;
+  hangingPunctuation = storedHangingPunctuation ? 1 : 0;
+  if (storedHangingPunctuation > 1) needsResave = true;
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
@@ -310,11 +301,10 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
-  // High nibble: percentage step (1=25% .. 4=100%). Low nibble: overhang cap in 4-pixel units.
-  // The physical cap is 80% of the selected margin: 5->4, 10->8, ... 40->32 px.
-  const uint8_t hangingLimitUnits = static_cast<uint8_t>((screenMargin * 4 / 5) / 4);
+  // Optical margin is OFF/ON. ON permits the eligible end punctuation to hang
+  // into the physical right margin, capped just inside the selected screen margin.
   spec.hangingPunctuationLimitPx =
-      static_cast<uint8_t>(((SETTINGS.hangingPunctuation / 20) << 5) | (SETTINGS.screenMargin > 2 ? SETTINGS.screenMargin - 2 : 0));
+      hangingPunctuation ? static_cast<uint8_t>(screenMargin > 1 ? screenMargin - 1 : 0) : 0;
   spec.shortHyphen = shortHyphen != 0;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.letterSpacingLimitPercent = letterSpacingLimitPercent;

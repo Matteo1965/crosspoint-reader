@@ -423,7 +423,7 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::HangingPunctuation:
-      SETTINGS.hangingPunctuation = SETTINGS.hangingPunctuation ? 0 : 100;
+      SETTINGS.hangingPunctuation = SETTINGS.hangingPunctuation ? 0 : 1;
       SETTINGS.saveToFile();
       requestUpdate();
       break;
@@ -502,7 +502,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
-      return SETTINGS.hangingPunctuation ? std::to_string(SETTINGS.hangingPunctuation) + "%" : tr(STR_STATE_OFF);
+      return SETTINGS.hangingPunctuation ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::ShortHyphen:
       return SETTINGS.shortHyphen ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::FixedDialogueSpacing:

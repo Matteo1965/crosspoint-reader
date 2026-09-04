@@ -440,6 +440,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
 
   ParsedText::setMinimumSpacePercent(spec.minimumSpacePercent);
   ParsedText::setShortHyphenEnabled(spec.shortHyphen);
+  ParsedText::setOpticalMarginEnabled(spec.hangingPunctuationLimitPx > 0);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);
   build_ = std::move(ctx);
