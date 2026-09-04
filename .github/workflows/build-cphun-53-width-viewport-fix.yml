@@ -1,0 +1,73 @@
+name: Build CPHUN-53 Width Viewport Fix
+
+on:
+  push:
+    branches: [agent/cphun-53-width-viewport-fix]
+    paths: ['.github/workflows/build-cphun-53-width-viewport-fix.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-53
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-53-width-viewport-fix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-53 width bookkeeping fix
+        run: |
+          set -euo pipefail
+          python3 tools/cphun_53_width_viewport_fix.py
+          grep -q 'shortHyphenEnabled_ && opticalMarginEnabled_ && chosenNeedsHyphen' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'measureFocusWordWidth(renderer, fontId, words\[wordIndex\], wordStyles\[wordIndex\]' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4)' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CPHUN-260904-53' src/CPHUNBuildId.h
+          grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/ParsedText.cpp src/activities/reader/EpubReaderActivity.cpp src/CPHUNBuildId.h tools/cphun_53_width_viewport_fix.py
+          git commit -m 'CPHUN-53: fix short-hyphen width bookkeeping and verify viewport margins'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-53-width-viewport-fix
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-53-Width-Viewport-Fix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
