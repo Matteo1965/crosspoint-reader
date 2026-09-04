@@ -1,0 +1,80 @@
+name: Build CPHUN-54 Hyphen Origin Alignment
+
+on:
+  push:
+    branches: [agent/cphun-54-hyphen-origin-align]
+    paths: ['.github/workflows/build-cphun-54-hyphen-origin-align.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260904-54
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-54-hyphen-origin-align
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply U+2011 optical-margin origin alignment
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          old = '''  const int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);\n  // Optikai margó is a simple OFF/ON control. ON allows 100% of the\n  // punctuation contribution to hang, capped by screenMargin - 1.\n  return std::min<int>(pixelLimit, punctuationAdvance);'''
+          new = '''  int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);\n  // For the synthetic short hyphen, hang by the glyph's standalone advance.\n  // The final word width already includes pair kerning; subtracting the standalone\n  // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the\n  // logical right margin, so every rendered short hyphen starts at the same X.\n  if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {\n    punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);\n  }\n  // Optikai margó is a simple OFF/ON control. ON allows 100% of the\n  // punctuation contribution to hang, capped by screenMargin - 1.\n  return std::min<int>(pixelLimit, punctuationAdvance);'''
+          if old not in s:
+              raise SystemExit('Expected hanging punctuation block not found')
+          p.write_text(s.replace(old, new, 1))
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260904-54"\n')
+          PY
+          grep -q 'punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8)' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'CPHUN-260904-54' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add lib/Epub/Epub/ParsedText.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-54: align short-hyphen origin at optical margin'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-54-hyphen-origin-align
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260904-54-Hyphen-Origin-Alignment-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
