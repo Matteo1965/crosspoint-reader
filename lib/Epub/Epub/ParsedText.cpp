@@ -241,12 +241,27 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
                                 ? 0
                                 : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
   int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
-  // For the synthetic short hyphen, hang by the glyph's standalone advance.
-  // The final word width already includes pair kerning; subtracting the standalone
-  // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the
-  // logical right margin, so every rendered short hyphen starts at the same X.
+  // CPHUN-55: For the synthetic short hyphen, align the visible bitmap start
+  // rather than only the glyph origin. The active font/size/style supplies the
+  // actual U+2011 left bearing, so no font-specific pixel constant is needed.
+  // The word itself is not split or post-shifted: the extra allowance is fed
+  // into justification, preserving the letter-to-hyphen spacing while letting
+  // the complete final word move outward as one typographic unit.
   if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {
-    punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);
+    const int standaloneAdvance =
+        cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);
+    int renderedLeftBearing = 0;
+    const auto fontIt = renderer.getFontMap().find(fontId);
+    if (fontIt != renderer.getFontMap().end()) {
+      const EpdGlyph* glyph = fontIt->second.getGlyph(punctuation, style);
+      if (glyph != nullptr) {
+        renderedLeftBearing = glyph->left;
+        if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+          renderedLeftBearing /= 2;
+        }
+      }
+    }
+    punctuationAdvance = std::max(0, standaloneAdvance - renderedLeftBearing);
   }
   // Optikai margó is a simple OFF/ON control. ON allows 100% of the
   // punctuation contribution to hang, capped by screenMargin - 1.
