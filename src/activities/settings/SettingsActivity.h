@@ -94,7 +94,8 @@ class SettingsActivity final : public UiTabListActivity {
   std::vector<freeink::ui::ListItem> rowItems_;
   void rebuildRowItems();
   static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
+  static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
+                                                         StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
   int listCount() const override { return settingsCount; }
   int tabCount() const override { return categoryCount; }
   int activeTab() const override { return selectedCategoryIndex; }
