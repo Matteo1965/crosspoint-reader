@@ -67,8 +67,18 @@ jobs:
           p=Path('lib/Epub/Epub/Section.cpp')
           s=p.read_text()
           s=re.sub(r'constexpr uint8_t SECTION_FILE_VERSION = \d+;', 'constexpr uint8_t SECTION_FILE_VERSION = 54;', s, count=1)
+          # CPHUN-50 adds shortHyphen to the serialized header. The previous generated
+          # HEADER_SIZE expression evaluated to 48 while the serialized/static_assert
+          # field list is 46 bytes. Keep the constant equal to that verified field list;
+          # the existing static_assert remains the compile-time guard against drift.
+          s, n = re.subn(r'constexpr uint32_t HEADER_SIZE =.*?;\n\}  // namespace',
+                         'constexpr uint32_t HEADER_SIZE = 46;\n}  // namespace',
+                         s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit(f'Section.cpp: expected one HEADER_SIZE block, found {n}')
           p.write_text(s)
           PY
+          grep -q 'constexpr uint32_t HEADER_SIZE = 46;' lib/Epub/Epub/Section.cpp
           grep -q 'CPHUN-260903-50' src/CPHUNBuildId.h
           grep -q 'CPHUN-49: dialogue/narrative dashes' lib/Epub/Epub/hyphenation/HyphenationCommon.cpp
           grep -q 'configured == ReaderAction::PreviousPage || configured == ReaderAction::NextPage' src/activities/reader/EpubReaderActivity.cpp
