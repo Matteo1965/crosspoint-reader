@@ -240,7 +240,14 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
   const int prefixAdvance = prefixWithoutPunctuation.empty()
                                 ? 0
                                 : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
-  const int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
+  int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
+  // For the synthetic short hyphen, hang by the glyph's standalone advance.
+  // The final word width already includes pair kerning; subtracting the standalone
+  // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the
+  // logical right margin, so every rendered short hyphen starts at the same X.
+  if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {
+    punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);
+  }
   // Optikai margó is a simple OFF/ON control. ON allows 100% of the
   // punctuation contribution to hang, capped by screenMargin - 1.
   return std::min<int>(pixelLimit, punctuationAdvance);
