@@ -250,6 +250,10 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
+  if (tab_ == Tab::Layout) {
+    props.rowHeight = 26;
+    props.rowGap = 0;
+  }
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (see SettingsActivity).
@@ -434,6 +438,18 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
+    case LayoutRow::LetterSpacingCorrection: {
+      const char* options[] = {tr(STR_STATE_OFF), "10%", "20%", "30%", "40%", "50%", "60%", "70%"};
+      const uint16_t v = SETTINGS.letterSpacingLimitPercent;
+      const int cur = v == 0 ? 0 : std::clamp<int>((260 - std::clamp<int>(v, 120, 240)) / 20, 1, 7);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",
+                        options, 8, cur, [](int idx) {
+                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint16_t>(260 - idx * 20);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      break;
+    }
     case LayoutRow::ShortHyphen:
       SETTINGS.shortHyphen = !SETTINGS.shortHyphen;
       SETTINGS.saveToFile();
@@ -477,6 +493,12 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     }
     case LayoutRow::MinimumSpace:
       return std::to_string(SETTINGS.minimumSpacePercent) + "%";
+    case LayoutRow::LetterSpacingCorrection: {
+      const uint16_t v = SETTINGS.letterSpacingLimitPercent;
+      if (v == 0) return tr(STR_STATE_OFF);
+      const int displayPercent = (260 - std::clamp<int>(v, 120, 240)) / 2;
+      return std::to_string(displayPercent) + "%";
+    }
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
