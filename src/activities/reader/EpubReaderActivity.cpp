@@ -285,8 +285,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                                    &orientedMarginLeft);
   const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
   orientedMarginTop += verticalScreenMargin;
-  // CPHUN-56: move the visible top text boundary 4 px upward relative to CPHUN-54.
-  orientedMarginTop = std::max(0, orientedMarginTop - 4);
+  // CPHUN-57: move the visible top text boundary 6 px upward relative to CPHUN-54.
+  orientedMarginTop = std::max(0, orientedMarginTop - 6);
   orientedMarginLeft += SETTINGS.screenMargin;
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
@@ -1320,8 +1320,8 @@ void EpubReaderActivity::renderBook() {
                                    &orientedMarginLeft);
   const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
   orientedMarginTop += verticalScreenMargin;
-  // CPHUN-56: move the visible top text boundary 4 px upward relative to CPHUN-54.
-  orientedMarginTop = std::max(0, orientedMarginTop - 4);
+  // CPHUN-57: move the visible top text boundary 6 px upward relative to CPHUN-54.
+  orientedMarginTop = std::max(0, orientedMarginTop - 6);
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
 
@@ -1335,9 +1335,9 @@ void EpubReaderActivity::renderBook() {
   } else {
     orientedMarginBottom += std::max(verticalScreenMargin, static_cast<int>(statusBarHeight));
   }
-  // CPHUN-56: move the visible bottom text boundary 4 px downward relative to CPHUN-54.
-  // Apply this after status-bar constraints so the 4 px expansion remains observable.
-  orientedMarginBottom = std::max(0, orientedMarginBottom - 4);
+  // CPHUN-57: move the visible bottom text boundary 6 px downward relative to CPHUN-54.
+  // Apply this after status-bar constraints so the 6 px expansion remains observable.
+  orientedMarginBottom = std::max(0, orientedMarginBottom - 6);
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
