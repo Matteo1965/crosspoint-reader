@@ -32,9 +32,11 @@ jobs:
           git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
 
           BASE=935afc433005e85f1da9df5f35a26c4fc77b42ab
+          C_LANG=cdbe2a7792bc41bd2f3ff052705eedafe41b6879
+          C_FUI=f24ef20955a358d0b33c7fa8b8ace0db0b970d10
           COMMITS=(
-            cdbe2a7792bc41bd2f3ff052705eedafe41b6879
-            f24ef20955a358d0b33c7fa8b8ace0db0b970d10
+            "$C_LANG"
+            "$C_FUI"
             68be3aec7452484f165a24395a4ec940d06541b9
             7a4c96dd3463226d7589d927ab67a6303d49ff70
             4f0b4b70f44302d531536b63c208520bd25b3184
@@ -50,9 +52,46 @@ jobs:
           for c in "${COMMITS[@]}"; do
             echo "=== cherry-pick $c ==="
             if ! git cherry-pick "$c"; then
-              echo 'Integration conflicts:'
-              git diff --name-only --diff-filter=U
-              exit 1
+              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+              if [ "$c" = "$C_FUI" ] && [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'src/components/OptionPopup.h' ]; then
+                # CPHUN has additional compact-16 option-dialog sizing. Keep it,
+                # then port only the upstream FUI theme/dismiss semantics.
+                git checkout --ours -- src/components/OptionPopup.h
+                python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/components/OptionPopup.h')
+          s = p.read_text()
+
+          target = '    fui::GfxRendererTarget target = makeUiTarget(renderer);\n'
+          theme = '    const fui::ThemeTokens& theme = refreshSharedUiThemeTokens(target);\n'
+          if theme not in s:
+              if target not in s:
+                  raise SystemExit('OptionPopup target marker not found')
+              s = s.replace(target, target + theme, 1)
+
+          gap = '''    props.gap = static_cast<int16_t>(compact16 ? std::max(0, metrics.optionPopupItemSpacing - 2)\n                                                    : metrics.optionPopupItemSpacing);\n'''
+          style = '''    // Rounded invert-fill themes use a black pill, not the default gray focus cursor.\n    if (theme.listSelectionStyle == fui::SelectionStyle::InvertFill && theme.listRowRadius > 0) {\n      props.buttonStyles = fui::defaultButtonStyles();\n      props.buttonStyles.focused = props.buttonStyles.selected;\n      fui::setStyleRadius(props.buttonStyles, theme.listRowRadius);\n    }\n'''
+          if style not in s:
+              if gap not in s:
+                  raise SystemExit('OptionPopup gap marker not found')
+              s = s.replace(gap, gap + style, 1)
+
+          marker = '  bool isActive() const { return active; }\n\n private:\n'
+          dismiss = '''  bool isActive() const { return active; }\n\n  // Close without firing the callback when the host screen goes away.\n  void dismiss() {\n    active = false;\n    onSelectCallback = nullptr;\n  }\n\n private:\n'''
+          if 'void dismiss()' not in s:
+              if marker not in s:
+                  raise SystemExit('OptionPopup dismiss insertion point not found')
+              s = s.replace(marker, dismiss, 1)
+
+          p.write_text(s)
+          PY
+                git add src/components/OptionPopup.h
+                git cherry-pick --continue
+              else
+                echo 'Integration conflicts:'
+                printf '%s\n' "${conflicts[@]}"
+                exit 1
+              fi
             fi
           done
 
@@ -144,6 +183,8 @@ jobs:
           grep -q 'keyboardLayouts' src/CrossPointSettings.h
           grep -q 'keyboardLayouts' src/CrossPointSettings.cpp
           grep -q 'constexpr.*categoryNames' src/activities/settings/SettingsActivity.h
+          grep -q 'refreshSharedUiThemeTokens' src/components/OptionPopup.h
+          grep -q 'void dismiss()' src/components/OptionPopup.h
           git diff --check
 
       - name: Unit tests
