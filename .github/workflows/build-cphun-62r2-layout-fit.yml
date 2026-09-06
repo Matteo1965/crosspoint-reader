@@ -60,8 +60,7 @@ jobs:
               raise SystemExit('Missing syncTabListViewport declaration')
           p.write_text(s)
 
-          # 3) Respect that override before X3/X4 theme defaults are applied,
-          #    so the requested 24 px is also used for visible-row calculation.
+          # 3) Respect that override before X3/X4 theme defaults are applied.
           p = Path('src/activities/UiTabListActivity.cpp')
           s = p.read_text()
           old_sig = ('void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, '
@@ -74,47 +73,26 @@ jobs:
           elif 'const int16_t rowHeightOverride' not in s:
               raise SystemExit('Missing syncTabListViewport definition')
 
-          old_body = '''  int16_t rowHeight = screen.theme().rowHeight;
-          if (!mappedInput.hasTouch()) {
-            // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
-            // height instead of FreeInkUI's touch-target-sized default (see
-            // UiListActivity::syncListViewport, the non-tab counterpart of this).
-            const auto& metrics = UITheme::getInstance().getMetrics();
-            rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-            // Wrapped (maxLines > 1) labels grow only their own row: list() sizes
-            // wrapped items per-row, so the dense height stays for the rest.
-            props.rowHeight = rowHeight;
-          }
-          '''
-          new_body = '''  int16_t rowHeight = screen.theme().rowHeight;
-          if (rowHeightOverride > 0) {
-            // Explicit per-screen override: use the same geometry for drawing and
-            // visible-row/navigation calculations, including non-touch X3/X4.
-            rowHeight = rowHeightOverride;
-            props.rowHeight = rowHeight;
-          } else if (!mappedInput.hasTouch()) {
-            // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
-            // height instead of FreeInkUI's touch-target-sized default (see
-            // UiListActivity::syncListViewport, the non-tab counterpart of this).
-            const auto& metrics = UITheme::getInstance().getMetrics();
-            rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-            // Wrapped (maxLines > 1) labels grow only their own row: list() sizes
-            // wrapped items per-row, so the dense height stays for the rest.
-            props.rowHeight = rowHeight;
-          }
-          '''
-          if old_body in s:
-              s = s.replace(old_body, new_body, 1)
-          elif 'if (rowHeightOverride > 0)' not in s:
-              raise SystemExit('Missing row-height selection block')
+          marker = '  int16_t rowHeight = screen.theme().rowHeight;\n'
+          if 'if (rowHeightOverride > 0)' not in s:
+              if marker not in s:
+                  raise SystemExit('Missing rowHeight initialization')
+              s = s.replace(
+                  marker,
+                  marker +
+                  '  if (rowHeightOverride > 0) {\n'
+                  '    rowHeight = rowHeightOverride;\n'
+                  '    props.rowHeight = rowHeight;\n'
+                  '  } else ',
+                  1,
+              )
+              s = s.replace('  if (!mappedInput.hasTouch()) {', 'if (!mappedInput.hasTouch()) {', 1)
           p.write_text(s)
 
           Path('src/CPHUNBuildId.h').write_text(
               '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R2"\n')
           PY
 
-          # Regression guards: 24 px must be effective on X4, while all other
-          # tabs retain existing theme geometry and the proven 62R1 USB fix.
           grep -F 'props.rowHeight = 24;' src/activities/settings/TextSettingsActivity.cpp
           grep -F 'tab_ == Tab::Layout ? 24 : 0' src/activities/settings/TextSettingsActivity.cpp
           grep -F 'int16_t rowHeightOverride = 0' src/activities/UiTabListActivity.h
