@@ -71,7 +71,17 @@ jobs:
           PY
 
       - name: Unit tests
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
+        shell: bash
+        run: |
+          set +e
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "No unit tests discovered; continuing with firmware build."
+          elif [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - uses: astral-sh/setup-uv@v6
 
