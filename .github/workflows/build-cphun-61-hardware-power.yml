@@ -61,24 +61,6 @@ jobs:
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
             if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'src/main.cpp' ]; then
               git checkout --ours -- src/main.cpp
-              python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/main.cpp')
-          s = p.read_text()
-          old = '''  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {\n    powerManager.startDeepSleep(gpio);\n  }'''
-          new = '''  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {\n    LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n    powerManager.startDeepSleep(gpio);\n  }'''
-          if old in s:
-              s = s.replace(old, new, 1)
-          old2 = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO\n'
-          new2 = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
-          if old2 in s:
-              s = s.replace(old2, new2, 1)
-          old3 = '''    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {\n      return;\n    }\n    enterDeepSleep();'''
-          new3 = '''    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {\n      return;\n    }\n    LOG_DBG("MAIN", "Power button held %lums, sleeping", gpio.getPowerButtonHeldTime());\n    enterDeepSleep();'''
-          if old3 in s:
-              s = s.replace(old3, new3, 1)
-          p.write_text(s)
-          PY
               git add src/main.cpp
               git cherry-pick --continue
             else
@@ -98,32 +80,8 @@ jobs:
                 *) echo "Unexpected X4 Classic conflict: $f"; exit 1 ;;
               esac
             done
-
-            git checkout --ours -- freeink-sdk
-            git add freeink-sdk
-            git checkout --ours -- src/activities/reader/EpubReaderActivity.cpp
-            git add src/activities/reader/EpubReaderActivity.cpp
-
-            git checkout --ours -- src/main.cpp
-            python3 - <<'PY'
-          from pathlib import Path
-          p = Path('src/main.cpp')
-          s = p.read_text()
-          old = 'BoardConfig::isX4Pro() ? MappedInputManager::Button::Down : MappedInputManager::Button::Up'
-          new = '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? MappedInputManager::Button::Down : MappedInputManager::Button::Up'
-          if old in s:
-              s = s.replace(old, new, 1)
-          oldlog = 'BoardConfig::isX4Pro() ? "DOWN" : "UP"'
-          newlog = '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? "DOWN" : "UP"'
-          if oldlog in s:
-              s = s.replace(oldlog, newlog, 1)
-          oldusb = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
-          newusb = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
-          if oldusb in s:
-              s = s.replace(oldusb, newusb, 1)
-          p.write_text(s)
-          PY
-            git add src/main.cpp
+            git checkout --ours -- freeink-sdk src/activities/reader/EpubReaderActivity.cpp src/main.cpp
+            git add freeink-sdk src/activities/reader/EpubReaderActivity.cpp src/main.cpp
             git cherry-pick --continue
           fi
 
@@ -140,7 +98,6 @@ jobs:
 
             git checkout --ours -- freeink-sdk
             git add freeink-sdk
-
             git checkout --ours -- lib/hal/HalStorage.cpp lib/hal/HalStorage.h
             python3 - <<'PY'
           from pathlib import Path
@@ -151,8 +108,7 @@ jobs:
               marker = '''class HalStorage::StorageLock {\n public:\n  StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }\n  ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }\n};\n\n'''
               if marker not in s:
                   raise SystemExit('HalStorage.cpp StorageLock block not found')
-              impl = marker + '''void HalStorage::prepareForDeepSleep() {\n  StorageLock lock;\n  SDCard.shutdown();\n}\n\n'''
-              s = s.replace(marker, impl, 1)
+              s = s.replace(marker, marker + '''void HalStorage::prepareForDeepSleep() {\n  StorageLock lock;\n  SDCard.shutdown();\n}\n\n''', 1)
           cpp.write_text(s)
 
           hdr = Path('lib/hal/HalStorage.h')
@@ -161,13 +117,62 @@ jobs:
               marker = '  bool ready() const;\n'
               if marker not in h:
                   raise SystemExit('HalStorage.h insertion point not found')
-              decl = '''  bool ready() const;\n  // Stop the SD card for deep sleep: unmount, stop the SDMMC host, and release\n  // the bus pads (no-op on SPI boards). Call only after all file users have\n  // stopped; open HalFiles become invalid. A deep-sleep wake resets the MCU and\n  // mounts storage again through begin().\n  void prepareForDeepSleep();\n'''
-              h = h.replace(marker, decl, 1)
+              h = h.replace(marker, marker + '  void prepareForDeepSleep();\n', 1)
           hdr.write_text(h)
           PY
             git add lib/hal/HalStorage.cpp lib/hal/HalStorage.h
             git cherry-pick --continue
           fi
+
+          # Re-port the final upstream power semantics onto CPHUN's custom main.cpp.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.cpp')
+          s = p.read_text()
+
+          # Deep sleep must shut the SD stack down after all activity/file cleanup.
+          old = '  halTiltSensor.deepSleep();\n  display.deepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep");'
+          new = '  halTiltSensor.deepSleep();\n  display.deepSleep();\n  Storage.prepareForDeepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep");'
+          if 'Storage.prepareForDeepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep")' not in s:
+              if old not in s:
+                  raise SystemExit('enterDeepSleep insertion point not found')
+              s = s.replace(old, new, 1)
+
+          # Sample physical wake immediately; decide whether a click is valid only after SETTINGS loads.
+          marker = '  const auto wakeupReason = gpio.getWakeupReason();\n'
+          if 'const bool wakeHoldVerified =' not in s:
+              if marker not in s:
+                  raise SystemExit('wakeupReason marker not found')
+              s = s.replace(marker, marker + '  const bool wakeHoldVerified =\n      wakeupReason != HalGPIO::WakeupReason::PowerButton || gpio.verifyPowerButtonWakeup();\n', 1)
+
+          # X4 Classic shares the X4 Pro recovery-key restriction.
+          s = s.replace('BoardConfig::isX4Pro() ? X4PRO_RECOVERY_SETTLE_MS : DEFAULT_RECOVERY_SETTLE_MS',
+                        '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? X4PRO_RECOVERY_SETTLE_MS : DEFAULT_RECOVERY_SETTLE_MS')
+          s = s.replace('BoardConfig::isX4Pro() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP',
+                        '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP')
+          s = s.replace('BoardConfig::isX4Pro() ? "DOWN" : "UP"',
+                        '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? "DOWN" : "UP"')
+
+          # Replace CPHUN's old two-argument wake verification with final single-click semantics.
+          old_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      LOG_DBG("MAIN", "Verifying power button press duration");\n      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),\n                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
+          new_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {\n        LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n        Storage.prepareForDeepSleep();\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
+          if old_case in s:
+              s = s.replace(old_case, new_case, 1)
+          elif 'SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP' not in s:
+              raise SystemExit('PowerButton wake case not found')
+
+          # X4 Pro / Classic, PaperMono and EEGO A4 remain awake on USB-power boot.
+          old_usb = '''#if FREEINK_DEVICE_PAPERMONO\n      // There is no armable GPIO wake because the button is behind the PMIC.\n      // Sleeping here would strand the device in a USB-replug boot loop.\n      break;\n#else\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
+          new_usb = '''#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n      break;\n#else\n      Storage.prepareForDeepSleep();\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
+          if old_usb in s:
+              s = s.replace(old_usb, new_usb, 1)
+          elif 'FREEINK_DEVICE_X4CLASSIC' not in s:
+              raise SystemExit('AfterUSBPower block not found')
+
+          p.write_text(s)
+          PY
+          git add src/main.cpp
+          git commit -m 'CPHUN-61: port final power and SD sleep semantics'
 
           git -C freeink-sdk fetch --no-tags origin "$FINAL_SDK"
           git -C freeink-sdk checkout "$FINAL_SDK"
@@ -202,7 +207,10 @@ jobs:
           grep -q 'coldBootImpliesPowerButton' lib/hal/HalGPIO.cpp
           grep -q 'XteinkX4Classic' lib/hal/HalGPIO.cpp
           grep -q '\[env:x4c\]' platformio.ini
+          grep -q 'BoardConfig::isX4Classic' src/main.cpp
           grep -q 'FREEINK_DEVICE_X4CLASSIC' src/main.cpp
+          grep -q 'wakeHoldVerified' src/main.cpp
+          grep -q 'SHORT_PWRBTN::SLEEP' src/main.cpp
           grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
           grep -q 'void prepareForDeepSleep();' lib/hal/HalStorage.h
           grep -q 'Storage.prepareForDeepSleep' src/main.cpp
