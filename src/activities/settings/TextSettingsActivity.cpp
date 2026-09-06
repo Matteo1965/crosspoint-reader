@@ -42,7 +42,46 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
 }
 
-constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
+constexpr uint8_t LINE_SPACING_VALUES[] = {
+    static_cast<uint8_t>(CrossPointSettings::TIGHT),
+    static_cast<uint8_t>(CrossPointSettings::NORMAL),
+    static_cast<uint8_t>(CrossPointSettings::NORMAL_PLUS),
+    static_cast<uint8_t>(CrossPointSettings::WIDE),
+    static_cast<uint8_t>(CrossPointSettings::WIDE_PLUS),
+    static_cast<uint8_t>(CrossPointSettings::EXTRA_WIDE),
+};
+
+std::vector<std::string> lineSpacingLabels() {
+  return {I18N.get(StrId::STR_TIGHT), I18N.get(StrId::STR_NORMAL),
+          std::string(I18N.get(StrId::STR_NORMAL)) + "+", I18N.get(StrId::STR_WIDE),
+          std::string(I18N.get(StrId::STR_WIDE)) + "+", I18N.get(StrId::STR_EXTRA_WIDE)};
+}
+
+int lineSpacingUiIndex(const uint8_t value) {
+  for (int i = 0; i < static_cast<int>(std::size(LINE_SPACING_VALUES)); ++i) {
+    if (LINE_SPACING_VALUES[i] == value) return i;
+  }
+  return 1;  // Normal fallback
+}
+
+std::string lineSpacingLabel(const uint8_t value) {
+  switch (value) {
+    case CrossPointSettings::TIGHT:
+      return I18N.get(StrId::STR_TIGHT);
+    case CrossPointSettings::NORMAL:
+      return I18N.get(StrId::STR_NORMAL);
+    case CrossPointSettings::NORMAL_PLUS:
+      return std::string(I18N.get(StrId::STR_NORMAL)) + "+";
+    case CrossPointSettings::WIDE:
+      return I18N.get(StrId::STR_WIDE);
+    case CrossPointSettings::WIDE_PLUS:
+      return std::string(I18N.get(StrId::STR_WIDE)) + "+";
+    case CrossPointSettings::EXTRA_WIDE:
+      return I18N.get(StrId::STR_EXTRA_WIDE);
+    default:
+      return I18N.get(StrId::STR_NORMAL);
+  }
+}
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
@@ -406,14 +445,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
-    case LayoutRow::LineSpacing:
-      optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
-                        SETTINGS.lineSpacing, [](int idx) {
-                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
-                          SETTINGS.saveToFile();
-                        });
+    case LayoutRow::LineSpacing: {
+      const auto options = lineSpacingLabels();
+      optionPopup_.show(StrId::STR_LINE_SPACING, options, lineSpacingUiIndex(SETTINGS.lineSpacing), [](int idx) {
+        if (idx >= 0 && idx < static_cast<int>(std::size(LINE_SPACING_VALUES))) {
+          SETTINGS.lineSpacing = LINE_SPACING_VALUES[idx];
+          SETTINGS.saveToFile();
+        }
+      });
       requestUpdate();
       break;
+    }
     case LayoutRow::Alignment:
       optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
                         SETTINGS.paragraphAlignment, [](int idx) {
@@ -480,10 +522,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
 
 std::string TextSettingsActivity::layoutValueText(int row) const {
   switch (static_cast<LayoutRow>(row)) {
-    case LayoutRow::LineSpacing: {
-      const uint8_t v = SETTINGS.lineSpacing;
-      return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
-    }
+    case LayoutRow::LineSpacing:
+      return lineSpacingLabel(SETTINGS.lineSpacing);
     case LayoutRow::ParaSpacing:
       return SETTINGS.extraParagraphSpacingEnabled ? std::to_string(SETTINGS.extraParagraphSpacing) + "%"
                                                    : tr(STR_STATE_OFF);

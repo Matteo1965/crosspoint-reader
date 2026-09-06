@@ -324,8 +324,12 @@ float CrossPointSettings::getReaderLineCompression() const {
       case NORMAL:
       default:
         return 1.0f;
+      case NORMAL_PLUS:
+        return 1.05f;
       case WIDE:
         return 1.1f;
+      case WIDE_PLUS:
+        return 1.15f;
       case EXTRA_WIDE:
         return 1.2f;
     }
@@ -340,8 +344,12 @@ float CrossPointSettings::getReaderLineCompression() const {
         case NORMAL:
         default:
           return 1.0f;
+        case NORMAL_PLUS:
+          return 1.05f;
         case WIDE:
           return 1.1f;
+        case WIDE_PLUS:
+          return 1.15f;
         case EXTRA_WIDE:
           return 1.2f;
       }
@@ -352,8 +360,12 @@ float CrossPointSettings::getReaderLineCompression() const {
         case NORMAL:
         default:
           return 0.95f;
+        case NORMAL_PLUS:
+          return 0.975f;
         case WIDE:
           return 1.0f;
+        case WIDE_PLUS:
+          return 1.025f;
         case EXTRA_WIDE:
           return 1.05f;
       }
