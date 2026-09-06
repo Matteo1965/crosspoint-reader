@@ -102,21 +102,10 @@ jobs:
             git checkout --ours -- freeink-sdk
             git add freeink-sdk
 
+            # CPHUN does not have upstream's xteinkClassPanel() helper.
+            # Keep our reader file unchanged; X4 Classic panel handling is covered
+            # by the board/HAL additions and does not need this helper in CPHUN.
             git checkout --ours -- src/activities/reader/EpubReaderActivity.cpp
-            python3 - <<'PY'
-          from pathlib import Path
-          import re
-          p = Path('src/activities/reader/EpubReaderActivity.cpp')
-          s = p.read_text()
-          if 'BoardConfig::isX4Classic()' not in s:
-              pattern = r'(bool\s+xteinkClassPanel\s*\(\)\s*\{\s*return\s+[^;]*BoardConfig::isX4Pro\(\))([^;]*;)'
-              m = re.search(pattern, s)
-              if not m:
-                  raise SystemExit('xteinkClassPanel with isX4Pro() not found')
-              replacement = m.group(1) + ' || BoardConfig::isX4Classic()' + m.group(2)
-              s = s[:m.start()] + replacement + s[m.end():]
-          p.write_text(s)
-          PY
             git add src/activities/reader/EpubReaderActivity.cpp
 
             git checkout --ours -- src/main.cpp
@@ -188,7 +177,6 @@ jobs:
           grep -q 'coldBootImpliesPowerButton' lib/hal/HalGPIO.cpp
           grep -q 'XteinkX4Classic' lib/hal/HalGPIO.cpp
           grep -q '\[env:x4c\]' platformio.ini
-          grep -q 'BoardConfig::isX4Classic' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'FREEINK_DEVICE_X4CLASSIC' src/main.cpp
           grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
           grep -q 'Storage.prepareForDeepSleep' src/main.cpp
