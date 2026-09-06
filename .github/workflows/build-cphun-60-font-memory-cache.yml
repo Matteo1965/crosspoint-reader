@@ -35,6 +35,7 @@ jobs:
           C_MANIFEST=93d572fcbd65bd3d7cabc75498b2c6515584602c
           C_GROUPS=3d5c4a5096897b2bd61a2a041634f33a1c14280b
           C_FLASH=c484dc72b8486d9ba7a71610af777870b66680d9
+          C_REGULAR=fb0523d367f124dd70fbb542f676a7a04ce89bd8
           C_PREWARM=8141d7b9c79cef1c8c5ed0eef96660bac22e6d88
           C_FONTIDS=32a0cadbcafb43bb4cb11105585428533d208d23
           C_ARENA=93b6fe111c1e22cace195f053fcda5e80985ac31
@@ -42,7 +43,7 @@ jobs:
           P_GROUPS=75c079fe7ad0773ba69500d904c01da301848b8c
           P_DOWNLOAD=3b2032641f01186e93fd6c2dd7f0d942a432d38f
 
-          git fetch --no-tags upstream "$C_MANIFEST" "$C_GROUPS" "$C_FLASH" "$C_PREWARM" "$C_FONTIDS" "$C_ARENA" "$C_DOWNLOAD" "$P_GROUPS" "$P_DOWNLOAD"
+          git fetch --no-tags upstream "$C_MANIFEST" "$C_GROUPS" "$C_FLASH" "$C_REGULAR" "$C_PREWARM" "$C_FONTIDS" "$C_ARENA" "$C_DOWNLOAD" "$P_GROUPS" "$P_DOWNLOAD"
 
           git cherry-pick "$C_MANIFEST"
 
@@ -76,12 +77,11 @@ jobs:
             git cherry-pick --continue
           fi
 
-          # CPHUN #59 carried regenerated Regular Ubuntu headers that can survive
-          # the cherry-pick without a textual conflict while still using the old
-          # dense int8_t kerning initializer. EpdFontData is already on the new
-          # sparse-kerning layout, so force the two retained Regular fonts to the
-          # exact c484dc7 representation. Medium fonts intentionally stay deleted.
-          git checkout "$C_FLASH" -- \
+          # The Regular Ubuntu UI fonts were restored upstream later by fb0523d,
+          # after sparse kerning had already landed. CPHUN #59 still carries the
+          # pre-sparse Regular headers, so take only these two generated headers
+          # from that upstream final-state commit. Do not cherry-pick the revert.
+          git checkout "$C_REGULAR" -- \
             lib/EpdFont/builtinFonts/ubuntu_10_regular.h \
             lib/EpdFont/builtinFonts/ubuntu_12_regular.h
           git add \
