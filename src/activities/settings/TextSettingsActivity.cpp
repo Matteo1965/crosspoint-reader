@@ -290,7 +290,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
   if (tab_ == Tab::Layout) {
-    props.rowHeight = 26;
+    props.rowHeight = 24;
     props.rowGap = 0;
   }
   // Titles match the value's font size (smallText) so both sides of a row
@@ -298,7 +298,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   // maxLines=2 also marks the style explicitly set (see SettingsActivity).
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 2;
-  syncTabListViewport(screen, props);
+  syncTabListViewport(screen, props, false, tab_ == Tab::Layout ? 24 : 0);
   screen.list(props);
 }
 
