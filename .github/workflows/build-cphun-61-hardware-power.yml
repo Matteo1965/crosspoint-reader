@@ -1,0 +1,120 @@
+name: Build CPHUN-61 Hardware Power SD
+
+on:
+  push:
+    branches: [agent/cphun-60-font-memory-cache]
+    paths: ['.github/workflows/build-cphun-61-hardware-power.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-61
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-60-font-memory-cache
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate selected CrossPoint 1.6.0 hardware and power fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
+
+          BASE=668220692b9c05d9860b19540acbaa7107d5460e
+          C_USB=8bc1603e85ba1f0b533d4fb3227d65266348799b
+          C_WAKE=cdd89b1d75ee2a3c01cf6ba1ae14a07ffd8d6627
+          C_COLD=e37164ca915761f55feca4b05f533a506f9bd393
+          C_X4C=f021d1e5f8c9d009e88090a346c88d51f7831d06
+          C_SD=4a679d5d4b8944227a219ee68d1028a648da1e10
+
+          git fetch --no-tags upstream "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"
+
+          for c in "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"; do
+            echo "=== cherry-pick $c ==="
+            if ! git cherry-pick "$c"; then
+              echo 'Unexpected integration conflict(s):'
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+          done
+
+          git submodule update --init --recursive
+
+          cat > src/CPHUNBuildId.h <<'EOF'
+          #pragma once
+
+          #define CPHUN_BUILD_ID "CPHUN-260906-61"
+          EOF
+          git add src/CPHUNBuildId.h
+          git commit -m 'CPHUN-61: set build identifier'
+
+          # Preserve Build #60 / CPHUN invariants.
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          test -f src/ReaderButtonGestureDetector.cpp
+          test -f src/activities/settings/ButtonFunctionsActivity.cpp
+          test -f src/activities/settings/CrossPointVersionActivity.cpp
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_10_medium.h
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_12_medium.h
+          git diff --quiet "$BASE" -- lib/I18n/translations/hungarian.yaml
+
+          # Stage 3 feature guards.
+          grep -q 'BatteryMonitor.h' lib/hal/HalGPIO.cpp
+          grep -q 'verifyPowerButtonWakeup()' lib/hal/HalGPIO.h
+          grep -q 'coldBootImpliesPowerButton' lib/hal/HalGPIO.cpp
+          grep -q 'XteinkX4Classic' lib/hal/HalGPIO.cpp
+          grep -q '\[env:x4c\]' platformio.ini
+          grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
+          grep -q 'Storage.prepareForDeepSleep' src/main.cpp
+          grep -q 'CPHUN-260906-61' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated source to Build 61 branch
+        run: git push origin HEAD:agent/cphun-61-hardware-power
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-61-Hardware-Power-SD-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
