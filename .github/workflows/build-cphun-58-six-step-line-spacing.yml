@@ -1,0 +1,149 @@
+name: Build CPHUN-58 Six-Step Line Spacing
+
+on:
+  push:
+    branches: [agent/cphun-58-six-step-line-spacing]
+    paths: ['.github/workflows/build-cphun-58-six-step-line-spacing.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-58
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-58-six-step-line-spacing
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply six-step line spacing
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # 1) Preserve all four legacy persisted values (0..3), append the two
+          # new values at 4 and 5. This avoids any settings migration.
+          p = Path('src/CrossPointSettings.h')
+          s = p.read_text()
+          old = 'enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, EXTRA_WIDE = 3, LINE_COMPRESSION_COUNT };'
+          new = ('enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, EXTRA_WIDE = 3, '
+                 'NORMAL_PLUS = 4, WIDE_PLUS = 5, LINE_COMPRESSION_COUNT };')
+          if old not in s:
+              raise SystemExit('Legacy four-step LINE_COMPRESSION enum not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 2) Add midpoint compression factors. SD fonts and Noto Serif keep
+          # the measured 0.95/1.00/1.10/1.20 anchors; Noto Sans keeps its own
+          # legacy anchors and receives midpoints between Normal/Wide and
+          # Wide/Extra Wide.
+          p = Path('src/CrossPointSettings.cpp')
+          s = p.read_text()
+          old_sd = '''      case NORMAL:\n      default:\n        return 1.0f;\n      case WIDE:\n        return 1.1f;\n      case EXTRA_WIDE:\n        return 1.2f;'''
+          new_sd = '''      case NORMAL:\n      default:\n        return 1.0f;\n      case NORMAL_PLUS:\n        return 1.05f;\n      case WIDE:\n        return 1.1f;\n      case WIDE_PLUS:\n        return 1.15f;\n      case EXTRA_WIDE:\n        return 1.2f;'''
+          count = s.count(old_sd)
+          if count != 2:
+              raise SystemExit(f'Expected two Serif/SD line-spacing blocks, found {count}')
+          s = s.replace(old_sd, new_sd)
+
+          old_sans = '''        case NORMAL:\n        default:\n          return 0.95f;\n        case WIDE:\n          return 1.0f;\n        case EXTRA_WIDE:\n          return 1.05f;'''
+          new_sans = '''        case NORMAL:\n        default:\n          return 0.95f;\n        case NORMAL_PLUS:\n          return 0.975f;\n        case WIDE:\n          return 1.0f;\n        case WIDE_PLUS:\n          return 1.025f;\n        case EXTRA_WIDE:\n          return 1.05f;'''
+          if old_sans not in s:
+              raise SystemExit('Noto Sans line-spacing block not found')
+          s = s.replace(old_sans, new_sans, 1)
+          p.write_text(s)
+
+          # 3) SettingsListBase is also used to validate persisted enum values.
+          # Keep indices 0..3 exactly as before; duplicate labels at 4/5 are only
+          # validation placeholders. TextSettingsActivity renders the actual + labels.
+          p = Path('src/SettingsListBase.h')
+          s = p.read_text()
+          old = '''        SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,\n                          {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE}, "lineSpacing",\n                          StrId::STR_CAT_READER)'''
+          new = '''        SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,\n                          {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE,\n                           StrId::STR_NORMAL, StrId::STR_WIDE},\n                          "lineSpacing", StrId::STR_CAT_READER)'''
+          if old not in s:
+              raise SystemExit('Four-value line-spacing SettingInfo not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          # 4) Present the six values in visual order while mapping them to the
+          # stable persisted enum values: 0,1,4,2,5,3.
+          p = Path('src/activities/settings/TextSettingsActivity.cpp')
+          s = p.read_text()
+          old = 'constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};'
+          new = '''constexpr uint8_t LINE_SPACING_VALUES[] = {\n    static_cast<uint8_t>(CrossPointSettings::TIGHT),\n    static_cast<uint8_t>(CrossPointSettings::NORMAL),\n    static_cast<uint8_t>(CrossPointSettings::NORMAL_PLUS),\n    static_cast<uint8_t>(CrossPointSettings::WIDE),\n    static_cast<uint8_t>(CrossPointSettings::WIDE_PLUS),\n    static_cast<uint8_t>(CrossPointSettings::EXTRA_WIDE),\n};\n\nstd::vector<std::string> lineSpacingLabels() {\n  return {I18N.get(StrId::STR_TIGHT), I18N.get(StrId::STR_NORMAL),\n          std::string(I18N.get(StrId::STR_NORMAL)) + "+", I18N.get(StrId::STR_WIDE),\n          std::string(I18N.get(StrId::STR_WIDE)) + "+", I18N.get(StrId::STR_EXTRA_WIDE)};\n}\n\nint lineSpacingUiIndex(const uint8_t value) {\n  for (int i = 0; i < static_cast<int>(std::size(LINE_SPACING_VALUES)); ++i) {\n    if (LINE_SPACING_VALUES[i] == value) return i;\n  }\n  return 1;  // Normal fallback\n}\n\nstd::string lineSpacingLabel(const uint8_t value) {\n  switch (value) {\n    case CrossPointSettings::TIGHT:\n      return I18N.get(StrId::STR_TIGHT);\n    case CrossPointSettings::NORMAL:\n      return I18N.get(StrId::STR_NORMAL);\n    case CrossPointSettings::NORMAL_PLUS:\n      return std::string(I18N.get(StrId::STR_NORMAL)) + "+";\n    case CrossPointSettings::WIDE:\n      return I18N.get(StrId::STR_WIDE);\n    case CrossPointSettings::WIDE_PLUS:\n      return std::string(I18N.get(StrId::STR_WIDE)) + "+";\n    case CrossPointSettings::EXTRA_WIDE:\n      return I18N.get(StrId::STR_EXTRA_WIDE);\n    default:\n      return I18N.get(StrId::STR_NORMAL);\n  }\n}'''
+          if old not in s:
+              raise SystemExit('LINE_SPACING_IDS definition not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    case LayoutRow::LineSpacing:\n      optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),\n                        SETTINGS.lineSpacing, [](int idx) {\n                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);\n                          SETTINGS.saveToFile();\n                        });\n      requestUpdate();\n      break;'''
+          new = '''    case LayoutRow::LineSpacing: {\n      const auto options = lineSpacingLabels();\n      optionPopup_.show(StrId::STR_LINE_SPACING, options, lineSpacingUiIndex(SETTINGS.lineSpacing), [](int idx) {\n        if (idx >= 0 && idx < static_cast<int>(std::size(LINE_SPACING_VALUES))) {\n          SETTINGS.lineSpacing = LINE_SPACING_VALUES[idx];\n          SETTINGS.saveToFile();\n        }\n      });\n      requestUpdate();\n      break;\n    }'''
+          if old not in s:
+              raise SystemExit('LineSpacing popup block not found')
+          s = s.replace(old, new, 1)
+
+          old = '''    case LayoutRow::LineSpacing: {\n      const uint8_t v = SETTINGS.lineSpacing;\n      return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);\n    }'''
+          new = '''    case LayoutRow::LineSpacing:\n      return lineSpacingLabel(SETTINGS.lineSpacing);'''
+          if old not in s:
+              raise SystemExit('LineSpacing value-text block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-58"\n')
+          PY
+
+          # Validate the intended stable storage and six-step UI mapping.
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 1.05f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.15f;' src/CrossPointSettings.cpp
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CPHUN-260906-58' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Commit validated source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CrossPointSettings.h src/CrossPointSettings.cpp src/SettingsListBase.h \
+                  src/activities/settings/TextSettingsActivity.cpp src/CPHUNBuildId.h
+          git commit -m 'CPHUN-58: add six-step line spacing scale'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source
+        run: git push origin HEAD:agent/cphun-58-six-step-line-spacing
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-58-Six-Step-Line-Spacing-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
