@@ -1,0 +1,181 @@
+name: Build CPHUN-62 UI Settings Translations
+
+on:
+  push:
+    branches: [agent/cphun-61-hardware-power]
+    paths: ['.github/workflows/build-cphun-62-ui-settings-translations.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-62
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-61-hardware-power
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate selected CrossPoint 1.6.0 UI settings and translation fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
+
+          BASE=935afc433005e85f1da9df5f35a26c4fc77b42ab
+          COMMITS=(
+            cdbe2a7792bc41bd2f3ff052705eedafe41b6879
+            f24ef20955a358d0b33c7fa8b8ace0db0b970d10
+            68be3aec7452484f165a24395a4ec940d06541b9
+            7a4c96dd3463226d7589d927ab67a6303d49ff70
+            4f0b4b70f44302d531536b63c208520bd25b3184
+            d5d2d67a5ed064ffb10b1bb8c97e33e9b52ae571
+            20d67cb3e1e971c39d7cbefc83ee0426d617920a
+            365618e47eac6589d53eecab54a9705dfb43acf8
+            320a97a9486f970d800b9043849a6ae3d1fe9f14
+          )
+
+          cp lib/I18n/translations/hungarian.yaml /tmp/hungarian.base.yaml
+          git fetch --no-tags upstream "${COMMITS[@]}"
+
+          for c in "${COMMITS[@]}"; do
+            echo "=== cherry-pick $c ==="
+            if ! git cherry-pick "$c"; then
+              echo 'Integration conflicts:'
+              git diff --name-only --diff-filter=U
+              exit 1
+            fi
+          done
+
+          # Preserve every existing CPHUN Hungarian value while accepting new
+          # upstream metadata/keys required by the final 1.6.0 UI.
+          python3 - <<'PY'
+          from pathlib import Path
+
+          base_path = Path('/tmp/hungarian.base.yaml')
+          new_path = Path('lib/I18n/translations/hungarian.yaml')
+          base_lines = base_path.read_text().splitlines()
+          new_lines = new_path.read_text().splitlines()
+
+          def keyed(lines):
+              out = {}
+              for line in lines:
+                  if line and not line[0].isspace() and ':' in line and not line.lstrip().startswith('#'):
+                      key = line.split(':', 1)[0]
+                      out[key] = line
+              return out
+
+          base = keyed(base_lines)
+          seen = set()
+          merged = []
+          for line in new_lines:
+              if line and not line[0].isspace() and ':' in line and not line.lstrip().startswith('#'):
+                  key = line.split(':', 1)[0]
+                  if key in base:
+                      line = base[key]
+                      seen.add(key)
+              merged.append(line)
+
+          missing = [k for k in base if k not in seen and k not in keyed(new_lines)]
+          if missing:
+              raise SystemExit('Upstream integration deleted existing Hungarian keys: ' + ', '.join(missing))
+
+          new_path.write_text('\n'.join(merged) + '\n')
+          PY
+
+          # Give the new keyboard-layout setting a native Hungarian label if
+          # upstream did not already provide one.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/I18n/translations/hungarian.yaml')
+          s = p.read_text()
+          if 'STR_KEYBOARD_LAYOUTS:' not in s:
+              marker = 'STR_LANGUAGE:'
+              lines = s.splitlines()
+              for i, line in enumerate(lines):
+                  if line.startswith(marker):
+                      lines.insert(i + 1, 'STR_KEYBOARD_LAYOUTS: "Billentyűzetkiosztások"')
+                      break
+              else:
+                  raise SystemExit('STR_LANGUAGE insertion point not found in Hungarian translation')
+              p.write_text('\n'.join(lines) + '\n')
+          PY
+
+          git add lib/I18n/translations/hungarian.yaml
+          if ! git diff --cached --quiet; then
+            git commit -m 'CPHUN-62: preserve Hungarian translations and add new UI keys'
+          fi
+
+          cat > src/CPHUNBuildId.h <<'EOF'
+          #pragma once
+
+          #define CPHUN_BUILD_ID "CPHUN-260906-62"
+          EOF
+          git add src/CPHUNBuildId.h
+          git commit -m 'CPHUN-62: set build identifier'
+
+          # CPHUN regression guards.
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          test -f src/ReaderButtonGestureDetector.cpp
+          test -f src/activities/settings/ButtonFunctionsActivity.cpp
+          test -f src/activities/settings/CrossPointVersionActivity.cpp
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_10_medium.h
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_12_medium.h
+          grep -q '_bcp47:.*hu' lib/I18n/translations/hungarian.yaml
+          grep -q 'STR_KEYBOARD_LAYOUTS:' lib/I18n/translations/hungarian.yaml
+          grep -q 'CPHUN-260906-62' src/CPHUNBuildId.h
+
+          # Stage-4 feature guards.
+          grep -q 'keyboardLayouts' src/CrossPointSettings.h
+          grep -q 'keyboardLayouts' src/CrossPointSettings.cpp
+          grep -q 'constexpr.*categoryNames' src/activities/settings/SettingsActivity.h
+          git diff --check
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated source to Build 62 branch
+        run: git push origin HEAD:agent/cphun-62-ui-settings-translations
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-62-UI-Settings-Translations-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
