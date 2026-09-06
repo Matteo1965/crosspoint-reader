@@ -33,11 +33,6 @@ jobs:
           p = Path('src/activities/settings/TextSettingsActivity.cpp')
           s = p.read_text()
           old = '''  if (tab_ == Tab::Layout) {
-              props.rowHeight = 26;
-              props.rowGap = 0;
-            }'''
-          # Match independent of the indentation used in the source.
-          old = '''  if (tab_ == Tab::Layout) {
             props.rowHeight = 26;
             props.rowGap = 0;
           }'''
@@ -45,7 +40,7 @@ jobs:
             // CPHUN: the Layout/Rendez. tab has nine rows. Keep this tab alone
             // compact enough that Fixed dialogue spacing remains visible on X4
             // without scrolling; other tabs retain the upstream/theme geometry.
-            props.rowHeight = 23;
+            props.rowHeight = 24;
             props.rowGap = 0;
           }'''
           if s.count(old) != 1:
@@ -56,7 +51,7 @@ jobs:
           bid.write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R2"\n')
           PY
 
-          grep -F 'props.rowHeight = 23;' src/activities/settings/TextSettingsActivity.cpp
+          grep -F 'props.rowHeight = 24;' src/activities/settings/TextSettingsActivity.cpp
           ! grep -F 'props.rowHeight = 26;' src/activities/settings/TextSettingsActivity.cpp
           grep -F '#define CPHUN_BUILD_ID "CPHUN-260906-62R2"' src/CPHUNBuildId.h
 
