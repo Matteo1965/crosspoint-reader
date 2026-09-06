@@ -76,6 +76,21 @@ jobs:
             git cherry-pick --continue
           fi
 
+          # CPHUN #59 carried regenerated Regular Ubuntu headers that can survive
+          # the cherry-pick without a textual conflict while still using the old
+          # dense int8_t kerning initializer. EpdFontData is already on the new
+          # sparse-kerning layout, so force the two retained Regular fonts to the
+          # exact c484dc7 representation. Medium fonts intentionally stay deleted.
+          git checkout "$C_FLASH" -- \
+            lib/EpdFont/builtinFonts/ubuntu_10_regular.h \
+            lib/EpdFont/builtinFonts/ubuntu_12_regular.h
+          git add \
+            lib/EpdFont/builtinFonts/ubuntu_10_regular.h \
+            lib/EpdFont/builtinFonts/ubuntu_12_regular.h
+          if ! git diff --cached --quiet; then
+            git commit -m 'CPHUN-60: align Regular Ubuntu fonts with sparse kerning layout'
+          fi
+
           # Style-aware prewarm. Preserve all CPHUN tests and add the upstream
           # font_cache_manager target when test/CMakeLists.txt is the only conflict.
           if ! git cherry-pick "$C_PREWARM"; then
@@ -139,6 +154,8 @@ jobs:
           git diff --quiet "$BASE" -- lib/I18n/translations/hungarian.yaml
 
           grep -q 'kernRowOffsets' lib/EpdFont/EpdFontData.h
+          grep -q 'ubuntu_10_regularKernRowOffsets' lib/EpdFont/builtinFonts/ubuntu_10_regular.h
+          grep -q 'ubuntu_12_regularKernRowOffsets' lib/EpdFont/builtinFonts/ubuntu_12_regular.h
           grep -q 'resolveScanStyle' lib/GfxRenderer/FontCacheManager.cpp
           grep -q 'PREWARM_ARENA_TOO_LARGE' lib/EpdFont/SdCardFont.h
           grep -q 'STR_ALL_FONTS' lib/I18n/translations/english.yaml
