@@ -95,17 +95,20 @@ jobs:
           git cherry-pick "$C_FONTIDS"
           git cherry-pick "$C_ARENA"
 
+          # The OPDS/font changes in 9d2f234 depend on the matching HttpDownloader
+          # API (heap thresholds and redirect option), so include those two network
+          # files while still excluding the unrelated HAL/platform/submodule edits.
           mapfile -t download_files < <(git diff --name-only "$P_DOWNLOAD" "$C_DOWNLOAD" \
-            | grep -Ei '(font|opds)' \
+            | grep -Ei '(font|opds|src/network/HttpDownloader\.(cpp|h)$)' \
             | grep -vE '^(freeink-sdk|lib/hal/|platformio\.ini)$' || true)
           if [ "${#download_files[@]}" -eq 0 ]; then
-            echo 'No font/OPDS files selected from 9d2f234'
+            echo 'No font/OPDS/HttpDownloader files selected from 9d2f234'
             exit 1
           fi
           printf 'Selected 9d2f234 files:\n%s\n' "${download_files[*]}"
           git diff --binary "$P_DOWNLOAD" "$C_DOWNLOAD" -- "${download_files[@]}" > /tmp/font-download-memory.patch
           git apply -3 --index /tmp/font-download-memory.patch
-          git commit -m 'CPHUN-60: integrate upstream font and OPDS memory handling only'
+          git commit -m 'CPHUN-60: integrate upstream font OPDS and downloader memory handling only'
 
           cat > src/CPHUNBuildId.h <<'EOF'
           #pragma once
@@ -140,6 +143,9 @@ jobs:
           grep -q 'PREWARM_ARENA_TOO_LARGE' lib/EpdFont/SdCardFont.h
           grep -q 'STR_ALL_FONTS' lib/I18n/translations/english.yaml
           grep -q '^add_subdirectory(font_cache_manager)$' test/CMakeLists.txt
+          grep -q 'MIN_TLS_FREE_HEAP' src/network/HttpDownloader.h
+          grep -q 'MIN_TLS_MAX_ALLOC' src/network/HttpDownloader.h
+          grep -q 'downgradeRedirectsToHttp' src/network/HttpDownloader.cpp
           grep -q 'CPHUN-260906-60' src/CPHUNBuildId.h
           git diff --check
 
