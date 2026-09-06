@@ -37,18 +37,33 @@ jobs:
           C_COLD=e37164ca915761f55feca4b05f533a506f9bd393
           C_X4C=f021d1e5f8c9d009e88090a346c88d51f7831d06
           C_SD=4a679d5d4b8944227a219ee68d1028a648da1e10
+          FINAL_SDK=fad70f28a982c978737410e535a4f7276ce28c19
 
           git fetch --no-tags upstream "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"
 
           for c in "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"; do
             echo "=== cherry-pick $c ==="
             if ! git cherry-pick "$c"; then
-              echo 'Unexpected integration conflict(s):'
-              git diff --name-only --diff-filter=U
-              exit 1
+              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+              if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
+                # Keep the current SDK pointer while applying each superproject commit.
+                # The exact final SDK required by this hardware batch is selected once
+                # all five commits are integrated below.
+                git checkout --ours -- freeink-sdk
+                git add freeink-sdk
+                git cherry-pick --continue
+              else
+                printf 'Unexpected integration conflicts:\n%s\n' "${conflicts[*]}"
+                exit 1
+              fi
             fi
           done
 
+          # Select the SDK revision expected by the final SD/deep-sleep fix.
+          git -C freeink-sdk fetch --no-tags origin "$FINAL_SDK"
+          git -C freeink-sdk checkout "$FINAL_SDK"
+          git add freeink-sdk
+          git commit -m 'CPHUN-61: align freeink-sdk with hardware power fixes'
           git submodule update --init --recursive
 
           cat > src/CPHUNBuildId.h <<'EOF'
@@ -82,6 +97,7 @@ jobs:
           grep -q '\[env:x4c\]' platformio.ini
           grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
           grep -q 'Storage.prepareForDeepSleep' src/main.cpp
+          test "$(git rev-parse HEAD:freeink-sdk)" = "$FINAL_SDK"
           grep -q 'CPHUN-260906-61' src/CPHUNBuildId.h
           git diff --check
 
