@@ -52,9 +52,6 @@ jobs:
               continue
             fi
 
-            # b6746c1 adds the upstream css_parser test while CPHUN already
-            # carries extra Hungarian test targets in the same CMake file.
-            # Firmware sources merge cleanly; preserve both test suites.
             if [ "$c" = "b6746c1dfe8f1a8514251ae747fbe793cc4373e2" ] && \
                git diff --name-only --diff-filter=U | grep -qx 'test/CMakeLists.txt'; then
               git checkout --ours test/CMakeLists.txt
@@ -76,16 +73,15 @@ jobs:
           git add src/CPHUNBuildId.h
           git commit -m 'CPHUN-59: set build identifier' || true
 
-          # Build #58 invariants: six-step line spacing must survive unchanged.
           grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
           grep -q 'return 0.975f;' src/CrossPointSettings.cpp
           grep -q 'return 1.025f;' src/CrossPointSettings.cpp
           grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
           grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
 
-          # Hungarian Edition invariants.
           test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
-          grep -q 'Hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          grep -q 'hungarianHyphenator' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          grep -q '"hungarian", "hu"' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
           test -f src/ReaderButtonGestureDetector.cpp
           test -f src/activities/settings/ButtonFunctionsActivity.cpp
           test -f src/activities/settings/CrossPointVersionActivity.cpp
