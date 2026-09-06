@@ -150,12 +150,13 @@ jobs:
           s = s.replace('BoardConfig::isX4Pro() ? "DOWN" : "UP"',
                         '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? "DOWN" : "UP"')
 
-          old_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      LOG_DBG("MAIN", "Verifying power button press duration");\n      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),\n                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
-          new_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {\n        LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n        Storage.prepareForDeepSleep();\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
-          if old_case in s:
-              s = s.replace(old_case, new_case, 1)
-          elif 'SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP' not in s:
-              raise SystemExit('PowerButton wake case not found')
+          if 'SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP' not in s:
+              start = s.find('    case HalGPIO::WakeupReason::PowerButton:\n')
+              end = s.find('    case HalGPIO::WakeupReason::AfterUSBPower:\n', start)
+              if start == -1 or end == -1:
+                  raise SystemExit('PowerButton wake case boundaries not found')
+              new_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {\n        LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n        Storage.prepareForDeepSleep();\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;\n'''
+              s = s[:start] + new_case + s[end:]
 
           old_usb = '''#if FREEINK_DEVICE_PAPERMONO\n      // There is no armable GPIO wake because the button is behind the PMIC.\n      // Sleeping here would strand the device in a USB-replug boot loop.\n      break;\n#else\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
           new_usb = '''#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n      break;\n#else\n      Storage.prepareForDeepSleep();\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
