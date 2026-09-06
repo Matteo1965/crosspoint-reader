@@ -105,13 +105,17 @@ jobs:
             git checkout --ours -- src/activities/reader/EpubReaderActivity.cpp
             python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('src/activities/reader/EpubReaderActivity.cpp')
           s = p.read_text()
-          old = 'bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro(); }'
-          new = 'bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro() || BoardConfig::isX4Classic(); }'
-          if old not in s:
-              raise SystemExit('Expected xteinkClassPanel expression not found')
-          p.write_text(s.replace(old, new, 1))
+          if 'BoardConfig::isX4Classic()' not in s:
+              pattern = r'(bool\s+xteinkClassPanel\s*\(\)\s*\{\s*return\s+[^;]*BoardConfig::isX4Pro\(\))([^;]*;)'
+              m = re.search(pattern, s)
+              if not m:
+                  raise SystemExit('xteinkClassPanel with isX4Pro() not found')
+              replacement = m.group(1) + ' || BoardConfig::isX4Classic()' + m.group(2)
+              s = s[:m.start()] + replacement + s[m.end():]
+          p.write_text(s)
           PY
             git add src/activities/reader/EpubReaderActivity.cpp
 
