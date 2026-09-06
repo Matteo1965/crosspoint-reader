@@ -48,7 +48,24 @@ jobs:
           git fetch --no-tags upstream "${commits[@]}"
           for c in "${commits[@]}"; do
             echo "=== cherry-pick $c ==="
-            git cherry-pick "$c"
+            if git cherry-pick "$c"; then
+              continue
+            fi
+
+            # b6746c1 adds the upstream css_parser test while CPHUN already
+            # carries extra Hungarian test targets in the same CMake file.
+            # Firmware sources merge cleanly; preserve both test suites.
+            if [ "$c" = "b6746c1dfe8f1a8514251ae747fbe793cc4373e2" ] && \
+               git diff --name-only --diff-filter=U | grep -qx 'test/CMakeLists.txt'; then
+              git checkout --ours test/CMakeLists.txt
+              grep -q '^add_subdirectory(css_parser)$' test/CMakeLists.txt || echo 'add_subdirectory(css_parser)' >> test/CMakeLists.txt
+              git add test/CMakeLists.txt
+              git cherry-pick --continue
+            else
+              echo "Unhandled cherry-pick conflict in $c"
+              git status --short
+              exit 1
+            fi
           done
 
           cat > src/CPHUNBuildId.h <<'EOF'
