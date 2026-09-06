@@ -1,0 +1,138 @@
+name: Build CPHUN-62R1 USB Serial Fix
+
+on:
+  push:
+    branches: [agent/cphun-62r1-usb-serial-fix]
+    paths: ['.github/workflows/build-cphun-62r1-usb-serial-fix.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-62R1
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-62r1-usb-serial-fix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Restore reliable X4 USB Serial startup
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('platformio.ini')
+          s = p.read_text()
+
+          def add_wait_flag(section_name: str) -> None:
+              global s
+              start = s.find(f'[{section_name}]')
+              if start < 0:
+                  raise SystemExit(f'Missing PlatformIO section: {section_name}')
+              end = s.find('\n[', start + 1)
+              if end < 0:
+                  end = len(s)
+              block = s[start:end]
+              if '-DCROSSPOINT_WAIT_FOR_USB_SERIAL' in block:
+                  return
+              marker = '  -DENABLE_SERIAL_LOG\n'
+              if marker not in block:
+                  raise SystemExit(f'Missing ENABLE_SERIAL_LOG marker in {section_name}')
+              block = block.replace(marker, marker + '  -DCROSSPOINT_WAIT_FOR_USB_SERIAL\n', 1)
+              s = s[:start] + block + s[end:]
+
+          # Build #60 always delayed 250 ms before Serial.begin(). Build #61 made
+          # that wait conditional but only enabled it for development builds.
+          # Restore the same cold-boot USB enumeration protection for the X4
+          # release targets used by distributed CPHUN firmware.
+          add_wait_flag('env:gh_release')
+          add_wait_flag('env:gh_release_rc')
+
+          p.write_text(s)
+          PY
+
+          cat > src/CPHUNBuildId.h <<'EOF'
+          #pragma once
+
+          #define CPHUN_BUILD_ID "CPHUN-260906-62R1"
+          EOF
+
+          # Guards: preserve #62 functionality and require the USB serial fix in
+          # both release build environments.
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('platformio.ini').read_text()
+          for section in ('env:gh_release', 'env:gh_release_rc'):
+              start = s.index(f'[{section}]')
+              end = s.find('\n[', start + 1)
+              if end < 0:
+                  end = len(s)
+              block = s[start:end]
+              assert '-DENABLE_SERIAL_LOG' in block
+              assert '-DCROSSPOINT_WAIT_FOR_USB_SERIAL' in block
+          PY
+
+          grep -q '#ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL' src/main.cpp
+          grep -q 'delay(250);' src/main.cpp
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'keyboardLayouts' src/CrossPointSettings.h
+          grep -q 'static constexpr StrId categoryNames' src/activities/settings/SettingsActivity.h
+          grep -q 'refreshSharedUiThemeTokens' src/components/OptionPopup.h
+          grep -q 'void dismiss()' src/components/OptionPopup.h
+          test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          test -f src/ReaderButtonGestureDetector.cpp
+          test -f src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'CPHUN-260906-62R1' src/CPHUNBuildId.h
+          git diff --check
+
+          git add platformio.ini src/CPHUNBuildId.h
+          git commit -m 'CPHUN-62R1: restore X4 USB serial enumeration wait'
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build corrected X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated corrected Build 62 source
+        run: git push origin HEAD:agent/cphun-62r1-usb-serial-fix
+
+      - name: Upload corrected firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-62R1-USB-Serial-Fix-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
