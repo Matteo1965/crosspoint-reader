@@ -41,14 +41,11 @@ jobs:
 
           git fetch --no-tags upstream "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"
 
-          for c in "$C_USB" "$C_WAKE" "$C_COLD" "$C_X4C" "$C_SD"; do
+          for c in "$C_USB" "$C_WAKE"; do
             echo "=== cherry-pick $c ==="
             if ! git cherry-pick "$c"; then
               mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
               if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
-                # Keep the current SDK pointer while applying each superproject commit.
-                # The exact final SDK required by this hardware batch is selected once
-                # all five commits are integrated below.
                 git checkout --ours -- freeink-sdk
                 git add freeink-sdk
                 git cherry-pick --continue
@@ -59,7 +56,54 @@ jobs:
             fi
           done
 
-          # Select the SDK revision expected by the final SD/deep-sleep fix.
+          echo "=== cherry-pick $C_COLD ==="
+          if ! git cherry-pick "$C_COLD"; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'src/main.cpp' ]; then
+              # Keep the CPHUN main.cpp structure, then port only the cold-boot
+              # behavior from e37164c that is still needed here.
+              git checkout --ours -- src/main.cpp
+              python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.cpp')
+          s = p.read_text()
+          old = '''  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {\n    powerManager.startDeepSleep(gpio);\n  }'''
+          new = '''  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {\n    LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n    powerManager.startDeepSleep(gpio);\n  }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          old2 = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO\n'
+          new2 = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
+          if old2 in s:
+              s = s.replace(old2, new2, 1)
+          old3 = '''    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {\n      return;\n    }\n    enterDeepSleep();'''
+          new3 = '''    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {\n      return;\n    }\n    LOG_DBG("MAIN", "Power button held %lums, sleeping", gpio.getPowerButtonHeldTime());\n    enterDeepSleep();'''
+          if old3 in s:
+              s = s.replace(old3, new3, 1)
+          p.write_text(s)
+          PY
+              git add src/main.cpp
+              git cherry-pick --continue
+            else
+              printf 'Unexpected cold-boot conflicts:\n%s\n' "${conflicts[*]}"
+              exit 1
+            fi
+          fi
+
+          for c in "$C_X4C" "$C_SD"; do
+            echo "=== cherry-pick $c ==="
+            if ! git cherry-pick "$c"; then
+              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+              if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
+                git checkout --ours -- freeink-sdk
+                git add freeink-sdk
+                git cherry-pick --continue
+              else
+                printf 'Unexpected integration conflicts:\n%s\n' "${conflicts[*]}"
+                exit 1
+              fi
+            fi
+          done
+
           git -C freeink-sdk fetch --no-tags origin "$FINAL_SDK"
           git -C freeink-sdk checkout "$FINAL_SDK"
           git add freeink-sdk
@@ -74,7 +118,6 @@ jobs:
           git add src/CPHUNBuildId.h
           git commit -m 'CPHUN-61: set build identifier'
 
-          # Preserve Build #60 / CPHUN invariants.
           grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
           grep -q 'return 0.975f;' src/CrossPointSettings.cpp
           grep -q 'return 1.025f;' src/CrossPointSettings.cpp
@@ -89,7 +132,6 @@ jobs:
           test ! -e lib/EpdFont/builtinFonts/ubuntu_12_medium.h
           git diff --quiet "$BASE" -- lib/I18n/translations/hungarian.yaml
 
-          # Stage 3 feature guards.
           grep -q 'BatteryMonitor.h' lib/hal/HalGPIO.cpp
           grep -q 'verifyPowerButtonWakeup()' lib/hal/HalGPIO.h
           grep -q 'coldBootImpliesPowerButton' lib/hal/HalGPIO.cpp
