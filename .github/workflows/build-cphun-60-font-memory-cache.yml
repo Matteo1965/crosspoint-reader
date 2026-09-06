@@ -44,10 +44,8 @@ jobs:
 
           git fetch --no-tags upstream "$C_MANIFEST" "$C_GROUPS" "$C_FLASH" "$C_PREWARM" "$C_FONTIDS" "$C_ARENA" "$C_DOWNLOAD" "$P_GROUPS" "$P_DOWNLOAD"
 
-          # Safe complete commit.
           git cherry-pick "$C_MANIFEST"
 
-          # Font Manager grouping only: intentionally exclude the unrelated Wi-Fi input changes.
           mapfile -t group_files < <(git diff --name-only "$P_GROUPS" "$C_GROUPS" | grep -Ei '(font|i18n)' || true)
           if [ "${#group_files[@]}" -eq 0 ]; then
             echo 'No Font Manager files selected from 3d5c4a5'
@@ -57,9 +55,6 @@ jobs:
           git apply -3 --index /tmp/font-groups.patch
           git commit -m 'CPHUN-60: integrate upstream Font Manager script grouping only'
 
-          # Built-in font flash optimization. This commit predates the later upstream
-          # removal of Ubuntu Medium. Keep the final 1.6.0 state: optimized Bold files,
-          # but do not resurrect the two deleted Medium headers.
           if ! git cherry-pick "$C_FLASH"; then
             mapfile -t flash_conflicts < <(git diff --name-only --diff-filter=U)
             printf 'Flash optimization conflicts:\n%s\n' "${flash_conflicts[*]}"
@@ -81,11 +76,25 @@ jobs:
             git cherry-pick --continue
           fi
 
-          git cherry-pick "$C_PREWARM"
+          # Style-aware prewarm. Preserve all CPHUN tests and add the upstream
+          # font_cache_manager target when test/CMakeLists.txt is the only conflict.
+          if ! git cherry-pick "$C_PREWARM"; then
+            mapfile -t prewarm_conflicts < <(git diff --name-only --diff-filter=U)
+            if [ "${#prewarm_conflicts[@]}" -ne 1 ] || [ "${prewarm_conflicts[0]}" != 'test/CMakeLists.txt' ]; then
+              printf 'Unexpected prewarm conflicts:\n%s\n' "${prewarm_conflicts[*]}"
+              exit 1
+            fi
+            git checkout --ours -- test/CMakeLists.txt
+            if ! grep -q '^add_subdirectory(font_cache_manager)$' test/CMakeLists.txt; then
+              printf '\nadd_subdirectory(font_cache_manager)\n' >> test/CMakeLists.txt
+            fi
+            git add test/CMakeLists.txt
+            git cherry-pick --continue
+          fi
+
           git cherry-pick "$C_FONTIDS"
           git cherry-pick "$C_ARENA"
 
-          # Font/OPDS memory handling only: deliberately exclude HAL, PlatformIO and submodule changes.
           mapfile -t download_files < <(git diff --name-only "$P_DOWNLOAD" "$C_DOWNLOAD" \
             | grep -Ei '(font|opds)' \
             | grep -vE '^(freeink-sdk|lib/hal/|platformio\.ini)$' || true)
@@ -106,7 +115,6 @@ jobs:
           git add src/CPHUNBuildId.h
           git commit -m 'CPHUN-60: set build identifier'
 
-          # Build #59 / Hungarian Edition invariants.
           grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
           grep -q 'return 0.975f;' src/CrossPointSettings.cpp
           grep -q 'return 1.025f;' src/CrossPointSettings.cpp
@@ -118,22 +126,20 @@ jobs:
           test -f src/activities/settings/ButtonFunctionsActivity.cpp
           test -f src/activities/settings/CrossPointVersionActivity.cpp
 
-          # Final upstream state: Ubuntu Medium must remain removed.
           test ! -e lib/EpdFont/builtinFonts/ubuntu_10_medium.h
           test ! -e lib/EpdFont/builtinFonts/ubuntu_12_medium.h
 
-          # Phase-boundary guards: these belong to later stages and must stay byte-identical to #59.
           git diff --quiet "$BASE" -- platformio.ini
           git diff --quiet "$BASE" -- lib/hal/HalSystem.cpp
           git diff --quiet "$BASE" -- freeink-sdk
           git diff --quiet "$BASE" -- src/activities/network/WifiSelectionActivity.cpp src/activities/network/WifiSelectionActivity.h
           git diff --quiet "$BASE" -- lib/I18n/translations/hungarian.yaml
 
-          # Verify core stage-2 functionality is present.
           grep -q 'kernRowOffsets' lib/EpdFont/EpdFontData.h
           grep -q 'resolveScanStyle' lib/GfxRenderer/FontCacheManager.cpp
           grep -q 'PREWARM_ARENA_TOO_LARGE' lib/EpdFont/SdCardFont.h
           grep -q 'STR_ALL_FONTS' lib/I18n/translations/english.yaml
+          grep -q '^add_subdirectory(font_cache_manager)$' test/CMakeLists.txt
           grep -q 'CPHUN-260906-60' src/CPHUNBuildId.h
           git diff --check
 
@@ -158,8 +164,7 @@ jobs:
         run: .venv/bin/pio run -e gh_release_rc
 
       - name: Report firmware size
-        run: |
-          stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
 
       - name: Push validated source to Build 60 branch
         run: git push origin HEAD:agent/cphun-60-font-memory-cache
