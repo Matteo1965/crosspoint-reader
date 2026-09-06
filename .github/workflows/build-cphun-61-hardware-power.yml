@@ -148,10 +148,10 @@ jobs:
           cpp = Path('lib/hal/HalStorage.cpp')
           s = cpp.read_text()
           if 'void HalStorage::prepareForDeepSleep()' not in s:
-              marker = '};\n\n#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC\n'
+              marker = '''class HalStorage::StorageLock {\n public:\n  StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }\n  ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }\n};\n\n'''
               if marker not in s:
-                  raise SystemExit('HalStorage.cpp insertion point not found')
-              impl = '''};\n\nvoid HalStorage::prepareForDeepSleep() {\n  StorageLock lock;\n  SDCard.shutdown();\n}\n\n#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC\n'''
+                  raise SystemExit('HalStorage.cpp StorageLock block not found')
+              impl = marker + '''void HalStorage::prepareForDeepSleep() {\n  StorageLock lock;\n  SDCard.shutdown();\n}\n\n'''
               s = s.replace(marker, impl, 1)
           cpp.write_text(s)
 
