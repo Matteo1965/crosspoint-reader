@@ -101,10 +101,6 @@ jobs:
 
             git checkout --ours -- freeink-sdk
             git add freeink-sdk
-
-            # CPHUN does not have upstream's xteinkClassPanel() helper.
-            # Keep our reader file unchanged; X4 Classic panel handling is covered
-            # by the board/HAL additions and does not need this helper in CPHUN.
             git checkout --ours -- src/activities/reader/EpubReaderActivity.cpp
             git add src/activities/reader/EpubReaderActivity.cpp
 
@@ -134,14 +130,43 @@ jobs:
           echo "=== cherry-pick $C_SD ==="
           if ! git cherry-pick "$C_SD"; then
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
-            if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
-              git checkout --ours -- freeink-sdk
-              git add freeink-sdk
-              git cherry-pick --continue
-            else
-              printf 'Unexpected SD integration conflicts:\n%s\n' "${conflicts[*]}"
-              exit 1
-            fi
+            allowed='freeink-sdk lib/hal/HalStorage.cpp lib/hal/HalStorage.h'
+            for f in "${conflicts[@]}"; do
+              case " $allowed " in
+                *" $f "*) ;;
+                *) echo "Unexpected SD integration conflict: $f"; exit 1 ;;
+              esac
+            done
+
+            git checkout --ours -- freeink-sdk
+            git add freeink-sdk
+
+            git checkout --ours -- lib/hal/HalStorage.cpp lib/hal/HalStorage.h
+            python3 - <<'PY'
+          from pathlib import Path
+
+          cpp = Path('lib/hal/HalStorage.cpp')
+          s = cpp.read_text()
+          if 'void HalStorage::prepareForDeepSleep()' not in s:
+              marker = '};\n\n#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC\n'
+              if marker not in s:
+                  raise SystemExit('HalStorage.cpp insertion point not found')
+              impl = '''};\n\nvoid HalStorage::prepareForDeepSleep() {\n  StorageLock lock;\n  SDCard.shutdown();\n}\n\n#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC\n'''
+              s = s.replace(marker, impl, 1)
+          cpp.write_text(s)
+
+          hdr = Path('lib/hal/HalStorage.h')
+          h = hdr.read_text()
+          if 'void prepareForDeepSleep();' not in h:
+              marker = '  bool ready() const;\n'
+              if marker not in h:
+                  raise SystemExit('HalStorage.h insertion point not found')
+              decl = '''  bool ready() const;\n  // Stop the SD card for deep sleep: unmount, stop the SDMMC host, and release\n  // the bus pads (no-op on SPI boards). Call only after all file users have\n  // stopped; open HalFiles become invalid. A deep-sleep wake resets the MCU and\n  // mounts storage again through begin().\n  void prepareForDeepSleep();\n'''
+              h = h.replace(marker, decl, 1)
+          hdr.write_text(h)
+          PY
+            git add lib/hal/HalStorage.cpp lib/hal/HalStorage.h
+            git cherry-pick --continue
           fi
 
           git -C freeink-sdk fetch --no-tags origin "$FINAL_SDK"
@@ -179,6 +204,7 @@ jobs:
           grep -q '\[env:x4c\]' platformio.ini
           grep -q 'FREEINK_DEVICE_X4CLASSIC' src/main.cpp
           grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
+          grep -q 'void prepareForDeepSleep();' lib/hal/HalStorage.h
           grep -q 'Storage.prepareForDeepSleep' src/main.cpp
           test "$(git rev-parse HEAD:freeink-sdk)" = "$FINAL_SDK"
           grep -q 'CPHUN-260906-61' src/CPHUNBuildId.h
