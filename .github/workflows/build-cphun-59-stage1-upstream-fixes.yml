@@ -1,0 +1,107 @@
+name: Build CPHUN-59 Stage 1 Upstream Fixes
+
+on:
+  push:
+    branches: [agent/cphun-58-six-step-line-spacing]
+    paths: ['.github/workflows/build-cphun-59-stage1-upstream-fixes.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-59
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-58-six-step-line-spacing
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate selected CrossPoint 1.6.0 final fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
+
+          commits=(
+            27f964b3e7ea73d65933946a13ea8ceb127ad3a7
+            a7a776a992ad5fa102eb262b28ae0b8ee34d8d8f
+            d28b9390a2da1db88d916a330bb9a84ddfec0818
+            f58f9b89fde648fe5a3cffdeb958e97fdc62f7cf
+            6c5bc307dd3f607224849051564b494f401a9c08
+            5182d27e20c7b68412d4c281cc3b248a096bf35c
+            b6746c1dfe8f1a8514251ae747fbe793cc4373e2
+            14cdb288b8a9ea31ce5f833406f6392793199c93
+            86976ab233f02a47854b60c63e0a925f3a8d5c6c
+            b42927b4fcbcf962296c06fff76cd5b0ab21b110
+            790a0817e6a4d1e920af679ab59673d9d751d2be
+          )
+
+          git fetch --no-tags upstream "${commits[@]}"
+          for c in "${commits[@]}"; do
+            echo "=== cherry-pick $c ==="
+            git cherry-pick "$c"
+          done
+
+          cat > src/CPHUNBuildId.h <<'EOF'
+          #pragma once
+
+          #define CPHUN_BUILD_ID "CPHUN-260906-59"
+          EOF
+          git add src/CPHUNBuildId.h
+          git commit -m 'CPHUN-59: set build identifier' || true
+
+          # Build #58 invariants: six-step line spacing must survive unchanged.
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
+
+          # Hungarian Edition invariants.
+          test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'Hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          test -f src/ReaderButtonGestureDetector.cpp
+          test -f src/activities/settings/ButtonFunctionsActivity.cpp
+          test -f src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'CPHUN-260906-59' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Push validated source to Build 59 branch
+        run: git push origin HEAD:agent/cphun-59-stage1-upstream-fixes
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-59-Stage1-Upstream-Fixes-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
