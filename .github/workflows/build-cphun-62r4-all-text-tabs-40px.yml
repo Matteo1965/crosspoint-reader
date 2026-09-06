@@ -31,22 +31,26 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('src/activities/settings/TextSettingsActivity.cpp')
           s = p.read_text()
 
-          old_block = '''  if (tab_ == Tab::Layout) {
-            props.rowHeight = 40;
-            props.rowGap = 0;
-          }
-          '''
-          new_block = '''  props.rowHeight = 40;
-          props.rowGap = 0;
-          '''
-          if old_block in s:
-              s = s.replace(old_block, new_block, 1)
-          elif new_block not in s:
-              raise SystemExit('Missing Text Settings row-height block')
+          # Replace the Layout-only row-height block while tolerating indentation.
+          pattern = re.compile(
+              r'(?m)^\s*if \(tab_ == Tab::Layout\) \{\s*\n'
+              r'\s*props\.rowHeight = 40;\s*\n'
+              r'\s*props\.rowGap = 0;\s*\n'
+              r'\s*\}\s*\n'
+          )
+          replacement = '  props.rowHeight = 40;\n  props.rowGap = 0;\n'
+          s2, n = pattern.subn(replacement, s, count=1)
+          if n == 0:
+              # Idempotent reruns are allowed if the global block is already present.
+              if '  props.rowHeight = 40;\n  props.rowGap = 0;\n' not in s:
+                  raise SystemExit('Missing Text Settings row-height block')
+              s2 = s
+          s = s2
 
           old_call = 'syncTabListViewport(screen, props, false, tab_ == Tab::Layout ? 40 : 0);'
           new_call = 'syncTabListViewport(screen, props, false, 40);'
