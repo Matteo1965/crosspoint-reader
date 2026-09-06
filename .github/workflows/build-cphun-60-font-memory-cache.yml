@@ -1,0 +1,146 @@
+name: Build CPHUN-60 Font Memory Cache
+
+on:
+  push:
+    branches: [agent/cphun-59-stage1-upstream-fixes]
+    paths: ['.github/workflows/build-cphun-60-font-memory-cache.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-60
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-59-stage1-upstream-fixes
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate selected CrossPoint 1.6.0 font and memory fixes
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
+
+          BASE=177251ba4f5fdf7fbfd7ef9cf0b4a16928316519
+          C_MANIFEST=93d572fcbd65bd3d7cabc75498b2c6515584602c
+          C_GROUPS=3d5c4a5096897b2bd61a2a041634f33a1c14280b
+          C_FLASH=c484dc72b8486d9ba7a71610af777870b66680d9
+          C_PREWARM=8141d7b9c79cef1c8c5ed0eef96660bac22e6d88
+          C_FONTIDS=32a0cadbcafb43bb4cb11105585428533d208d23
+          C_ARENA=93b6fe111c1e22cace195f053fcda5e80985ac31
+          C_DOWNLOAD=9d2f234e1d20a875347d3a339b73d5d539fd945c
+          P_GROUPS=75c079fe7ad0773ba69500d904c01da301848b8c
+          P_DOWNLOAD=3b2032641f01186e93fd6c2dd7f0d942a432d38f
+
+          git fetch --no-tags upstream "$C_MANIFEST" "$C_GROUPS" "$C_FLASH" "$C_PREWARM" "$C_FONTIDS" "$C_ARENA" "$C_DOWNLOAD" "$P_GROUPS" "$P_DOWNLOAD"
+
+          # Safe complete commits.
+          git cherry-pick "$C_MANIFEST"
+
+          # Font Manager grouping only: intentionally exclude the unrelated Wi-Fi input changes.
+          mapfile -t group_files < <(git diff --name-only "$P_GROUPS" "$C_GROUPS" | grep -Ei '(font|i18n)' || true)
+          if [ "${#group_files[@]}" -eq 0 ]; then
+            echo 'No Font Manager files selected from 3d5c4a5'
+            exit 1
+          fi
+          git diff --binary "$P_GROUPS" "$C_GROUPS" -- "${group_files[@]}" > /tmp/font-groups.patch
+          git apply -3 --index /tmp/font-groups.patch
+          git commit -m 'CPHUN-60: integrate upstream Font Manager script grouping only'
+
+          git cherry-pick "$C_FLASH"
+          git cherry-pick "$C_PREWARM"
+          git cherry-pick "$C_FONTIDS"
+          git cherry-pick "$C_ARENA"
+
+          # Font/OPDS memory handling only: deliberately exclude HAL, PlatformIO and submodule changes.
+          mapfile -t download_files < <(git diff --name-only "$P_DOWNLOAD" "$C_DOWNLOAD" \
+            | grep -Ei '(font|opds)' \
+            | grep -vE '^(freeink-sdk|lib/hal/|platformio\.ini)$' || true)
+          if [ "${#download_files[@]}" -eq 0 ]; then
+            echo 'No font/OPDS files selected from 9d2f234'
+            exit 1
+          fi
+          printf 'Selected 9d2f234 files:\n%s\n' "${download_files[*]}"
+          git diff --binary "$P_DOWNLOAD" "$C_DOWNLOAD" -- "${download_files[@]}" > /tmp/font-download-memory.patch
+          git apply -3 --index /tmp/font-download-memory.patch
+          git commit -m 'CPHUN-60: integrate upstream font and OPDS memory handling only'
+
+          cat > src/CPHUNBuildId.h <<'EOF'
+          #pragma once
+
+          #define CPHUN_BUILD_ID "CPHUN-260906-60"
+          EOF
+          git add src/CPHUNBuildId.h
+          git commit -m 'CPHUN-60: set build identifier'
+
+          # Build #59 / Hungarian Edition invariants.
+          grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
+          grep -q 'return 0.975f;' src/CrossPointSettings.cpp
+          grep -q 'return 1.025f;' src/CrossPointSettings.cpp
+          grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'CrossPointSettings::WIDE_PLUS' src/activities/settings/TextSettingsActivity.cpp
+          test -f lib/Epub/Epub/hyphenation/generated/hyph-hu.trie.h
+          grep -q 'hungarian' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+          test -f src/ReaderButtonGestureDetector.cpp
+          test -f src/activities/settings/ButtonFunctionsActivity.cpp
+          test -f src/activities/settings/CrossPointVersionActivity.cpp
+
+          # Phase-boundary guards: these belong to later stages and must stay byte-identical to #59.
+          git diff --quiet "$BASE" -- platformio.ini
+          git diff --quiet "$BASE" -- lib/hal/HalSystem.cpp
+          git diff --quiet "$BASE" -- freeink-sdk
+          git diff --quiet "$BASE" -- src/activities/network/WifiSelectionActivity.cpp src/activities/network/WifiSelectionActivity.h
+          git diff --quiet "$BASE" -- lib/I18n/translations/hungarian.yaml
+
+          # Verify core stage-2 functionality is present.
+          grep -q 'kernRowOffsets' lib/EpdFont/EpdFontData.h
+          grep -q 'resolveScanStyle' lib/GfxRenderer/FontCacheManager.cpp
+          grep -q 'PREWARM_ARENA_TOO_LARGE' lib/EpdFont/SdCardFont.h
+          grep -q 'STR_ALL_FONTS' lib/I18n/translations/english.yaml
+          grep -q 'CPHUN-260906-60' src/CPHUNBuildId.h
+          git diff --check
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: |
+          stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated source to Build 60 branch
+        run: git push origin HEAD:agent/cphun-60-font-memory-cache
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-60-Font-Memory-Cache-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
