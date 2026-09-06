@@ -44,7 +44,7 @@ jobs:
 
           git fetch --no-tags upstream "$C_MANIFEST" "$C_GROUPS" "$C_FLASH" "$C_PREWARM" "$C_FONTIDS" "$C_ARENA" "$C_DOWNLOAD" "$P_GROUPS" "$P_DOWNLOAD"
 
-          # Safe complete commits.
+          # Safe complete commit.
           git cherry-pick "$C_MANIFEST"
 
           # Font Manager grouping only: intentionally exclude the unrelated Wi-Fi input changes.
@@ -57,7 +57,30 @@ jobs:
           git apply -3 --index /tmp/font-groups.patch
           git commit -m 'CPHUN-60: integrate upstream Font Manager script grouping only'
 
-          git cherry-pick "$C_FLASH"
+          # Built-in font flash optimization. This commit predates the later upstream
+          # removal of Ubuntu Medium. Keep the final 1.6.0 state: optimized Bold files,
+          # but do not resurrect the two deleted Medium headers.
+          if ! git cherry-pick "$C_FLASH"; then
+            mapfile -t flash_conflicts < <(git diff --name-only --diff-filter=U)
+            printf 'Flash optimization conflicts:\n%s\n' "${flash_conflicts[*]}"
+            for f in "${flash_conflicts[@]}"; do
+              case "$f" in
+                lib/EpdFont/builtinFonts/ubuntu_10_bold.h|lib/EpdFont/builtinFonts/ubuntu_12_bold.h)
+                  git checkout --theirs -- "$f"
+                  git add "$f"
+                  ;;
+                lib/EpdFont/builtinFonts/ubuntu_10_medium.h|lib/EpdFont/builtinFonts/ubuntu_12_medium.h)
+                  git rm -f -- "$f"
+                  ;;
+                *)
+                  echo "Unexpected c484dc7 conflict: $f"
+                  exit 1
+                  ;;
+              esac
+            done
+            git cherry-pick --continue
+          fi
+
           git cherry-pick "$C_PREWARM"
           git cherry-pick "$C_FONTIDS"
           git cherry-pick "$C_ARENA"
@@ -94,6 +117,10 @@ jobs:
           test -f src/ReaderButtonGestureDetector.cpp
           test -f src/activities/settings/ButtonFunctionsActivity.cpp
           test -f src/activities/settings/CrossPointVersionActivity.cpp
+
+          # Final upstream state: Ubuntu Medium must remain removed.
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_10_medium.h
+          test ! -e lib/EpdFont/builtinFonts/ubuntu_12_medium.h
 
           # Phase-boundary guards: these belong to later stages and must stay byte-identical to #59.
           git diff --quiet "$BASE" -- platformio.ini
