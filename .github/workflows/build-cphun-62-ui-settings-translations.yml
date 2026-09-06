@@ -34,12 +34,13 @@ jobs:
           BASE=935afc433005e85f1da9df5f35a26c4fc77b42ab
           C_LANG=cdbe2a7792bc41bd2f3ff052705eedafe41b6879
           C_FUI=f24ef20955a358d0b33c7fa8b8ace0db0b970d10
+          C_HOME=4f0b4b70f44302d531536b63c208520bd25b3184
           COMMITS=(
             "$C_LANG"
             "$C_FUI"
             68be3aec7452484f165a24395a4ec940d06541b9
             7a4c96dd3463226d7589d927ab67a6303d49ff70
-            4f0b4b70f44302d531536b63c208520bd25b3184
+            "$C_HOME"
             d5d2d67a5ed064ffb10b1bb8c97e33e9b52ae571
             20d67cb3e1e971c39d7cbefc83ee0426d617920a
             365618e47eac6589d53eecab54a9705dfb43acf8
@@ -86,6 +87,26 @@ jobs:
           p.write_text(s)
           PY
                 git add src/components/OptionPopup.h
+                git cherry-pick --continue
+              elif [ "$c" = "$C_HOME" ] && [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'src/activities/util/FrontlightPanelActivity.cpp' ]; then
+                # Keep the CPHUN panel implementation. The upstream commit only
+                # changes the orientation tile so it no longer rotates the
+                # renderer underneath the panel immediately. Port that behavior
+                # structurally when the old block is present; otherwise the CPHUN
+                # implementation already has no direct renderer rotation here.
+                git checkout --ours -- src/activities/util/FrontlightPanelActivity.cpp
+                python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/activities/util/FrontlightPanelActivity.cpp')
+          s = p.read_text()
+          s = s.replace('#include "activities/reader/ReaderUtils.h"\n', '')
+          old = '''    case 2:  // Cycle the reading orientation\n      SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);\n      SETTINGS.saveToFile();\n      // Nothing else would turn the renderer: ActivityManager::Pop restores the\n      // activity underneath without calling onEnter(), so its\n      // applyInitialOrientation() never runs. Apply it here instead.\n      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);\n      // Close rather than redraw in place: the turned panel lays out against\n      // the new frame while the old panel's pixels sit in the old frame, so\n      // repeated taps stacked stale panels on screen. The screen underneath\n      // repaints in the new orientation and its refresh carries the cleanup a\n      // whole-frame rewrite needs.\n      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);\n      close();\n      break;\n'''
+          new = '''    case 2:  // Cycle the reading orientation\n      SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);\n      SETTINGS.saveToFile();\n      // Only the setting changes: turning the renderer cropped portrait-only\n      // screens the panel opens over. The reader applies it when appropriate.\n      requestUpdate();\n      break;\n'''
+          if old in s:
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+                git add src/activities/util/FrontlightPanelActivity.cpp
                 git cherry-pick --continue
               else
                 echo 'Integration conflicts:'
@@ -185,6 +206,10 @@ jobs:
           grep -q 'constexpr.*categoryNames' src/activities/settings/SettingsActivity.h
           grep -q 'refreshSharedUiThemeTokens' src/components/OptionPopup.h
           grep -q 'void dismiss()' src/components/OptionPopup.h
+          if grep -q 'ReaderUtils::applyOrientation(renderer, SETTINGS.orientation)' src/activities/util/FrontlightPanelActivity.cpp; then
+            echo 'Old direct renderer-orientation behavior still present in FrontlightPanelActivity.cpp'
+            exit 1
+          fi
           git diff --check
 
       - name: Unit tests
