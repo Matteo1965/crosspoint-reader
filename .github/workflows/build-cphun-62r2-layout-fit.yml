@@ -32,20 +32,19 @@ jobs:
 
           p = Path('src/activities/settings/TextSettingsActivity.cpp')
           s = p.read_text()
-          old = '''  if (tab_ == Tab::Layout) {
-            props.rowHeight = 26;
-            props.rowGap = 0;
-          }'''
-          new = '''  if (tab_ == Tab::Layout) {
-            // CPHUN: the Layout/Rendez. tab has nine rows. Keep this tab alone
-            // compact enough that Fixed dialogue spacing remains visible on X4
-            // without scrolling; other tabs retain the upstream/theme geometry.
-            props.rowHeight = 24;
-            props.rowGap = 0;
-          }'''
-          if s.count(old) != 1:
-              raise SystemExit('Expected exactly one Layout rowHeight=26 block')
-          p.write_text(s.replace(old, new))
+          lines = s.splitlines()
+
+          hits = [i for i, line in enumerate(lines) if line.strip() == 'props.rowHeight = 26;']
+          if len(hits) != 1:
+              raise SystemExit(f'Expected exactly one rowHeight=26 line, found {len(hits)}')
+
+          i = hits[0]
+          if not any('if (tab_ == Tab::Layout)' in lines[j] for j in range(max(0, i - 4), i + 1)):
+              raise SystemExit('rowHeight=26 is not inside the Layout tab block')
+
+          indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+          lines[i] = indent + 'props.rowHeight = 24;'
+          p.write_text('\n'.join(lines) + '\n')
 
           bid = Path('src/CPHUNBuildId.h')
           bid.write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R2"\n')
