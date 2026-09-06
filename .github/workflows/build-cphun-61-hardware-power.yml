@@ -88,7 +88,7 @@ jobs:
           echo "=== cherry-pick $C_SD ==="
           if ! git cherry-pick "$C_SD"; then
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
-            allowed='freeink-sdk lib/hal/HalStorage.cpp lib/hal/HalStorage.h'
+            allowed='freeink-sdk lib/hal/HalStorage.cpp lib/hal/HalStorage.h src/main.cpp'
             for f in "${conflicts[@]}"; do
               case " $allowed " in
                 *" $f "*) ;;
@@ -96,8 +96,8 @@ jobs:
               esac
             done
 
-            git checkout --ours -- freeink-sdk
-            git add freeink-sdk
+            git checkout --ours -- freeink-sdk src/main.cpp
+            git add freeink-sdk src/main.cpp
             git checkout --ours -- lib/hal/HalStorage.cpp lib/hal/HalStorage.h
             python3 - <<'PY'
           from pathlib import Path
@@ -130,7 +130,6 @@ jobs:
           p = Path('src/main.cpp')
           s = p.read_text()
 
-          # Deep sleep must shut the SD stack down after all activity/file cleanup.
           old = '  halTiltSensor.deepSleep();\n  display.deepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep");'
           new = '  halTiltSensor.deepSleep();\n  display.deepSleep();\n  Storage.prepareForDeepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep");'
           if 'Storage.prepareForDeepSleep();\n  LOG_DBG("MAIN", "Entering deep sleep")' not in s:
@@ -138,14 +137,12 @@ jobs:
                   raise SystemExit('enterDeepSleep insertion point not found')
               s = s.replace(old, new, 1)
 
-          # Sample physical wake immediately; decide whether a click is valid only after SETTINGS loads.
           marker = '  const auto wakeupReason = gpio.getWakeupReason();\n'
           if 'const bool wakeHoldVerified =' not in s:
               if marker not in s:
                   raise SystemExit('wakeupReason marker not found')
               s = s.replace(marker, marker + '  const bool wakeHoldVerified =\n      wakeupReason != HalGPIO::WakeupReason::PowerButton || gpio.verifyPowerButtonWakeup();\n', 1)
 
-          # X4 Classic shares the X4 Pro recovery-key restriction.
           s = s.replace('BoardConfig::isX4Pro() ? X4PRO_RECOVERY_SETTLE_MS : DEFAULT_RECOVERY_SETTLE_MS',
                         '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? X4PRO_RECOVERY_SETTLE_MS : DEFAULT_RECOVERY_SETTLE_MS')
           s = s.replace('BoardConfig::isX4Pro() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP',
@@ -153,7 +150,6 @@ jobs:
           s = s.replace('BoardConfig::isX4Pro() ? "DOWN" : "UP"',
                         '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? "DOWN" : "UP"')
 
-          # Replace CPHUN's old two-argument wake verification with final single-click semantics.
           old_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      LOG_DBG("MAIN", "Verifying power button press duration");\n      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),\n                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
           new_case = '''    case HalGPIO::WakeupReason::PowerButton:\n      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {\n        LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");\n        Storage.prepareForDeepSleep();\n        powerManager.startDeepSleep(gpio);\n      }\n      wakePowerReleasePending = true;\n      break;'''
           if old_case in s:
@@ -161,7 +157,6 @@ jobs:
           elif 'SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP' not in s:
               raise SystemExit('PowerButton wake case not found')
 
-          # X4 Pro / Classic, PaperMono and EEGO A4 remain awake on USB-power boot.
           old_usb = '''#if FREEINK_DEVICE_PAPERMONO\n      // There is no armable GPIO wake because the button is behind the PMIC.\n      // Sleeping here would strand the device in a USB-replug boot loop.\n      break;\n#else\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
           new_usb = '''#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n      break;\n#else\n      Storage.prepareForDeepSleep();\n      powerManager.startDeepSleep(gpio);\n      break;\n#endif'''
           if old_usb in s:
