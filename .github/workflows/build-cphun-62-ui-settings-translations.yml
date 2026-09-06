@@ -107,7 +107,13 @@ jobs:
           p.write_text(s)
           PY
                 git add src/activities/util/FrontlightPanelActivity.cpp
-                git cherry-pick --continue
+                if git diff --cached --quiet; then
+                  # The CPHUN implementation already has the upstream behavior,
+                  # so conflict resolution leaves this cherry-pick empty.
+                  git cherry-pick --skip
+                else
+                  git cherry-pick --continue
+                fi
               else
                 echo 'Integration conflicts:'
                 printf '%s\n' "${conflicts[@]}"
