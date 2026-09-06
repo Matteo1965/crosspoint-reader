@@ -1,0 +1,113 @@
+name: Build CPHUN-62R2 Layout Fit
+
+on:
+  push:
+    branches:
+      - agent/cphun-62r2-layout-fit
+    paths:
+      - ".github/workflows/build-cphun-62r2-layout-fit.yml"
+  workflow_dispatch:
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260906-62R2
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-62r2-layout-fit
+          fetch-depth: 0
+
+      - name: Compact Layout tab only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/activities/settings/TextSettingsActivity.cpp')
+          s = p.read_text()
+          old = '''  if (tab_ == Tab::Layout) {
+              props.rowHeight = 26;
+              props.rowGap = 0;
+            }'''
+          # Match independent of the indentation used in the source.
+          old = '''  if (tab_ == Tab::Layout) {
+            props.rowHeight = 26;
+            props.rowGap = 0;
+          }'''
+          new = '''  if (tab_ == Tab::Layout) {
+            // CPHUN: the Layout/Rendez. tab has nine rows. Keep this tab alone
+            // compact enough that Fixed dialogue spacing remains visible on X4
+            // without scrolling; other tabs retain the upstream/theme geometry.
+            props.rowHeight = 23;
+            props.rowGap = 0;
+          }'''
+          if s.count(old) != 1:
+              raise SystemExit('Expected exactly one Layout rowHeight=26 block')
+          p.write_text(s.replace(old, new))
+
+          bid = Path('src/CPHUNBuildId.h')
+          bid.write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R2"\n')
+          PY
+
+          grep -F 'props.rowHeight = 23;' src/activities/settings/TextSettingsActivity.cpp
+          ! grep -F 'props.rowHeight = 26;' src/activities/settings/TextSettingsActivity.cpp
+          grep -F '#define CPHUN_BUILD_ID "CPHUN-260906-62R2"' src/CPHUNBuildId.h
+
+          # Preserve the physically validated USB Serial fix from 62R1.
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('platformio.ini').read_text()
+          for env in ('gh_release', 'gh_release_rc'):
+              start = s.index(f'[env:{env}]')
+              end = s.find('\n[', start + 1)
+              block = s[start:end if end != -1 else len(s)]
+              if block.count('-DCROSSPOINT_WAIT_FOR_USB_SERIAL') != 1:
+                  raise SystemExit(f'{env}: USB serial wait flag missing or duplicated')
+          main = Path('src/main.cpp').read_text()
+          for needle in ('CROSSPOINT_WAIT_FOR_USB_SERIAL', 'delay(250);', 'Serial.begin(115200);'):
+              if needle not in main:
+                  raise SystemExit(f'USB serial regression guard failed: {needle}')
+          PY
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install PlatformIO
+        run: uv tool install platformio
+
+      - name: Build CPHUN-62R2 firmware
+        run: pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: ls -lh .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated Build 62R2 source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/activities/settings/TextSettingsActivity.cpp src/CPHUNBuildId.h
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-62R2: fit all Layout rows on X4"
+            git push origin HEAD:agent/cphun-62r2-layout-fit
+          fi
+
+      - name: Upload CPHUN-62R2 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260906-62R2-Layout-Fit-FW
+          path: |
+            .pio/build/gh_release_rc/firmware.bin
+            .pio/build/gh_release_rc/bootloader.bin
+            .pio/build/gh_release_rc/partitions.bin
+            .pio/build/gh_release_rc/boot_app0.bin
+          if-no-files-found: error
