@@ -1,4 +1,4 @@
-name: Build CPHUN-62R2 Layout Fit
+name: Build CPHUN-62R3 Layout Fit 40px
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  CPHUN_BUILD_ID: CPHUN-260906-62R2
+  CPHUN_BUILD_ID: CPHUN-260906-62R3
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -25,80 +25,38 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Apply effective Layout row-height override
+      - name: Apply measured 40px Layout row height
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
 
-          # 1) Layout tab requests 24 px rows.
           p = Path('src/activities/settings/TextSettingsActivity.cpp')
           s = p.read_text()
-          if 'props.rowHeight = 26;' in s:
-              s = s.replace('props.rowHeight = 26;', 'props.rowHeight = 24;', 1)
-          elif 'props.rowHeight = 24;' not in s:
+          if 'props.rowHeight = 24;' in s:
+              s = s.replace('props.rowHeight = 24;', 'props.rowHeight = 40;', 1)
+          elif 'props.rowHeight = 40;' not in s:
               raise SystemExit('Missing Layout rowHeight assignment')
 
-          old_call = 'syncTabListViewport(screen, props);'
-          new_call = 'syncTabListViewport(screen, props, false, tab_ == Tab::Layout ? 24 : 0);'
+          old_call = 'syncTabListViewport(screen, props, false, tab_ == Tab::Layout ? 24 : 0);'
+          new_call = 'syncTabListViewport(screen, props, false, tab_ == Tab::Layout ? 40 : 0);'
           if old_call in s:
               s = s.replace(old_call, new_call, 1)
           elif new_call not in s:
-              raise SystemExit('Missing TextSettings syncTabListViewport call')
-          p.write_text(s)
-
-          # 2) Add an opt-in row-height override to the shared tab-list helper.
-          p = Path('src/activities/UiTabListActivity.h')
-          s = p.read_text()
-          old = 'void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);'
-          new = ('void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false,\n'
-                 '                           int16_t rowHeightOverride = 0);')
-          if old in s:
-              s = s.replace(old, new, 1)
-          elif 'int16_t rowHeightOverride = 0' not in s:
-              raise SystemExit('Missing syncTabListViewport declaration')
-          p.write_text(s)
-
-          # 3) Respect that override before X3/X4 theme defaults are applied.
-          p = Path('src/activities/UiTabListActivity.cpp')
-          s = p.read_text()
-          old_sig = ('void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, '
-                     'const bool hasSubtitle) {')
-          new_sig = ('void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, '
-                     'const bool hasSubtitle,\n'
-                     '                                                const int16_t rowHeightOverride) {')
-          if old_sig in s:
-              s = s.replace(old_sig, new_sig, 1)
-          elif 'const int16_t rowHeightOverride' not in s:
-              raise SystemExit('Missing syncTabListViewport definition')
-
-          marker = '  int16_t rowHeight = screen.theme().rowHeight;\n'
-          if 'if (rowHeightOverride > 0)' not in s:
-              if marker not in s:
-                  raise SystemExit('Missing rowHeight initialization')
-              s = s.replace(
-                  marker,
-                  marker +
-                  '  if (rowHeightOverride > 0) {\n'
-                  '    rowHeight = rowHeightOverride;\n'
-                  '    props.rowHeight = rowHeight;\n'
-                  '  } else ',
-                  1,
-              )
-              s = s.replace('  if (!mappedInput.hasTouch()) {', 'if (!mappedInput.hasTouch()) {', 1)
+              raise SystemExit('Missing effective Layout row-height override call')
           p.write_text(s)
 
           Path('src/CPHUNBuildId.h').write_text(
-              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R2"\n')
+              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260906-62R3"\n')
           PY
 
-          grep -F 'props.rowHeight = 24;' src/activities/settings/TextSettingsActivity.cpp
-          grep -F 'tab_ == Tab::Layout ? 24 : 0' src/activities/settings/TextSettingsActivity.cpp
+          grep -F 'props.rowHeight = 40;' src/activities/settings/TextSettingsActivity.cpp
+          grep -F 'tab_ == Tab::Layout ? 40 : 0' src/activities/settings/TextSettingsActivity.cpp
           grep -F 'int16_t rowHeightOverride = 0' src/activities/UiTabListActivity.h
           grep -F 'if (rowHeightOverride > 0)' src/activities/UiTabListActivity.cpp
           grep -F 'rowHeight = rowHeightOverride;' src/activities/UiTabListActivity.cpp
-          grep -F '#define CPHUN_BUILD_ID "CPHUN-260906-62R2"' src/CPHUNBuildId.h
+          grep -F '#define CPHUN_BUILD_ID "CPHUN-260906-62R3"' src/CPHUNBuildId.h
 
           python3 - <<'PY'
           from pathlib import Path
@@ -134,27 +92,27 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-62R2 firmware
+      - name: Build CPHUN-62R3 firmware
         run: .venv/bin/pio run -e gh_release_rc
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
 
-      - name: Push validated Build 62R2 source
+      - name: Push validated Build 62R3 source
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/activities/settings/TextSettingsActivity.cpp src/activities/UiTabListActivity.h src/activities/UiTabListActivity.cpp src/CPHUNBuildId.h
+          git add src/activities/settings/TextSettingsActivity.cpp src/CPHUNBuildId.h
           if ! git diff --cached --quiet; then
-            git commit -m "CPHUN-62R2: fit all Layout rows on X4"
+            git commit -m "CPHUN-62R3: use 40px Layout rows on X4"
             git push origin HEAD:agent/cphun-62r2-layout-fit
           fi
 
-      - name: Upload CPHUN-62R2 firmware
+      - name: Upload CPHUN-62R3 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260906-62R2-Layout-Fit-FW
+          name: CPHUN-260906-62R3-Layout-40px-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
