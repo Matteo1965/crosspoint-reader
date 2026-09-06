@@ -42,23 +42,27 @@ jobs:
           s = s.replace(old, new, 1)
           p.write_text(s)
 
-          # 2) Add midpoint compression factors. SD fonts and Noto Serif keep
-          # the measured 0.95/1.00/1.10/1.20 anchors; Noto Sans keeps its own
-          # legacy anchors and receives midpoints between Normal/Wide and
-          # Wide/Extra Wide.
+          # 2) Add midpoint compression factors. Match SD, Noto Serif and Noto Sans
+          # independently because their indentation/anchor blocks are not identical.
           p = Path('src/CrossPointSettings.cpp')
           s = p.read_text()
+
           old_sd = '''      case NORMAL:\n      default:\n        return 1.0f;\n      case WIDE:\n        return 1.1f;\n      case EXTRA_WIDE:\n        return 1.2f;'''
           new_sd = '''      case NORMAL:\n      default:\n        return 1.0f;\n      case NORMAL_PLUS:\n        return 1.05f;\n      case WIDE:\n        return 1.1f;\n      case WIDE_PLUS:\n        return 1.15f;\n      case EXTRA_WIDE:\n        return 1.2f;'''
-          count = s.count(old_sd)
-          if count != 2:
-              raise SystemExit(f'Expected two Serif/SD line-spacing blocks, found {count}')
-          s = s.replace(old_sd, new_sd)
+          if s.count(old_sd) != 1:
+              raise SystemExit(f'Expected one SD-font line-spacing block, found {s.count(old_sd)}')
+          s = s.replace(old_sd, new_sd, 1)
+
+          old_serif = '''        case NORMAL:\n        default:\n          return 1.0f;\n        case WIDE:\n          return 1.1f;\n        case EXTRA_WIDE:\n          return 1.2f;'''
+          new_serif = '''        case NORMAL:\n        default:\n          return 1.0f;\n        case NORMAL_PLUS:\n          return 1.05f;\n        case WIDE:\n          return 1.1f;\n        case WIDE_PLUS:\n          return 1.15f;\n        case EXTRA_WIDE:\n          return 1.2f;'''
+          if s.count(old_serif) != 1:
+              raise SystemExit(f'Expected one Noto Serif line-spacing block, found {s.count(old_serif)}')
+          s = s.replace(old_serif, new_serif, 1)
 
           old_sans = '''        case NORMAL:\n        default:\n          return 0.95f;\n        case WIDE:\n          return 1.0f;\n        case EXTRA_WIDE:\n          return 1.05f;'''
           new_sans = '''        case NORMAL:\n        default:\n          return 0.95f;\n        case NORMAL_PLUS:\n          return 0.975f;\n        case WIDE:\n          return 1.0f;\n        case WIDE_PLUS:\n          return 1.025f;\n        case EXTRA_WIDE:\n          return 1.05f;'''
-          if old_sans not in s:
-              raise SystemExit('Noto Sans line-spacing block not found')
+          if s.count(old_sans) != 1:
+              raise SystemExit(f'Expected one Noto Sans line-spacing block, found {s.count(old_sans)}')
           s = s.replace(old_sans, new_sans, 1)
           p.write_text(s)
 
@@ -102,8 +106,8 @@ jobs:
 
           # Validate the intended stable storage and six-step UI mapping.
           grep -q 'NORMAL_PLUS = 4, WIDE_PLUS = 5' src/CrossPointSettings.h
-          grep -q 'return 1.05f;' src/CrossPointSettings.cpp
-          grep -q 'return 1.15f;' src/CrossPointSettings.cpp
+          test "$(grep -c 'return 1.05f;' src/CrossPointSettings.cpp)" -ge 2
+          test "$(grep -c 'return 1.15f;' src/CrossPointSettings.cpp)" -ge 2
           grep -q 'return 0.975f;' src/CrossPointSettings.cpp
           grep -q 'return 1.025f;' src/CrossPointSettings.cpp
           grep -q 'CrossPointSettings::NORMAL_PLUS' src/activities/settings/TextSettingsActivity.cpp
