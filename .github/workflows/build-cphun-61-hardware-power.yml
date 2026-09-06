@@ -60,8 +60,6 @@ jobs:
           if ! git cherry-pick "$C_COLD"; then
             mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
             if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'src/main.cpp' ]; then
-              # Keep the CPHUN main.cpp structure, then port only the cold-boot
-              # behavior from e37164c that is still needed here.
               git checkout --ours -- src/main.cpp
               python3 - <<'PY'
           from pathlib import Path
@@ -89,20 +87,69 @@ jobs:
             fi
           fi
 
-          for c in "$C_X4C" "$C_SD"; do
-            echo "=== cherry-pick $c ==="
-            if ! git cherry-pick "$c"; then
-              mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
-              if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
-                git checkout --ours -- freeink-sdk
-                git add freeink-sdk
-                git cherry-pick --continue
-              else
-                printf 'Unexpected integration conflicts:\n%s\n' "${conflicts[*]}"
-                exit 1
-              fi
+          echo "=== cherry-pick $C_X4C ==="
+          if ! git cherry-pick "$C_X4C"; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            printf 'X4 Classic conflicts:\n%s\n' "${conflicts[*]}"
+            allowed='freeink-sdk src/activities/reader/EpubReaderActivity.cpp src/main.cpp'
+            for f in "${conflicts[@]}"; do
+              case " $allowed " in
+                *" $f "*) ;;
+                *) echo "Unexpected X4 Classic conflict: $f"; exit 1 ;;
+              esac
+            done
+
+            git checkout --ours -- freeink-sdk
+            git add freeink-sdk
+
+            git checkout --ours -- src/activities/reader/EpubReaderActivity.cpp
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/activities/reader/EpubReaderActivity.cpp')
+          s = p.read_text()
+          old = 'bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro(); }'
+          new = 'bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro() || BoardConfig::isX4Classic(); }'
+          if old not in s:
+              raise SystemExit('Expected xteinkClassPanel expression not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+            git add src/activities/reader/EpubReaderActivity.cpp
+
+            git checkout --ours -- src/main.cpp
+            python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/main.cpp')
+          s = p.read_text()
+          old = 'BoardConfig::isX4Pro() ? MappedInputManager::Button::Down : MappedInputManager::Button::Up'
+          new = '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? MappedInputManager::Button::Down : MappedInputManager::Button::Up'
+          if old in s:
+              s = s.replace(old, new, 1)
+          oldlog = 'BoardConfig::isX4Pro() ? "DOWN" : "UP"'
+          newlog = '(BoardConfig::isX4Pro() || BoardConfig::isX4Classic()) ? "DOWN" : "UP"'
+          if oldlog in s:
+              s = s.replace(oldlog, newlog, 1)
+          oldusb = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
+          newusb = '#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4\n'
+          if oldusb in s:
+              s = s.replace(oldusb, newusb, 1)
+          p.write_text(s)
+          PY
+            git add src/main.cpp
+            git cherry-pick --continue
+          fi
+
+          echo "=== cherry-pick $C_SD ==="
+          if ! git cherry-pick "$C_SD"; then
+            mapfile -t conflicts < <(git diff --name-only --diff-filter=U)
+            if [ "${#conflicts[@]}" -eq 1 ] && [ "${conflicts[0]}" = 'freeink-sdk' ]; then
+              git checkout --ours -- freeink-sdk
+              git add freeink-sdk
+              git cherry-pick --continue
+            else
+              printf 'Unexpected SD integration conflicts:\n%s\n' "${conflicts[*]}"
+              exit 1
             fi
-          done
+          fi
 
           git -C freeink-sdk fetch --no-tags origin "$FINAL_SDK"
           git -C freeink-sdk checkout "$FINAL_SDK"
@@ -137,6 +184,8 @@ jobs:
           grep -q 'coldBootImpliesPowerButton' lib/hal/HalGPIO.cpp
           grep -q 'XteinkX4Classic' lib/hal/HalGPIO.cpp
           grep -q '\[env:x4c\]' platformio.ini
+          grep -q 'BoardConfig::isX4Classic' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'FREEINK_DEVICE_X4CLASSIC' src/main.cpp
           grep -q 'prepareForDeepSleep' lib/hal/HalStorage.cpp
           grep -q 'Storage.prepareForDeepSleep' src/main.cpp
           test "$(git rev-parse HEAD:freeink-sdk)" = "$FINAL_SDK"
