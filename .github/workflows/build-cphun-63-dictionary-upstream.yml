@@ -29,10 +29,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
-          git fetch upstream 57c692fe846984c7b9c9a12d427048aef79764e0
-          git cherry-pick --no-commit 57c692fe846984c7b9c9a12d427048aef79764e0
-
           python3 - <<'PY'
           from pathlib import Path
 
@@ -45,6 +41,79 @@ jobs:
                   raise SystemExit(f'{path}: missing patch anchor for {marker}')
               p.write_text(s.replace(old, new, 1))
 
+          # 57c692f: port only the memory-gate logic, preserving the CPHUN
+          # ChapterHtmlSlimParser constructor arguments and Hungarian extensions.
+          p = Path('src/util/DictHtmlPages.cpp')
+          s = p.read_text()
+          if 'MIN_STYLED_RETAIN_HEAP' not in s:
+              old = '''// Keep enough contiguous heap for the parser's 16KB SD-font advance scratch
+// plus page/layout allocations. Falling back to plain text is cheaper than
+// entering a throwing allocation path under pressure.
+constexpr size_t MIN_STYLED_FREE_HEAP = 40 * 1024;
+constexpr size_t MIN_STYLED_MAX_ALLOC = 20 * 1024;
+'''
+              new = '''// ENTRY gate: is there room to start a styled layout at all? Keeps enough
+// contiguous heap for the parser's 16KB SD-font advance scratch plus
+// page/layout allocations. Falling back to plain text is cheaper than entering
+// a throwing allocation path under pressure.
+constexpr size_t MIN_STYLED_FREE_HEAP = 40 * 1024;
+constexpr size_t MIN_STYLED_MAX_ALLOC = 20 * 1024;
+
+// RETAIN gate: the parser is already alive here, so use a lower floor than the
+// entry gate. The retained page count/element caps below still bound memory use.
+constexpr size_t MIN_STYLED_RETAIN_HEAP = 16 * 1024;
+constexpr size_t MIN_STYLED_RETAIN_ALLOC = 8 * 1024;
+'''
+              if old not in s:
+                  raise SystemExit('DictHtmlPages.cpp: missing entry-gate block')
+              s = s.replace(old, new, 1)
+
+              s = s.replace(
+                  '  bool resourceLimitHit = false;\n  size_t retainedElements = 0;',
+                  '  bool resourceLimitHit = false;\n  const char* limitReason = nullptr;\n  size_t retainedElements = 0;', 1)
+
+              old_lambda = '''        [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
+          if (resourceLimitHit) return;
+          const size_t pageElements = page->elements.size();
+          if (pagesOut.size() >= MAX_STYLED_PAGES || pageElements > MAX_STYLED_PAGE_ELEMENTS - retainedElements ||
+              ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
+            resourceLimitHit = true;
+            pagesOut.clear();
+            return;
+          }
+          retainedElements += pageElements;
+          pagesOut.push_back(std::move(page));
+        },
+'''
+              new_lambda = '''        [&pagesOut, &resourceLimitHit, &retainedElements, &limitReason](std::unique_ptr<Page> page, uint16_t, uint16_t,
+                                                                        uint32_t) {
+          if (resourceLimitHit) return;
+          const size_t pageElements = page->elements.size();
+          if (pagesOut.size() >= MAX_STYLED_PAGES) {
+            limitReason = "page count";
+          } else if (pageElements > MAX_STYLED_PAGE_ELEMENTS - retainedElements) {
+            limitReason = "element count";
+          } else if (ESP.getFreeHeap() < MIN_STYLED_RETAIN_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_RETAIN_ALLOC) {
+            limitReason = "free heap";
+          }
+          if (limitReason != nullptr) {
+            LOG_ERR("DHTML", "Styled definition stopped on %s (pages=%u elements=%u free=%u contig=%u)", limitReason,
+                    static_cast<unsigned>(pagesOut.size()), static_cast<unsigned>(retainedElements + pageElements),
+                    ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+            resourceLimitHit = true;
+            pagesOut.clear();
+            return;
+          }
+          retainedElements += pageElements;
+          pagesOut.push_back(std::move(page));
+        },
+'''
+              if old_lambda not in s:
+                  raise SystemExit('DictHtmlPages.cpp: missing retain lambda block')
+              s = s.replace(old_lambda, new_lambda, 1)
+              p.write_text(s)
+
+          # 84fcff8: release dictionary SD-font caches on exit.
           patch_once('src/activities/reader/DictionaryDefinitionActivity.h',
                      '  void onEnter() override;\n  void loop() override;',
                      '  void onEnter() override;\n  void onExit() override;\n  void loop() override;',
@@ -55,6 +124,7 @@ jobs:
                      '  requestUpdate();\n}\n\nvoid DictionaryDefinitionActivity::onExit() {\n  Activity::onExit();\n  if (auto* fcm = renderer.getFontCacheManager()) {\n    fcm->releaseSdFontCaches();\n  }\n}\n\nDictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {',
                      'void DictionaryDefinitionActivity::onExit()')
 
+          # Dictionary-only part of 8cb0a39: hold Left/Right for repeated word navigation.
           p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
           s = p.read_text()
           if 'WORD_REPEAT_START_MS' not in s:
@@ -92,6 +162,7 @@ jobs:
                      '  int selected = 0;\n  uint16_t rowCount = 0;\n  unsigned long lastHorizontalMoveTime = 0;\n',
                      'lastHorizontalMoveTime = 0;')
 
+          # 5182d27 was already integrated earlier; verify only.
           if 'std::isalnum' not in Path('src/util/HtmlToPlainText.cpp').read_text():
               raise SystemExit('5182d27 regression: heading tag scan fix is missing')
 
@@ -105,9 +176,16 @@ jobs:
           grep -F 'WORD_REPEAT_START_MS = 500' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -F 'lastHorizontalMoveTime = 0' src/activities/reader/DictionaryWordSelectActivity.h
           grep -F 'std::isalnum' src/util/HtmlToPlainText.cpp
+
+          # Preserve CPHUN Hungarian dictionary behaviour and parser arguments.
           grep -F 'uppercaseHungarian' src/activities/reader/DictionaryDefinitionActivity.cpp
           grep -F 'Forrás:' src/activities/reader/DictionaryDefinitionActivity.cpp
           grep -F 'Hyphenator::breakOffsetsForLanguage(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -F 'SETTINGS.softHyphenEnabled != 0' src/util/DictHtmlPages.cpp
+          grep -F 'SETTINGS.fixedDialogueSpacing != 0' src/util/DictHtmlPages.cpp
+          grep -F 'SETTINGS.letterSpacingLimitPercent' src/util/DictHtmlPages.cpp
+
+          # Preserve physically validated #62R5 and earlier fixes.
           grep -F 'hasHungarianNumericLeft' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -F 'AllowsNumericSuffixBreakAfterExistingHyphen' test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp
           grep -F 'props.rowHeight = 40;' src/activities/settings/TextSettingsActivity.cpp
