@@ -22,6 +22,7 @@ class DictionaryDefinitionActivity final : public Activity {
         htmlDefinition(htmlDefinition) {}
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   bool appliesNightMode() const override { return true; }
