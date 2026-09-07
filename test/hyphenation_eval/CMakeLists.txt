@@ -22,3 +22,24 @@ target_link_libraries(HyphenationEvaluationTest PRIVATE
 )
 
 gtest_discover_tests(HyphenationEvaluationTest)
+
+add_executable(HungarianSlashBreakTest
+  HungarianSlashBreakTest.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/Hyphenator.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/LiangHyphenation.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp
+  ${REPO_ROOT}/lib/Utf8/Utf8.cpp
+)
+
+target_include_directories(HungarianSlashBreakTest PRIVATE
+  ${REPO_ROOT}/lib/Epub
+  ${REPO_ROOT}/lib/Utf8
+)
+
+target_link_libraries(HungarianSlashBreakTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(HungarianSlashBreakTest)
