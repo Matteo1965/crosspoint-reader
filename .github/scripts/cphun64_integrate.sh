@@ -2,118 +2,114 @@
 set -euo pipefail
 
 UPSTREAM=https://github.com/crosspoint-reader/crosspoint-reader.git
-COMMITS=(
-  c6fe67d48d8b65f5dfdefae31f06d0bc9826f267
-  7e42d070774e75f250c8ffefe5e9357dacd39eb2
-  da3d50c245334155daccb85058f3645637fd6db4
-  52444a0c973ef9ffe4dd719c92d2dccca9a4d778
-  30992315663dfd181476880b873fa91a49ac8d87
-  ce6c6cbce473e34a9271c34d374e5d7eb1c7695f
-)
 
 git remote add upstream "$UPSTREAM" 2>/dev/null || true
-for c in "${COMMITS[@]}"; do
+for c in \
+  c6fe67d48d8b65f5dfdefae31f06d0bc9826f267 \
+  7e42d070774e75f250c8ffefe5e9357dacd39eb2 \
+  da3d50c245334155daccb85058f3645637fd6db4 \
+  52444a0c973ef9ffe4dd719c92d2dccca9a4d778 \
+  30992315663dfd181476880b873fa91a49ac8d87 \
+  ce6c6cbce473e34a9271c34d374e5d7eb1c7695f; do
   git fetch upstream "$c"
 done
 
-for c in "${COMMITS[@]}"; do
-  echo "=== Applying $c ==="
-  if git cherry-pick --no-commit "$c"; then
-    continue
-  fi
+# Port small, low-conflict fixes directly from their upstream commits.
+# Keep CPHUN's newer Section.cpp/cache format and custom parser extensions.
+git checkout c6fe67d48d8b65f5dfdefae31f06d0bc9826f267 -- lib/Epub/Epub/ParsedText.cpp
 
-  # CPHUN has its own newer section-cache format/version and extra render-spec
-  # fields. Upstream commits in this batch only bump Section.cpp's version for
-  # their layout change, so keep CPHUN's Section.cpp when it is the sole or one
-  # of the conflicts and let the actual parser/rendering changes apply.
-  conflicted="$(git diff --name-only --diff-filter=U)"
-  echo "Conflicts:"
-  echo "$conflicted"
-  if grep -qx 'lib/Epub/Epub/Section.cpp' <<<"$conflicted"; then
-    git checkout --ours lib/Epub/Epub/Section.cpp
-    git add lib/Epub/Epub/Section.cpp
-  fi
+git checkout 30992315663dfd181476880b873fa91a49ac8d87 -- lib/EpdFont/EpdFont.cpp
 
-  remaining="$(git diff --name-only --diff-filter=U)"
-  if [[ -n "$remaining" ]]; then
-    echo "Unresolved CPHUN-64 conflicts remain:"
-    echo "$remaining"
-    exit 42
-  fi
-  git cherry-pick --continue || true
-done
-
-# badfa95: port only the EPUB parser superscript/subscript-link fix, not the
-# unrelated formatting/test churn bundled in that upstream commit.
 python3 - <<'PY'
 from pathlib import Path
 
 cpp = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp')
 hdr = Path('lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h')
+css = Path('lib/Epub/Epub/css/CssParser.cpp')
+cssh = Path('lib/Epub/Epub/css/CssParser.h')
+
 s = cpp.read_text()
 h = hdr.read_text()
+c = css.read_text()
+ch = cssh.read_text()
 
+# c6fe67d: don't soft-flush in a ruby group.
+s = s.replace('if (blockWordCount > softFlushThreshold) {',
+              'if (blockWordCount > softFlushThreshold && !self->inRuby) {', 1)
+
+# 7e42d07: tolerate junk after a completed </html> document.
+if 'bool htmlEnded_ = false;' not in h:
+    h = h.replace('  bool insideBody = false;\n', '  bool insideBody = false;\n  bool htmlEnded_ = false;\n', 1)
+if 'self->htmlEnded_ = true;' not in s:
+    s = s.replace('  if (strcmp(name, "body") == 0) {\n    self->insideBody = false;\n  }\n}',
+                  '  if (strcmp(name, "body") == 0) {\n    self->insideBody = false;\n  }\n  if (strcmp(name, "html") == 0) {\n    self->htmlEnded_ = true;\n  }\n}', 1)
+if 'htmlEnded_ = false;' not in s:
+    s = s.replace('bool ChapterHtmlSlimParser::beginParse() {\n',
+                  'bool ChapterHtmlSlimParser::beginParse() {\n  htmlEnded_ = false;\n', 1)
+err_anchor = '  if (XML_ParseBuffer(xmlParser_, static_cast<int>(len), done) == XML_STATUS_ERROR) {\n'
+if 'Ignoring trailing data after </html>' not in s:
+    if err_anchor not in s:
+        raise SystemExit('parse error anchor missing')
+    s = s.replace(err_anchor, err_anchor +
+                  '    if (htmlEnded_) {\n'
+                  '      LOG_DBG("EHP", "Ignoring trailing data after </html>: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));\n'
+                  '      return ParseStatus::Done;\n'
+                  '    }\n', 1)
+
+# 52444a0: strip !important for all supported declarations.
+if 'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));' not in c:
+    c = c.replace('const std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));',
+                  'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));', 1)
+if 'value = stripTrailingImportant(value);' not in c:
+    c = c.replace('  if (name.empty() || value.empty()) return;\n',
+                  '  if (name.empty() || value.empty()) return;\n\n  value = stripTrailingImportant(value);\n', 1)
+c = c.replace('    const std::string_view displayValue = stripTrailingImportant(value);\n    style.display = iequalsAscii(displayValue, "none") ? CssDisplay::None : CssDisplay::Block;',
+              '    style.display = iequalsAscii(value, "none") ? CssDisplay::None : CssDisplay::Block;')
+c = c.replace('    const std::string_view directionValue = stripTrailingImportant(value);\n    if (iequalsAscii(directionValue, "rtl")) {',
+              '    if (iequalsAscii(value, "rtl")) {')
+c = c.replace('    } else if (iequalsAscii(directionValue, "ltr")) {',
+              '    } else if (iequalsAscii(value, "ltr")) {')
+if 'CSS_CACHE_VERSION = 11' not in ch:
+    ch = ch.replace('CSS_CACHE_VERSION = 10', 'CSS_CACHE_VERSION = 11')
+
+# 52444a0: strip inherited vertical spacing when a block closes.
+s = s.replace('      self->startNewTextBlock(self->blockStyleStack.back());',
+              '      self->startNewTextBlock(self->blockStyleStack.back().withoutTop().withoutBottom());', 1)
+
+# ce6c6cb: paragraph base direction must not be replaced by inline direction.
+if 'bool setsParagraphDirection = false;' not in h:
+    h = h.replace('    CssTextDirection direction = CssTextDirection::Ltr;\n',
+                  '    CssTextDirection direction = CssTextDirection::Ltr;\n    bool setsParagraphDirection = false;\n', 1)
+
+# badfa95: preserve superscript/subscript on internal EPUB links.
 if 'applyVerticalAlignToEntry' not in s:
-    anchor = '''void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css) {
-  if (css.hasTextDecoration()) {
-    entry.hasTextDecoration = true;
-    entry.textDecoration = css.textDecoration;
-  }
-}
-'''
-    addition = anchor + '''\nvoid ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {
-  if (!css.hasVerticalAlign()) return;
-  if (css.verticalAlign == CssVerticalAlign::Super) {
-    entry.hasSup = true;
-    entry.sup = true;
-  } else if (css.verticalAlign == CssVerticalAlign::Sub) {
-    entry.hasSub = true;
-    entry.sub = true;
-  }
-}
-'''
+    anchor = '''void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css) {\n  if (css.hasTextDecoration()) {\n    entry.hasTextDecoration = true;\n    entry.textDecoration = css.textDecoration;\n  }\n}\n'''
+    addition = anchor + '''\nvoid ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {\n  if (!css.hasVerticalAlign()) return;\n  if (css.verticalAlign == CssVerticalAlign::Super) {\n    entry.hasSup = true;\n    entry.sup = true;\n  } else if (css.verticalAlign == CssVerticalAlign::Sub) {\n    entry.hasSub = true;\n    entry.sub = true;\n  }\n}\n'''
     if anchor not in s:
         raise SystemExit('missing applyTextDecorationToEntry anchor')
     s = s.replace(anchor, addition, 1)
-
-    # Internal EPUB link branch: add vertical-align after direction handling.
     link_anchor = '      applyDirectionToEntry(entry, cssStyle);\n      self->inlineStyleStack.push_back(entry);'
-    if link_anchor not in s:
-        raise SystemExit('missing internal-link style anchor')
-    s = s.replace(link_anchor,
-                  '      applyDirectionToEntry(entry, cssStyle);\n      applyVerticalAlignToEntry(entry, cssStyle);\n      self->inlineStyleStack.push_back(entry);', 1)
-
-    # Generic inline branch may still contain the open-coded vertical-align block.
-    old = '''      if (cssStyle.hasVerticalAlign()) {
-        if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
-          entry.hasSup = true;
-          entry.sup = true;
-        } else if (cssStyle.verticalAlign == CssVerticalAlign::Sub) {
-          entry.hasSub = true;
-          entry.sub = true;
-        }
-      }
-'''
+    if link_anchor in s:
+        s = s.replace(link_anchor,
+                      '      applyDirectionToEntry(entry, cssStyle);\n      applyVerticalAlignToEntry(entry, cssStyle);\n      self->inlineStyleStack.push_back(entry);', 1)
+    old = '''      if (cssStyle.hasVerticalAlign()) {\n        if (cssStyle.verticalAlign == CssVerticalAlign::Super) {\n          entry.hasSup = true;\n          entry.sup = true;\n        } else if (cssStyle.verticalAlign == CssVerticalAlign::Sub) {\n          entry.hasSub = true;\n          entry.sub = true;\n        }\n      }\n'''
     if old in s:
         s = s.replace(old, '      applyVerticalAlignToEntry(entry, cssStyle);\n', 1)
-    cpp.write_text(s)
-
 if 'applyVerticalAlignToEntry' not in h:
-    h_anchor = '  static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);\n'
-    if h_anchor not in h:
-        raise SystemExit('missing parser header style-helper anchor')
-    h = h.replace(h_anchor, h_anchor + '  static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);\n', 1)
-    hdr.write_text(h)
+    h = h.replace('  static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);\n',
+                  '  static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);\n  static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);\n', 1)
 
+cpp.write_text(s)
+hdr.write_text(h)
+css.write_text(c)
+cssh.write_text(ch)
 Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260907-64"\n')
 PY
 
-# Guard the imported fixes.
+# Guard imported fixes.
 grep -F 'htmlEnded_' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
 grep -F '!self->inRuby' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
-grep -F 'fallbackTableRowToStacked' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
 grep -F 'stripTrailingImportant(value)' lib/Epub/Epub/css/CssParser.cpp
-grep -F 'setsParagraphDirection' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
 grep -F 'isArabicPresentationForm' lib/EpdFont/EpdFont.cpp
 grep -F 'applyVerticalAlignToEntry' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
 
