@@ -1,15 +1,8 @@
-name: Build CPHUN-70 Hungarian Keyboard Labels v2
+name: Build CPHUN-71 Hungarian Keyboard Layout v3
 
 on:
   push:
-    branches: [agent/cphun-70-hungarian-keyboard-labels-v2]
-    paths:
-      - '.github/workflows/build-cphun-70-hungarian-keyboard-labels-v2.yml'
-      - 'src/activities/util/HungarianKeyboardLayout.h'
-      - 'src/activities/util/KeyboardLayoutSet.h'
-      - 'src/activities/util/KeyboardLayoutSet.cpp'
-      - 'src/activities/util/KeyboardEntryActivity.cpp'
-      - 'src/activities/util/KeyboardEntryActivity.h'
+    branches: [agent/cphun-71-hungarian-keyboard-layout-v3]
   workflow_dispatch:
 
 permissions:
@@ -25,40 +18,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/cphun-70-hungarian-keyboard-labels-v2
+          ref: agent/cphun-71-hungarian-keyboard-layout-v3
           submodules: recursive
           fetch-depth: 0
-
       - name: Check diff whitespace
-        run: git diff --check origin/agent/cphun-69-hungarian-keyboard-labels...HEAD
-
+        run: git diff --check origin/agent/cphun-70-hungarian-keyboard-labels-v2...HEAD
       - name: Unit tests
         run: |
           cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
           cmake --build build/test -j2
           ctest --test-dir build/test --output-on-failure -j2
-
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
           enable-cache: false
-
       - name: Install PlatformIO
         run: |
           uv venv .venv
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
-
-      - name: Build CPHUN-70 firmware
+      - name: Build CPHUN-71 firmware
         run: .venv/bin/pio run -e gh_release_rc
-
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
-
-      - name: Upload CPHUN-70 firmware
+      - name: Upload CPHUN-71 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260907-70-Hungarian-Keyboard-Labels-v2-FW
+          name: CPHUN-260908-71-Hungarian-Keyboard-Layout-v3-FW
           path: .pio/build/gh_release_rc/firmware.bin
           if-no-files-found: error
           retention-days: 90
