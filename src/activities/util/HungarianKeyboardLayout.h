@@ -28,7 +28,7 @@ inline const fui::KeyboardKey NUM_ROW[] = {
 // remains lowercase. Every ordinary character key uses the same width (2 units),
 // including the right-edge -, Ö and Á keys.
 inline const fui::KeyboardKey ROW1[] = {
-    HUK("Q", "q", 'q'), HUK("w", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
+    HUK("Q", "q", 'q'), HUK("W", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
     HUK("T", "t", 't'), HUK("Z", "z", 'z'), HUK("U", "u", 'u'), HUK("I", "i", 'i'),
     HUK("O", "o", 'o'), HUK("P", "p", 'p'), HUK("Ö", "ö", 1303)};
 
@@ -44,7 +44,7 @@ inline const fui::KeyboardKey ROW3[] = {
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SHIFT_ROW1[] = {
-    HUK("Q", "Q", 'Q'), HUK("w", "W", 'W'), HUK("E", "E", 'E'), HUK("R", "R", 'R'),
+    HUK("Q", "Q", 'Q'), HUK("W", "W", 'W'), HUK("E", "E", 'E'), HUK("R", "R", 'R'),
     HUK("T", "T", 'T'), HUK("Z", "Z", 'Z'), HUK("U", "U", 'U'), HUK("I", "I", 'I'),
     HUK("O", "O", 'O'), HUK("P", "P", 'P'), HUK("Ö", "Ö", 1353)};
 
