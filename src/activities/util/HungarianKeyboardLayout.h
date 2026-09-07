@@ -9,63 +9,73 @@ namespace fui = freeink::ui;
 
 #define HUK(label, output, value) \
   fui::KeyboardKey { label, output, fui::KeyKind::Normal, fui::StateNormal, value, 2, true, nullptr }
-#define HUKA(label, output, value, alt) \
-  fui::KeyboardKey { label, output, fui::KeyKind::Normal, fui::StateNormal, value, 2, true, alt }
 #define HUKW(label, output, value, units) \
   fui::KeyboardKey { label, output, fui::KeyKind::Normal, fui::StateNormal, value, units, true, nullptr }
 #define HUKS(label, kind, value, units) \
   fui::KeyboardKey { label, nullptr, kind, fui::StateNormal, value, units, true, nullptr }
 
+// CPHUN-69: the Hungarian keyboard deliberately carries no explicit `alt`
+// strings in its key tables. FreeInkUI draws every explicit alt as a small
+// corner hint, which is too dense on the X4 keyboard. Long-press output is
+// supplied separately by altOutputFor(), so functionality stays unchanged
+// while each key face shows only its primary label.
 inline const fui::KeyboardKey NUM_ROW[] = {
-    HUKA("1", "1", '1', "!"), HUKA("2", "2", '2', "@"), HUKA("3", "3", '3', "#"),
-    HUKA("4", "4", '4', "$"), HUKA("5", "5", '5', "%"), HUKA("6", "6", '6', "^"),
-    HUKA("7", "7", '7', "&"), HUKA("8", "8", '8', "*"), HUKA("9", "9", '9', "("),
-    HUKA("0", "0", '0', ")"), HUKA("-", "-", '-', "_")};
+    HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'), HUK("4", "4", '4'),
+    HUK("5", "5", '5'), HUK("6", "6", '6'), HUK("7", "7", '7'), HUK("8", "8", '8'),
+    HUK("9", "9", '9'), HUK("0", "0", '0'), HUK("-", "-", '-')};
 
+// Main key labels are uppercase for readability, while normal-layer output
+// remains lowercase. Shift therefore changes output/case without changing the
+// visible letter style.
 inline const fui::KeyboardKey ROW1[] = {
-    HUK("q", "q", 'q'), HUK("w", "w", 'w'), HUKA("e", "e", 'e', "é"), HUK("r", "r", 'r'),
-    HUK("t", "t", 't'), HUK("z", "z", 'z'), HUKA("u", "u", 'u', "ú"), HUKA("i", "i", 'i', "í"),
-    HUKA("o", "o", 'o', "ó"), HUK("p", "p", 'p'), HUKA("ö", "ö", 1303, "ő")};
+    HUK("Q", "q", 'q'), HUK("W", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
+    HUK("T", "t", 't'), HUK("Z", "z", 'z'), HUK("U", "u", 'u'), HUK("I", "i", 'i'),
+    HUK("O", "o", 'o'), HUK("P", "p", 'p'), HUK("Ö", "ö", 1303)};
 
 inline const fui::KeyboardKey ROW2[] = {
-    HUKA("a", "a", 'a', "á"), HUK("s", "s", 's'), HUK("d", "d", 'd'), HUK("f", "f", 'f'),
-    HUK("g", "g", 'g'), HUK("h", "h", 'h'), HUK("j", "j", 'j'), HUK("k", "k", 'k'),
-    HUK("l", "l", 'l'), HUK("é", "é", 1301), HUK("á", "á", 1302)};
+    HUK("A", "a", 'a'), HUK("S", "s", 's'), HUK("D", "d", 'd'), HUK("F", "f", 'f'),
+    HUK("G", "g", 'g'), HUK("H", "h", 'h'), HUK("J", "j", 'j'), HUK("K", "k", 'k'),
+    HUK("L", "l", 'l'), HUK("É", "é", 1301), HUK("Á", "á", 1302)};
 
 inline const fui::KeyboardKey ROW3[] = {
     HUKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
-    HUK("y", "y", 'y'), HUK("x", "x", 'x'), HUK("c", "c", 'c'), HUK("v", "v", 'v'),
-    HUK("b", "b", 'b'), HUK("n", "n", 'n'), HUK("m", "m", 'm'), HUKA("ü", "ü", 1304, "ű"),
+    HUK("Y", "y", 'y'), HUK("X", "x", 'x'), HUK("C", "c", 'c'), HUK("V", "v", 'v'),
+    HUK("B", "b", 'b'), HUK("N", "n", 'n'), HUK("M", "m", 'm'), HUK("Ü", "ü", 1304),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SHIFT_ROW1[] = {
-    HUK("Q", "Q", 'Q'), HUK("W", "W", 'W'), HUKA("E", "E", 'E', "É"), HUK("R", "R", 'R'),
-    HUK("T", "T", 'T'), HUK("Z", "Z", 'Z'), HUKA("U", "U", 'U', "Ú"), HUKA("I", "I", 'I', "Í"),
-    HUKA("O", "O", 'O', "Ó"), HUK("P", "P", 'P'), HUKA("Ö", "Ö", 1353, "Ő")};
+    HUK("Q", "Q", 'Q'), HUK("W", "W", 'W'), HUK("E", "E", 'E'), HUK("R", "R", 'R'),
+    HUK("T", "T", 'T'), HUK("Z", "Z", 'Z'), HUK("U", "U", 'U'), HUK("I", "I", 'I'),
+    HUK("O", "O", 'O'), HUK("P", "P", 'P'), HUK("Ö", "Ö", 1353)};
 
 inline const fui::KeyboardKey SHIFT_ROW2[] = {
-    HUKA("A", "A", 'A', "Á"), HUK("S", "S", 'S'), HUK("D", "D", 'D'), HUK("F", "F", 'F'),
+    HUK("A", "A", 'A'), HUK("S", "S", 'S'), HUK("D", "D", 'D'), HUK("F", "F", 'F'),
     HUK("G", "G", 'G'), HUK("H", "H", 'H'), HUK("J", "J", 'J'), HUK("K", "K", 'K'),
     HUK("L", "L", 'L'), HUK("É", "É", 1351), HUK("Á", "Á", 1352)};
 
 inline const fui::KeyboardKey SHIFT_ROW3[] = {
     HUKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
     HUK("Y", "Y", 'Y'), HUK("X", "X", 'X'), HUK("C", "C", 'C'), HUK("V", "V", 'V'),
-    HUK("B", "B", 'B'), HUK("N", "N", 'N'), HUK("M", "M", 'M'), HUKA("Ü", "Ü", 1354, "Ű"),
+    HUK("B", "B", 'B'), HUK("N", "N", 'N'), HUK("M", "M", 'M'), HUK("Ü", "Ü", 1354),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
+// Single-layout variant: no globe key is needed. The visible proportions are
+// 1.5 / 5 / 1 / 1 / 1 / 1.5 on the doubled unit grid.
 inline const fui::KeyboardKey BOTTOM[] = {
-    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 4), HUK(",", ",", ','),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10), HUK(".", ".", '.'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 4)};
+    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
+    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
-// When CrossPoint exposes more than one enabled layout, preserve the existing
-// globe switch while keeping the punctuation keys directly accessible.
+// Normal Hungarian configuration includes the language/globe key. Exact
+// requested widths: 1.5 / 1 / 4 / 1 / 1 / 1 / 1.5 = 11 visual units.
+// Doubled because KeyboardKey::widthUnits is integer-only.
 inline const fui::KeyboardKey BOTTOM_LANG[] = {
-    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 4), HUK(",", ",", ','),
+    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8), HUK(".", ".", '.'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 4)};
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
+    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
 inline const fui::KeyboardKey SYMBOL_ROW1[] = {
     HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'), HUK("4", "4", '4'),
@@ -98,13 +108,13 @@ inline const fui::KeyboardKey SYMBOL_BOTTOM[] = {
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10), HUK(".", ".", '.'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 4)};
 
-inline const fui::KeyboardRow ROWS[] = {{NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM, 5, 0}};
+inline const fui::KeyboardRow ROWS[] = {{NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM, 6, 0}};
 inline const fui::KeyboardRow ROWS_LANG[] = {
-    {NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM_LANG, 6, 0}};
+    {NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM_LANG, 7, 0}};
 inline const fui::KeyboardRow SHIFT_ROWS[] = {
-    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM, 5, 0}};
+    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM, 6, 0}};
 inline const fui::KeyboardRow SHIFT_ROWS_LANG[] = {
-    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM_LANG, 6, 0}};
+    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM_LANG, 7, 0}};
 inline const fui::KeyboardRow SYMBOL_ROWS[] = {
     {SYMBOL_ROW1, 11, 0}, {SYMBOL_ROW2, 11, 0}, {SYMBOL_ROW3, 10, 0}, {SYMBOL_BOTTOM, 5, 0}};
 inline const fui::KeyboardRow SYMBOL2_ROWS[] = {
@@ -123,8 +133,61 @@ inline const fui::KeyboardLayout& layout(const bool shifted, const bool symbols,
   return langKey ? LAYOUT_LANG : LAYOUT;
 }
 
+inline bool isHungarianLetterLayout(const fui::KeyboardLayout& current) {
+  return &current == &LAYOUT || &current == &LAYOUT_LANG || &current == &SHIFT_LAYOUT ||
+         &current == &SHIFT_LAYOUT_LANG;
+}
+
+inline bool isShiftedLetterLayout(const fui::KeyboardLayout& current) {
+  return &current == &SHIFT_LAYOUT || &current == &SHIFT_LAYOUT_LANG;
+}
+
+// Long-press behavior formerly stored in KeyboardKey::alt. Keeping it here
+// makes the secondary characters functional without drawing them on the keys.
+inline const char* altOutputFor(const fui::KeyboardLayout& current, const int16_t value) {
+  if (!isHungarianLetterLayout(current)) return nullptr;
+
+  switch (value) {
+    case '1': return "!";
+    case '2': return "@";
+    case '3': return "#";
+    case '4': return "$";
+    case '5': return "%";
+    case '6': return "^";
+    case '7': return "&";
+    case '8': return "*";
+    case '9': return "(";
+    case '0': return ")";
+    case '-': return "_";
+    default: break;
+  }
+
+  if (isShiftedLetterLayout(current)) {
+    switch (value) {
+      case 'A': return "Á";
+      case 'E': return "É";
+      case 'I': return "Í";
+      case 'O': return "Ó";
+      case 'U': return "Ú";
+      case 1353: return "Ő";
+      case 1354: return "Ű";
+      default: return nullptr;
+    }
+  }
+
+  switch (value) {
+    case 'a': return "á";
+    case 'e': return "é";
+    case 'i': return "í";
+    case 'o': return "ó";
+    case 'u': return "ú";
+    case 1303: return "ő";
+    case 1304: return "ű";
+    default: return nullptr;
+  }
+}
+
 #undef HUK
-#undef HUKA
 #undef HUKW
 #undef HUKS
 
