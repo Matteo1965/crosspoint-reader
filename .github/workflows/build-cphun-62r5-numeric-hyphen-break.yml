@@ -1,0 +1,177 @@
+name: Build CPHUN-62R5 Numeric Hyphen Break
+
+on:
+  push:
+    branches: [agent/cphun-62r5-numeric-hyphen-break]
+    paths: ['.github/workflows/build-cphun-62r5-numeric-hyphen-break.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CPHUN_BUILD_ID: CPHUN-260907-62R5
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-62r5-numeric-hyphen-break
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Allow Hungarian extended break after numeric hard hyphen
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('lib/Epub/Epub/hyphenation/Hyphenator.cpp')
+          s = p.read_text()
+
+          old_sig = 'std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {'
+          new_sig = ('std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps,\n'
+                     '                                                            const bool allowHungarianNumericPrefix) {')
+          if old_sig in s:
+              s = s.replace(old_sig, new_sig, 1)
+          elif new_sig not in s:
+              raise SystemExit('Missing buildExplicitBreakInfos signature')
+
+          old_guard = re.compile(
+              r'\s*if \(!isExplicitHyphen\(cp\) \|\| !isAlphabetic\(cps\[i - 1\]\.value\) \|\|\s*'
+              r'!isAlphabetic\(cps\[i \+ 1\]\.value\)\) \{\s*continue;\s*\}',
+              re.MULTILINE)
+          new_guard = '''
+    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i + 1].value)) {
+      continue;
+    }
+    const bool hasAlphabeticLeft = isAlphabetic(cps[i - 1].value);
+    const bool hasHungarianNumericLeft =
+        allowHungarianNumericPrefix && !isSoftHyphen(cp) && isAsciiDigit(cps[i - 1].value);
+    if (!hasAlphabeticLeft && !hasHungarianNumericLeft) {
+      continue;
+    }'''
+          if 'hasHungarianNumericLeft' not in s:
+              s, count = old_guard.subn(new_guard, s, count=1)
+              if count != 1:
+                  raise SystemExit(f'Explicit hyphen guard replacement count={count}')
+
+          old_call = 'auto explicitBreakInfos = buildExplicitBreakInfos(cps);'
+          new_call = 'auto explicitBreakInfos = buildExplicitBreakInfos(cps, useHungarianExtended);'
+          if old_call in s:
+              s = s.replace(old_call, new_call, 1)
+          elif new_call not in s:
+              raise SystemExit('Missing buildExplicitBreakInfos call')
+
+          p.write_text(s)
+
+          test = Path('test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp')
+          t = test.read_text()
+          marker = 'TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen)'
+          if marker not in t:
+              t += r'''
+
+TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen) {
+  constexpr size_t kExpectedOffset = 5;  // "2007-|ben"
+
+  Hyphenator::setHungarianExtended(false);
+  const auto basicBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
+  EXPECT_FALSE(std::any_of(basicBreaks.begin(), basicBreaks.end(), [](const Hyphenator::BreakInfo& info) {
+    return info.byteOffset == kExpectedOffset;
+  }));
+
+  Hyphenator::setHungarianExtended(true);
+  const auto extendedBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
+  Hyphenator::setHungarianExtended(false);
+
+  const auto it = std::find_if(extendedBreaks.begin(), extendedBreaks.end(), [](const Hyphenator::BreakInfo& info) {
+    return info.byteOffset == kExpectedOffset;
+  });
+  ASSERT_NE(it, extendedBreaks.end());
+  EXPECT_FALSE(it->requiresInsertedHyphen);
+}
+'''
+              test.write_text(t)
+
+          Path('src/CPHUNBuildId.h').write_text(
+              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260907-62R5"\n')
+          PY
+
+          grep -F 'allowHungarianNumericPrefix' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -F 'hasHungarianNumericLeft' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -F 'buildExplicitBreakInfos(cps, useHungarianExtended)' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -F 'AllowsNumericSuffixBreakAfterExistingHyphen' test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp
+          grep -F '#define CPHUN_BUILD_ID "CPHUN-260907-62R5"' src/CPHUNBuildId.h
+
+          # Preserve the validated 40px Text Settings layout from #62R4.
+          grep -F 'props.rowHeight = 40;' src/activities/settings/TextSettingsActivity.cpp
+          grep -F 'syncTabListViewport(screen, props, false, 40);' src/activities/settings/TextSettingsActivity.cpp
+
+          # Preserve the validated X4 USB serial enumeration fix.
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('platformio.ini').read_text()
+          for env in ('gh_release', 'gh_release_rc'):
+              start = s.index(f'[env:{env}]')
+              end = s.find('\n[', start + 1)
+              block = s[start:end if end != -1 else len(s)]
+              if block.count('-DCROSSPOINT_WAIT_FOR_USB_SERIAL') != 1:
+                  raise SystemExit(f'{env}: USB serial wait flag missing or duplicated')
+          main = Path('src/main.cpp').read_text()
+          for needle in ('CROSSPOINT_WAIT_FOR_USB_SERIAL', 'delay(250);', 'Serial.begin(115200);'):
+              if needle not in main:
+                  raise SystemExit(f'USB serial regression guard failed: {needle}')
+          PY
+
+          git diff --check
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-62R5 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Push validated Build 62R5 source
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+                  test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp \
+                  src/CPHUNBuildId.h
+          if ! git diff --cached --quiet; then
+            git commit -m "CPHUN-62R5: break numeric Hungarian suffixes after existing hyphen"
+            git push origin HEAD:agent/cphun-62r5-numeric-hyphen-break
+          fi
+
+      - name: Upload CPHUN-62R5 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260907-62R5-Numeric-Hyphen-Break-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
