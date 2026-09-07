@@ -71,8 +71,140 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   if (const char* huAlt = keyboard_layouts::hu_keyboard::altOutputFor(layout, value)) return huAlt;
   return keyboardAltOutputFor(layout, value);
 }
+
+// CPHUN-73: on the Hungarian letter layers, keep FreeInkUI's exact keyboard
+// behavior but move each row's integer-division remainder from the last key to
+// the second key. This gives W and S the few spare pixels symmetrically around
+// their centered labels, while Ö and Á return to the normal key width.
+template <size_t MaxInteractions>
+void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
+  if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
+    keyboard(frame, rect, props);
+    return;
+  }
+
+  KeyboardProps huProps = props;
+  huProps.shiftLabel = "Sh";
+  huProps.modeLabel = "Fn";
+
+  if (!huProps.layout->rows || huProps.layout->rowCount == 0) return;
+  StyleSet styles = huProps.keyStyles.unset() ? defaultButtonStyles() : huProps.keyStyles;
+  if (huProps.keyRadius > 0) setStyleRadius(styles, huProps.keyRadius);
+  TextStyle keyText = huProps.labelText;
+  keyText.align = TextAlign::Center;
+  keyText.maxLines = 1;
+  rect = rect.inset(huProps.padding);
+  if (rect.empty() || rect.width < 10 || rect.height < 10) return;
+  const int16_t gap = huProps.gap < 0 ? 0 : huProps.gap;
+  const int16_t rowH =
+      static_cast<int16_t>((rect.height - gap * (huProps.layout->rowCount - 1)) / huProps.layout->rowCount);
+  int16_t logicalIndex = 0;
+
+  auto actionFor = [&](KeyKind kind) {
+    if (kind == KeyKind::Shift && huProps.shiftAction != NO_ACTION) return huProps.shiftAction;
+    if (kind == KeyKind::Mode && huProps.modeAction != NO_ACTION) return huProps.modeAction;
+    if (kind == KeyKind::Lang && huProps.langAction != NO_ACTION) return huProps.langAction;
+    if (kind == KeyKind::Delete && huProps.deleteAction != NO_ACTION) return huProps.deleteAction;
+    if (kind == KeyKind::Ok && huProps.okAction != NO_ACTION) return huProps.okAction;
+    return huProps.keyAction;
+  };
+
+  int16_t rowHitOverflow = 0;
+  auto drawKey = [&](Rect keyRect, const KeyboardKey& key, int16_t selectedIndex) {
+    State state = StateNormal;
+    if (huProps.selectedIndex == selectedIndex) state |= huProps.inactiveSelection ? StateFocused : StateSelected;
+    if (!key.enabled || key.kind == KeyKind::Disabled) state |= StateDisabled;
+    const ActionId action = actionFor(key.kind);
+    ButtonProps bp;
+    bp.label = (key.kind == KeyKind::Space || key.kind == KeyKind::Delete || key.kind == KeyKind::Lang)
+                   ? nullptr
+                   : key.label;
+    if (key.kind == KeyKind::Ok && huProps.okLabel) bp.label = huProps.okLabel;
+    if (key.kind == KeyKind::Shift && huProps.shiftLabel) bp.label = huProps.shiftLabel;
+    if (key.kind == KeyKind::Mode && huProps.modeLabel) bp.label = huProps.modeLabel;
+    bp.action = action;
+    bp.value = key.value;
+    bp.inputMask = huProps.inputMask;
+    bp.state = state;
+    bp.text = keyText;
+    bp.styles = styles;
+    bp.minTouchSize = huProps.minTouchSize;
+    bp.hitPadding.bottom = rowHitOverflow;
+    bp.radius = huProps.keyRadius;
+    bp.enabled = key.enabled && key.kind != KeyKind::Disabled;
+    button(frame, keyRect, bp);
+
+    if (key.kind == KeyKind::Delete || key.kind == KeyKind::Lang) {
+      const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
+      const int16_t lh = frame.target().lineHeight(keyText.font);
+      const int16_t desired = static_cast<int16_t>(lh + lh / 8);
+      int16_t iconSize = static_cast<int16_t>(((desired + 8) / 16) * 16);
+      if (iconSize < 16) iconSize = 16;
+      const int16_t maxSize = keyRect.height < keyRect.width ? keyRect.height : keyRect.width;
+      while (iconSize > maxSize && iconSize > 16) iconSize = static_cast<int16_t>(iconSize - 16);
+      if (iconSize > maxSize) iconSize = maxSize;
+      const BitmapRef icon = key.kind == KeyKind::Delete ? lucideDeleteIcon16() : lucideGlobeIcon32();
+      frame.target().bitmap(centeredRect(keyRect, Size{iconSize, iconSize}), icon, BitmapMode::Contain, ink);
+      return;
+    }
+
+    if (key.kind == KeyKind::Normal && key.alt) {
+      TextStyle altStyle = huProps.altText;
+      altStyle.align = TextAlign::Right;
+      altStyle.maxLines = 1;
+      altStyle.color = styles.resolve(frame.stateFor(action, key.value, state)).foreground.color;
+      const int16_t altLh = frame.target().lineHeight(altStyle.font);
+      frame.target().text(Rect{static_cast<int16_t>(keyRect.x + 2), static_cast<int16_t>(keyRect.y + 2),
+                               static_cast<int16_t>(keyRect.width - 3), altLh},
+                          key.alt, altStyle);
+      return;
+    }
+
+    if (key.kind != KeyKind::Space) return;
+    const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
+    const int16_t cx = static_cast<int16_t>(keyRect.x + keyRect.width / 2);
+    const int16_t cy = static_cast<int16_t>(keyRect.y + keyRect.height / 2);
+    const int16_t half = static_cast<int16_t>(keyRect.width * 9 / 20);
+    frame.target().line(Point{static_cast<int16_t>(cx - half), static_cast<int16_t>(cy + 3)},
+                        Point{static_cast<int16_t>(cx + half), static_cast<int16_t>(cy + 3)}, 3, ink);
+  };
+
+  for (uint8_t row = 0; row < huProps.layout->rowCount; ++row) {
+    const KeyboardRow& layoutRow = huProps.layout->rows[row];
+    if (!layoutRow.keys || layoutRow.count == 0) continue;
+    rowHitOverflow = row == huProps.layout->rowCount - 1 ? huProps.bottomHitOverflow : 0;
+    uint16_t units = static_cast<uint16_t>(layoutRow.insetUnits * 2);
+    uint16_t keyUnitsTotal = 0;
+    for (uint8_t col = 0; col < layoutRow.count; ++col) {
+      const uint8_t keyUnits = layoutRow.keys[col].widthUnits ? layoutRow.keys[col].widthUnits : 1;
+      keyUnitsTotal = static_cast<uint16_t>(keyUnitsTotal + keyUnits);
+      units = static_cast<uint16_t>(units + keyUnits);
+    }
+    const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
+    const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
+    int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW);
+    const int16_t rowRight = static_cast<int16_t>(rect.right() - layoutRow.insetUnits * unitW);
+    const int16_t remainder = static_cast<int16_t>(rowRight - x - gap * (layoutRow.count - 1) -
+                                                   unitW * keyUnitsTotal);
+    const bool rebalanceToSecondKey = row == 1 || row == 2;
+
+    for (uint8_t col = 0; col < layoutRow.count; ++col) {
+      const KeyboardKey& key = layoutRow.keys[col];
+      const uint8_t keyUnits = key.widthUnits ? key.widthUnits : 1;
+      int16_t w = static_cast<int16_t>(unitW * keyUnits);
+      if (rebalanceToSecondKey) {
+        if (col == 1) w = static_cast<int16_t>(w + remainder);
+      } else if (col == layoutRow.count - 1) {
+        w = static_cast<int16_t>(rowRight - x);
+      }
+      drawKey(Rect{x, y, w, rowH}, key, logicalIndex++);
+      x = static_cast<int16_t>(x + w + gap);
+    }
+  }
+}
 }  // namespace ui
 }  // namespace freeink
 
 #define builtinKeyboardLayout builtinKeyboardLayoutCphun
 #define keyboardAltOutputFor keyboardAltOutputForCphun
+#define keyboard keyboardCphun
