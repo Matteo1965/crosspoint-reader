@@ -57,9 +57,12 @@ if 'Ignoring trailing data after </html>' not in s:
                   '    }\n', 1)
 
 # 52444a0: strip !important for all supported declarations.
-if 'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));' not in c:
-    c = c.replace('const std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));',
-                  'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));', 1)
+const_value = 'const std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));'
+mutable_value = 'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));'
+if const_value in c:
+    c = c.replace(const_value, mutable_value, 1)
+elif mutable_value not in c:
+    raise SystemExit('CSS declaration value anchor missing')
 if 'value = stripTrailingImportant(value);' not in c:
     c = c.replace('  if (name.empty() || value.empty()) return;\n',
                   '  if (name.empty() || value.empty()) return;\n\n  value = stripTrailingImportant(value);\n', 1)
@@ -109,6 +112,7 @@ PY
 # Guard imported fixes.
 grep -F 'htmlEnded_' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.h
 grep -F '!self->inRuby' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+grep -F 'std::string_view value = trimCssWhitespace(decl.substr(colonPos + 1));' lib/Epub/Epub/css/CssParser.cpp
 grep -F 'stripTrailingImportant(value)' lib/Epub/Epub/css/CssParser.cpp
 grep -F 'isArabicPresentationForm' lib/EpdFont/EpdFont.cpp
 grep -F 'applyVerticalAlignToEntry' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
