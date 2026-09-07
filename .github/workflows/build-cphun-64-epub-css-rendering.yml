@@ -26,7 +26,28 @@ jobs:
           fetch-depth: 0
 
       - name: Integrate EPUB CSS rendering fixes
-        run: bash .github/scripts/cphun64_integrate.sh
+        run: |
+          cp lib/Epub/Epub/ParsedText.cpp /tmp/CPHUN-ParsedText.cpp
+          bash .github/scripts/cphun64_integrate.sh
+          cp /tmp/CPHUN-ParsedText.cpp lib/Epub/Epub/ParsedText.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/Epub/Epub/ParsedText.cpp')
+          s = p.read_text()
+          old = '    wordContinues[idx] = true;  // Prevent page breaker from splitting the Group Ruby!'
+          new = ('    wordContinues[idx] = true;       // Prevent page breaker from splitting the Group Ruby!\n'
+                 '    wordNoSpaceBefore[idx] = false;  // Ensure allowsBreak returns false!')
+          if 'wordNoSpaceBefore[idx] = false;  // Ensure allowsBreak returns false!' not in s:
+              if old not in s:
+                  raise SystemExit('ParsedText ruby group anchor missing')
+              s = s.replace(old, new, 1)
+          for marker in ('ParsedText::minimumSpacePercent_', 'ParsedText::shortHyphenEnabled_',
+                         'ParsedText::opticalMarginEnabled_', 'wordNoSpaceBefore[idx] = false'):
+              if marker not in s:
+                  raise SystemExit(f'ParsedText preservation failed: {marker}')
+          p.write_text(s)
+          PY
+          git diff --check
 
       - name: Unit tests
         run: |
