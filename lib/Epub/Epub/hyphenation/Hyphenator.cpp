@@ -74,6 +74,34 @@ void normalizeHungarianProcessingCodepoints(std::vector<CodepointInfo>& cps) {
   }
 }
 
+bool isHungarianClosingQuote(const uint32_t cp) {
+  return cp == '"' || cp == 0x00BB || cp == 0x201D;
+}
+
+void stripHungarianClosingQuoteBeforeSuffix(std::vector<CodepointInfo>& cps) {
+  for (size_t i = 1; i + 2 < cps.size(); ++i) {
+    if (!isHungarianClosingQuote(cps[i].value) || !isAlphabetic(cps[i - 1].value) ||
+        !isExplicitHyphen(cps[i + 1].value) || isSoftHyphen(cps[i + 1].value) ||
+        !isAlphabetic(cps[i + 2].value)) {
+      continue;
+    }
+
+    bool suffixIsAlphabetic = true;
+    for (size_t j = i + 2; j < cps.size(); ++j) {
+      if (!isAlphabetic(cps[j].value)) {
+        suffixIsAlphabetic = false;
+        break;
+      }
+    }
+    if (!suffixIsAlphabetic) continue;
+
+    // CPHUN-66: remove only from the processing copy. Byte offsets still point
+    // into the original token, so rendering keeps the closing quote intact.
+    cps.erase(cps.begin() + i);
+    return;
+  }
+}
+
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps,
                                                             const bool allowHungarianNumericPrefix) {
   std::vector<Hyphenator::BreakInfo> breaks;
@@ -391,6 +419,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
   const bool useHungarianExtended = hungarianExtended_ && preferredLanguageIsHungarian_;
+  if (useHungarianExtended) {
+    stripHungarianClosingQuoteBeforeSuffix(cps);
+  }
 
   bool hasApostropheLikeSeparator = false;
   bool hasHungarianSlashSeparator = false;
