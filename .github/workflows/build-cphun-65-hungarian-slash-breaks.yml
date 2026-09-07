@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check diff whitespace
-        run: git diff --check agent/cphun-64-epub-css-rendering...HEAD
+        run: git diff --check origin/agent/cphun-64-epub-css-rendering...HEAD
 
       - name: Unit tests
         run: |
