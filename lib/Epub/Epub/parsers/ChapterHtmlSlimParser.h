@@ -74,6 +74,7 @@ class ChapterHtmlSlimParser {
     CssTextDecoration textDecoration = CssTextDecoration::None;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool setsParagraphDirection = false;
     bool hasSup = false, sup = false;
     bool hasSub = false, sub = false;
   };
@@ -107,6 +108,7 @@ class ChapterHtmlSlimParser {
   uint32_t currentPageVisibleOffset = 0;
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;
+  bool htmlEnded_ = false;
   bool syntheticCharacterData = false;
   uint16_t nonVisibleTextDepth = 0;
 
@@ -145,6 +147,7 @@ class ChapterHtmlSlimParser {
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
+  static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
   // XML callbacks
