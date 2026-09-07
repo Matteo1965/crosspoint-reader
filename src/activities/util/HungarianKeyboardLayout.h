@@ -14,7 +14,7 @@ namespace fui = freeink::ui;
 #define HUKS(label, kind, value, units) \
   fui::KeyboardKey { label, nullptr, kind, fui::StateNormal, value, units, true, nullptr }
 
-// CPHUN-69: the Hungarian keyboard deliberately carries no explicit `alt`
+// CPHUN-69/70: the Hungarian keyboard deliberately carries no explicit `alt`
 // strings in its key tables. FreeInkUI draws every explicit alt as a small
 // corner hint, which is too dense on the X4 keyboard. Long-press output is
 // supplied separately by altOutputFor(), so functionality stays unchanged
@@ -25,8 +25,8 @@ inline const fui::KeyboardKey NUM_ROW[] = {
     HUK("9", "9", '9'), HUK("0", "0", '0'), HUK("-", "-", '-')};
 
 // Main key labels are uppercase for readability, while normal-layer output
-// remains lowercase. Shift therefore changes output/case without changing the
-// visible letter style.
+// remains lowercase. Every ordinary character key uses the same width (2 units),
+// including the right-edge -, Ö and Á keys.
 inline const fui::KeyboardKey ROW1[] = {
     HUK("Q", "q", 'q'), HUK("W", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
     HUK("T", "t", 't'), HUK("Z", "z", 'z'), HUK("U", "u", 'u'), HUK("I", "i", 'i'),
@@ -38,7 +38,7 @@ inline const fui::KeyboardKey ROW2[] = {
     HUK("L", "l", 'l'), HUK("É", "é", 1301), HUK("Á", "á", 1302)};
 
 inline const fui::KeyboardKey ROW3[] = {
-    HUKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
+    HUKS("Sh", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
     HUK("Y", "y", 'y'), HUK("X", "x", 'x'), HUK("C", "c", 'c'), HUK("V", "v", 'v'),
     HUK("B", "b", 'b'), HUK("N", "n", 'n'), HUK("M", "m", 'm'), HUK("Ü", "ü", 1304),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
@@ -54,15 +54,14 @@ inline const fui::KeyboardKey SHIFT_ROW2[] = {
     HUK("L", "L", 'L'), HUK("É", "É", 1351), HUK("Á", "Á", 1352)};
 
 inline const fui::KeyboardKey SHIFT_ROW3[] = {
-    HUKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
+    HUKS("Sh", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
     HUK("Y", "Y", 'Y'), HUK("X", "X", 'X'), HUK("C", "C", 'C'), HUK("V", "V", 'V'),
     HUK("B", "B", 'B'), HUK("N", "N", 'N'), HUK("M", "M", 'M'), HUK("Ü", "Ü", 1354),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
-// Single-layout variant: no globe key is needed. The visible proportions are
-// 1.5 / 5 / 1 / 1 / 1 / 1.5 on the doubled unit grid.
+// Single-layout variant: no globe key is needed.
 inline const fui::KeyboardKey BOTTOM[] = {
-    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUKS("123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
     HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
@@ -71,7 +70,7 @@ inline const fui::KeyboardKey BOTTOM[] = {
 // requested widths: 1.5 / 1 / 4 / 1 / 1 / 1 / 1.5 = 11 visual units.
 // Doubled because KeyboardKey::widthUnits is integer-only.
 inline const fui::KeyboardKey BOTTOM_LANG[] = {
-    HUKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUKS("123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
     HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
