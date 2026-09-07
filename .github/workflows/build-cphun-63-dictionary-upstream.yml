@@ -30,9 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           git remote add upstream https://github.com/crosspoint-reader/crosspoint-reader.git || true
-          git fetch upstream 57c692fe846984c7b9c9a12d427048aef79764e0 84fcff848c8b9a487338124ffc43abb6e52acf93 8cb0a39086414e26664ebeb5650ad1087b1f8c8a
-
-          # 57c692f touches only DictHtmlPages and should apply cleanly on the CPHUN base.
+          git fetch upstream 57c692fe846984c7b9c9a12d427048aef79764e0
           git cherry-pick --no-commit 57c692fe846984c7b9c9a12d427048aef79764e0
 
           python3 - <<'PY'
@@ -47,73 +45,59 @@ jobs:
                   raise SystemExit(f'{path}: missing patch anchor for {marker}')
               p.write_text(s.replace(old, new, 1))
 
-          # 84fcff8: release dictionary SD-font caches on exit.
-          patch_once(
-              'src/activities/reader/DictionaryDefinitionActivity.h',
-              '  void onEnter() override;\n  void loop() override;',
-              '  void onEnter() override;\n  void onExit() override;\n  void loop() override;',
-              'void onExit() override;')
+          patch_once('src/activities/reader/DictionaryDefinitionActivity.h',
+                     '  void onEnter() override;\n  void loop() override;',
+                     '  void onEnter() override;\n  void onExit() override;\n  void loop() override;',
+                     'void onExit() override;')
 
-          patch_once(
-              'src/activities/reader/DictionaryDefinitionActivity.cpp',
-              '  requestUpdate();\n}\n\nDictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {',
-              '  requestUpdate();\n}\n\nvoid DictionaryDefinitionActivity::onExit() {\n  Activity::onExit();\n  if (auto* fcm = renderer.getFontCacheManager()) {\n    fcm->releaseSdFontCaches();\n  }\n}\n\nDictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {',
-              'void DictionaryDefinitionActivity::onExit()')
+          patch_once('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                     '  requestUpdate();\n}\n\nDictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {',
+                     '  requestUpdate();\n}\n\nvoid DictionaryDefinitionActivity::onExit() {\n  Activity::onExit();\n  if (auto* fcm = renderer.getFontCacheManager()) {\n    fcm->releaseSdFontCaches();\n  }\n}\n\nDictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {',
+                     'void DictionaryDefinitionActivity::onExit()')
 
-          # Dictionary-only part of 8cb0a39: hold Left/Right for repeated word navigation.
           p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
           s = p.read_text()
           if 'WORD_REPEAT_START_MS' not in s:
-              s = s.replace(
-                  'constexpr unsigned long POPUP_DURATION_MS = 1500;\n',
-                  'constexpr unsigned long POPUP_DURATION_MS = 1500;\nconstexpr unsigned long WORD_REPEAT_START_MS = 500;\nconstexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;\n',
-                  1)
-              old = '''  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
-  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) && selected > 0) {
-    selected--;
-    requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) && hasNextWord) {
-    selected++;
-    requestUpdate();
-'''
-              new = '''  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
-  const unsigned long now = millis();
-  const bool repeat =
-      mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
-  const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
-                        (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
-  const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
-                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
-  if (moveLeft && selected > 0) {
-    selected--;
-    lastHorizontalMoveTime = now;
-    requestUpdate();
-  } else if (moveRight && hasNextWord) {
-    selected++;
-    lastHorizontalMoveTime = now;
-    requestUpdate();
-'''
+              s = s.replace('constexpr unsigned long POPUP_DURATION_MS = 1500;\n',
+                            'constexpr unsigned long POPUP_DURATION_MS = 1500;\nconstexpr unsigned long WORD_REPEAT_START_MS = 500;\nconstexpr unsigned long WORD_REPEAT_INTERVAL_MS = 500;\n', 1)
+              old = ('  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());\n'
+                     '  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) && selected > 0) {\n'
+                     '    selected--;\n'
+                     '    requestUpdate();\n'
+                     '  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) && hasNextWord) {\n'
+                     '    selected++;\n'
+                     '    requestUpdate();\n')
+              new = ('  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());\n'
+                     '  const unsigned long now = millis();\n'
+                     '  const bool repeat =\n'
+                     '      mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;\n'
+                     '  const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||\n'
+                     '                        (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));\n'
+                     '  const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||\n'
+                     '                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));\n'
+                     '  if (moveLeft && selected > 0) {\n'
+                     '    selected--;\n'
+                     '    lastHorizontalMoveTime = now;\n'
+                     '    requestUpdate();\n'
+                     '  } else if (moveRight && hasNextWord) {\n'
+                     '    selected++;\n'
+                     '    lastHorizontalMoveTime = now;\n'
+                     '    requestUpdate();\n')
               if old not in s:
                   raise SystemExit('DictionaryWordSelectActivity.cpp: missing horizontal navigation block')
-              s = s.replace(old, new, 1)
-              p.write_text(s)
+              p.write_text(s.replace(old, new, 1))
 
-          patch_once(
-              'src/activities/reader/DictionaryWordSelectActivity.h',
-              '  int selected = 0;\n  uint16_t rowCount = 0;\n',
-              '  int selected = 0;\n  uint16_t rowCount = 0;\n  unsigned long lastHorizontalMoveTime = 0;\n',
-              'lastHorizontalMoveTime = 0;')
+          patch_once('src/activities/reader/DictionaryWordSelectActivity.h',
+                     '  int selected = 0;\n  uint16_t rowCount = 0;\n',
+                     '  int selected = 0;\n  uint16_t rowCount = 0;\n  unsigned long lastHorizontalMoveTime = 0;\n',
+                     'lastHorizontalMoveTime = 0;')
 
-          # 5182d27 was already integrated in #59. Verify rather than duplicate it.
-          html = Path('src/util/HtmlToPlainText.cpp').read_text()
-          if 'std::isalnum' not in html:
+          if 'std::isalnum' not in Path('src/util/HtmlToPlainText.cpp').read_text():
               raise SystemExit('5182d27 regression: heading tag scan fix is missing')
 
-          Path('src/CPHUNBuildId.h').write_text(
-              '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260907-63"\n')
+          Path('src/CPHUNBuildId.h').write_text('#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260907-63"\n')
           PY
 
-          # Dictionary integration guards.
           grep -F 'MIN_STYLED_RETAIN_HEAP = 16 * 1024' src/util/DictHtmlPages.cpp
           grep -F 'MIN_STYLED_RETAIN_ALLOC = 8 * 1024' src/util/DictHtmlPages.cpp
           grep -F 'void DictionaryDefinitionActivity::onExit()' src/activities/reader/DictionaryDefinitionActivity.cpp
@@ -121,13 +105,9 @@ jobs:
           grep -F 'WORD_REPEAT_START_MS = 500' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -F 'lastHorizontalMoveTime = 0' src/activities/reader/DictionaryWordSelectActivity.h
           grep -F 'std::isalnum' src/util/HtmlToPlainText.cpp
-
-          # Preserve CPHUN dictionary/Hungarian custom behaviour.
           grep -F 'uppercaseHungarian' src/activities/reader/DictionaryDefinitionActivity.cpp
           grep -F 'Forrás:' src/activities/reader/DictionaryDefinitionActivity.cpp
           grep -F 'Hyphenator::breakOffsetsForLanguage(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
-
-          # Preserve #62R5 and prior physically validated regressions.
           grep -F 'hasHungarianNumericLeft' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -F 'AllowsNumericSuffixBreakAfterExistingHyphen' test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp
           grep -F 'props.rowHeight = 40;' src/activities/settings/TextSettingsActivity.cpp
@@ -174,12 +154,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/util/DictHtmlPages.cpp \
-                  src/activities/reader/DictionaryDefinitionActivity.cpp \
-                  src/activities/reader/DictionaryDefinitionActivity.h \
-                  src/activities/reader/DictionaryWordSelectActivity.cpp \
-                  src/activities/reader/DictionaryWordSelectActivity.h \
-                  src/CPHUNBuildId.h
+          git add src/util/DictHtmlPages.cpp src/activities/reader/DictionaryDefinitionActivity.cpp src/activities/reader/DictionaryDefinitionActivity.h src/activities/reader/DictionaryWordSelectActivity.cpp src/activities/reader/DictionaryWordSelectActivity.h src/CPHUNBuildId.h
           if ! git diff --cached --quiet; then
             git commit -m "CPHUN-63: integrate upstream dictionary fixes"
             git push origin HEAD:agent/cphun-63-dictionary-upstream
