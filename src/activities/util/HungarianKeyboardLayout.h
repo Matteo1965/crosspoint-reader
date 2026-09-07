@@ -14,21 +14,15 @@ namespace fui = freeink::ui;
 #define HUKS(label, kind, value, units) \
   fui::KeyboardKey { label, nullptr, kind, fui::StateNormal, value, units, true, nullptr }
 
-// CPHUN-69/70: the Hungarian keyboard deliberately carries no explicit `alt`
-// strings in its key tables. FreeInkUI draws every explicit alt as a small
-// corner hint, which is too dense on the X4 keyboard. Long-press output is
-// supplied separately by altOutputFor(), so functionality stays unchanged
-// while each key face shows only its primary label.
 inline const fui::KeyboardKey NUM_ROW[] = {
     HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'), HUK("4", "4", '4'),
     HUK("5", "5", '5'), HUK("6", "6", '6'), HUK("7", "7", '7'), HUK("8", "8", '8'),
     HUK("9", "9", '9'), HUK("0", "0", '0'), HUK("-", "-", '-')};
 
-// Main key labels are uppercase for readability, while normal-layer output
-// remains lowercase. Every ordinary character key uses the same width (2 units),
-// including the right-edge -, Ö and Á keys.
+// CPHUN-71: the W key keeps its position, width and output, but uses a
+// lowercase visual label so it fits the narrow X4 key face more comfortably.
 inline const fui::KeyboardKey ROW1[] = {
-    HUK("Q", "q", 'q'), HUK("W", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
+    HUK("Q", "q", 'q'), HUK("w", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
     HUK("T", "t", 't'), HUK("Z", "z", 'z'), HUK("U", "u", 'u'), HUK("I", "i", 'i'),
     HUK("O", "o", 'o'), HUK("P", "p", 'p'), HUK("Ö", "ö", 1303)};
 
@@ -44,7 +38,7 @@ inline const fui::KeyboardKey ROW3[] = {
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SHIFT_ROW1[] = {
-    HUK("Q", "Q", 'Q'), HUK("W", "W", 'W'), HUK("E", "E", 'E'), HUK("R", "R", 'R'),
+    HUK("w", "W", 'W'), HUK("Q", "Q", 'Q'), HUK("E", "E", 'E'), HUK("R", "R", 'R'),
     HUK("T", "T", 'T'), HUK("Z", "Z", 'Z'), HUK("U", "U", 'U'), HUK("I", "I", 'I'),
     HUK("O", "O", 'O'), HUK("P", "P", 'P'), HUK("Ö", "Ö", 1353)};
 
@@ -59,21 +53,20 @@ inline const fui::KeyboardKey SHIFT_ROW3[] = {
     HUK("B", "B", 'B'), HUK("N", "N", 'N'), HUK("M", "M", 'M'), HUK("Ü", "Ü", 1354),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
-// Single-layout variant: no globe key is needed.
+// Bottom row: Fn, language, ?, Space, comma, period, OK.
 inline const fui::KeyboardKey BOTTOM[] = {
-    HUKS("123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUKS("Fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUK("?", "?", '?'),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
-    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
+    HUK(",", ",", ','), HUK(".", ".", '.'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
-// Normal Hungarian configuration includes the language/globe key. Exact
-// requested widths: 1.5 / 1 / 4 / 1 / 1 / 1 / 1.5 = 11 visual units.
-// Doubled because KeyboardKey::widthUnits is integer-only.
 inline const fui::KeyboardKey BOTTOM_LANG[] = {
-    HUKS("123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
+    HUKS("Fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
+    HUK("?", "?", '?'),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
-    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("?", "?", '?'),
+    HUK(",", ",", ','), HUK(".", ".", '.'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
 inline const fui::KeyboardKey SYMBOL_ROW1[] = {
@@ -141,8 +134,6 @@ inline bool isShiftedLetterLayout(const fui::KeyboardLayout& current) {
   return &current == &SHIFT_LAYOUT || &current == &SHIFT_LAYOUT_LANG;
 }
 
-// Long-press behavior formerly stored in KeyboardKey::alt. Keeping it here
-// makes the secondary characters functional without drawing them on the keys.
 inline const char* altOutputFor(const fui::KeyboardLayout& current, const int16_t value) {
   if (!isHungarianLetterLayout(current)) return nullptr;
 
