@@ -48,18 +48,19 @@ jobs:
               r'\s*if \(!isExplicitHyphen\(cp\) \|\| !isAlphabetic\(cps\[i - 1\]\.value\) \|\|\s*'
               r'!isAlphabetic\(cps\[i \+ 1\]\.value\)\) \{\s*continue;\s*\}',
               re.MULTILINE)
-          new_guard = '''
-    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i + 1].value)) {
-      continue;
-    }
-    const bool hasAlphabeticLeft = isAlphabetic(cps[i - 1].value);
-    const bool hasHungarianNumericLeft =
-        allowHungarianNumericPrefix && !isSoftHyphen(cp) && isAsciiDigit(cps[i - 1].value);
-    if (!hasAlphabeticLeft && !hasHungarianNumericLeft) {
-      continue;
-    }'''
+          new_guard = '\n'.join([
+              '    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i + 1].value)) {',
+              '      continue;',
+              '    }',
+              '    const bool hasAlphabeticLeft = isAlphabetic(cps[i - 1].value);',
+              '    const bool hasHungarianNumericLeft =',
+              '        allowHungarianNumericPrefix && !isSoftHyphen(cp) && isAsciiDigit(cps[i - 1].value);',
+              '    if (!hasAlphabeticLeft && !hasHungarianNumericLeft) {',
+              '      continue;',
+              '    }',
+          ])
           if 'hasHungarianNumericLeft' not in s:
-              s, count = old_guard.subn(new_guard, s, count=1)
+              s, count = old_guard.subn('\n' + new_guard, s, count=1)
               if count != 1:
                   raise SystemExit(f'Explicit hyphen guard replacement count={count}')
 
@@ -76,29 +77,31 @@ jobs:
           t = test.read_text()
           marker = 'TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen)'
           if marker not in t:
-              t += r'''
-
-TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen) {
-  constexpr size_t kExpectedOffset = 5;  // "2007-|ben"
-
-  Hyphenator::setHungarianExtended(false);
-  const auto basicBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
-  EXPECT_FALSE(std::any_of(basicBreaks.begin(), basicBreaks.end(), [](const Hyphenator::BreakInfo& info) {
-    return info.byteOffset == kExpectedOffset;
-  }));
-
-  Hyphenator::setHungarianExtended(true);
-  const auto extendedBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
-  Hyphenator::setHungarianExtended(false);
-
-  const auto it = std::find_if(extendedBreaks.begin(), extendedBreaks.end(), [](const Hyphenator::BreakInfo& info) {
-    return info.byteOffset == kExpectedOffset;
-  });
-  ASSERT_NE(it, extendedBreaks.end());
-  EXPECT_FALSE(it->requiresInsertedHyphen);
-}
-'''
-              test.write_text(t)
+              test_lines = [
+                  '',
+                  '',
+                  'TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen) {',
+                  '  constexpr size_t kExpectedOffset = 5;  // "2007-|ben"',
+                  '',
+                  '  Hyphenator::setHungarianExtended(false);',
+                  '  const auto basicBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");',
+                  '  EXPECT_FALSE(std::any_of(basicBreaks.begin(), basicBreaks.end(), [](const Hyphenator::BreakInfo& info) {',
+                  '    return info.byteOffset == kExpectedOffset;',
+                  '  }));',
+                  '',
+                  '  Hyphenator::setHungarianExtended(true);',
+                  '  const auto extendedBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");',
+                  '  Hyphenator::setHungarianExtended(false);',
+                  '',
+                  '  const auto it = std::find_if(extendedBreaks.begin(), extendedBreaks.end(), [](const Hyphenator::BreakInfo& info) {',
+                  '    return info.byteOffset == kExpectedOffset;',
+                  '  });',
+                  '  ASSERT_NE(it, extendedBreaks.end());',
+                  '  EXPECT_FALSE(it->requiresInsertedHyphen);',
+                  '}',
+                  '',
+              ]
+              test.write_text(t + '\n'.join(test_lines))
 
           Path('src/CPHUNBuildId.h').write_text(
               '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260907-62R5"\n')
@@ -110,11 +113,9 @@ TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphe
           grep -F 'AllowsNumericSuffixBreakAfterExistingHyphen' test/hungarian_single_prefix/HungarianSinglePrefixTest.cpp
           grep -F '#define CPHUN_BUILD_ID "CPHUN-260907-62R5"' src/CPHUNBuildId.h
 
-          # Preserve the validated 40px Text Settings layout from #62R4.
           grep -F 'props.rowHeight = 40;' src/activities/settings/TextSettingsActivity.cpp
           grep -F 'syncTabListViewport(screen, props, false, 40);' src/activities/settings/TextSettingsActivity.cpp
 
-          # Preserve the validated X4 USB serial enumeration fix.
           python3 - <<'PY'
           from pathlib import Path
           s = Path('platformio.ini').read_text()
