@@ -107,3 +107,62 @@ TEST(HungarianSlashBreak, NumericHyphenRegressionRemainsValid) {
 
   Hyphenator::setHungarianExtended(false);
 }
+
+TEST(HungarianQuotedSuffix, ExtendedPreservesLiangBreaksBeforeClosingQuoteSuffix) {
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  const std::string plain = "tovább";
+  const auto plainBreaks = Hyphenator::breakOffsets(plain, false);
+  ASSERT_FALSE(plainBreaks.empty()) << "Expected Hungarian Liang breaks inside tovább";
+
+  const std::string quotedSuffix = "tovább”-hoz";
+  const auto quotedBreaks = Hyphenator::breakOffsets(quotedSuffix, false);
+  for (const auto& plainBreak : plainBreaks) {
+    const auto* quoted = findBreak(quotedBreaks, plainBreak.byteOffset);
+    ASSERT_NE(quoted, nullptr) << "Closing quote before -hoz blocked a Liang break inside tovább";
+    EXPECT_EQ(quoted->requiresInsertedHyphen, plainBreak.requiresInsertedHyphen);
+    EXPECT_EQ(quoted->replacement, plainBreak.replacement);
+  }
+
+  Hyphenator::setHungarianExtended(false);
+}
+
+TEST(HungarianQuotedSuffix, ExtendedKeepsVisibleSuffixHyphenBreak) {
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  const std::string word = "tovább”-hoz";
+  const size_t suffixBoundary = std::string("tovább”-").size();
+  const auto breaks = Hyphenator::breakOffsets(word, false);
+  const auto* info = findBreak(breaks, suffixBoundary);
+  ASSERT_NE(info, nullptr) << "Expected a legal break after the existing suffix hyphen";
+  EXPECT_FALSE(info->requiresInsertedHyphen) << "Existing suffix hyphen must not insert another hyphen";
+
+  Hyphenator::setHungarianExtended(false);
+}
+
+TEST(HungarianQuotedSuffix, BasicDoesNotEnableQuotedSuffixNormalization) {
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(false);
+
+  const std::string plain = "tovább";
+  const auto plainBreaks = Hyphenator::breakOffsets(plain, false);
+  ASSERT_FALSE(plainBreaks.empty());
+
+  const auto quotedBreaks = Hyphenator::breakOffsets("tovább”-hoz", false);
+  for (const auto& plainBreak : plainBreaks) {
+    EXPECT_EQ(findBreak(quotedBreaks, plainBreak.byteOffset), nullptr)
+        << "Basic Hungarian mode unexpectedly enabled quoted-suffix normalization";
+  }
+}
+
+TEST(HungarianQuotedSuffix, OtherLanguagesDoNotEnableQuotedSuffixNormalization) {
+  Hyphenator::setPreferredLanguage("en");
+  Hyphenator::setHungarianExtended(true);
+
+  const auto breaks = Hyphenator::breakOffsets("tovább”-hoz", false);
+  EXPECT_TRUE(breaks.empty()) << "Quoted-suffix normalization must remain Hungarian-Extended-only";
+
+  Hyphenator::setHungarianExtended(false);
+}
