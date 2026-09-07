@@ -17,10 +17,6 @@ bool Hyphenator::softHyphenEnabled_ = false;
 
 namespace {
 
-// Normalize ISO 639-2 (three-letter) codes to ISO 639-1 (two-letter) codes used by the
-// hyphenation registry.  EPUBs may use either form in their dc:language metadata (e.g.
-// "eng" instead of "en").  Both the bibliographic ("fre"/"ger") and terminological
-// ("fra"/"deu") ISO 639-2 variants are mapped.
 struct Iso639Mapping {
   const char* iso639_2;
   const char* iso639_1;
@@ -29,11 +25,9 @@ static constexpr Iso639Mapping kIso639Mappings[] = {{"eng", "en"}, {"fra", "fr"}
                                                     {"ger", "de"}, {"rus", "ru"}, {"spa", "es"}, {"ita", "it"},
                                                     {"ukr", "uk"}, {"swe", "sv"}, {"fin", "fi"}, {"hun", "hu"}};
 
-// Maps a BCP-47 or ISO 639-2 language tag to a language-specific hyphenator.
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   if (langTag.empty()) return nullptr;
 
-  // Extract primary subtag and normalize to lowercase (e.g., "en-US" -> "en", "ENG" -> "en").
   std::string primary;
   primary.reserve(langTag.size());
   for (char c : langTag) {
@@ -43,7 +37,6 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   }
   if (primary.empty()) return nullptr;
 
-  // Normalize ISO 639-2 three-letter codes to two-letter equivalents.
   for (const auto& mapping : kIso639Mappings) {
     if (primary == mapping.iso639_2) {
       primary = mapping.iso639_1;
@@ -54,7 +47,6 @@ const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
   return getLanguageHyphenatorForPrimaryTag(primary);
 }
 
-// Maps a codepoint index back to its byte offset inside the source word.
 size_t byteOffsetForIndex(const std::vector<CodepointInfo>& cps, const size_t index) {
   return (index < cps.size()) ? cps[index].byteOffset : (cps.empty() ? 0 : cps.back().byteOffset);
 }
@@ -82,17 +74,6 @@ void normalizeHungarianProcessingCodepoints(std::vector<CodepointInfo>& cps) {
   }
 }
 
-// Builds a vector of break information from explicit hyphen markers in the given codepoints.
-// Only hyphens that appear between two alphabetic characters are considered valid breaks.
-//
-// Example: "US-Satellitensystems" (cps: U, S, -, S, a, t, ...)
-//   -> finds '-' at index 2 with alphabetic neighbors 'S' and 'S'
-//   -> returns one BreakInfo at the byte offset of 'S' (the char after '-'),
-//      with requiresInsertedHyphen=false because '-' is already visible.
-//
-// Example: "Satel\u00ADliten" (soft-hyphen between 'l' and 'l')
-//   -> returns one BreakInfo with requiresInsertedHyphen=true (soft-hyphen
-//      is invisible and needs a visible '-' when the break is used).
 std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps,
                                                             const bool allowHungarianNumericPrefix) {
   std::vector<Hyphenator::BreakInfo> breaks;
@@ -108,22 +89,24 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
     if (!hasAlphabeticLeft && !hasHungarianNumericLeft) {
       continue;
     }
-    // Offset points to the next codepoint so rendering starts after the hyphen marker.
     breaks.push_back({cps[i + 1].byteOffset, isSoftHyphen(cp)});
   }
 
   return breaks;
 }
 
-bool isSegmentSeparator(const uint32_t cp) { return isExplicitHyphen(cp) || isApostrophe(cp); }
+bool isSegmentSeparator(const uint32_t cp, const bool includeHungarianSlash = false) {
+  return isExplicitHyphen(cp) || isApostrophe(cp) || (includeHungarianSlash && cp == '/');
+}
 
 void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const LanguageHyphenator& hyphenator,
-                                const bool includeFallback, std::vector<Hyphenator::BreakInfo>& outBreaks) {
+                                const bool includeFallback, const bool includeHungarianSlash,
+                                std::vector<Hyphenator::BreakInfo>& outBreaks) {
   size_t segStart = 0;
 
   for (size_t i = 0; i <= cps.size(); ++i) {
     const bool atEnd = i == cps.size();
-    const bool atSeparator = !atEnd && isSegmentSeparator(cps[i].value);
+    const bool atSeparator = !atEnd && isSegmentSeparator(cps[i].value, includeHungarianSlash);
     if (!atEnd && !atSeparator) {
       continue;
     }
@@ -154,6 +137,17 @@ void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const Lan
   }
 }
 
+void appendHungarianSlashBreaks(const std::vector<CodepointInfo>& cps,
+                                std::vector<Hyphenator::BreakInfo>& outBreaks) {
+  for (size_t i = 1; i + 1 < cps.size(); ++i) {
+    if (cps[i].value != '/' || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
+      continue;
+    }
+    // The slash is already visible, so a line break after it must not insert '-'.
+    outBreaks.push_back({cps[i + 1].byteOffset, false});
+  }
+}
+
 void appendApostropheContractionBreaks(const std::vector<CodepointInfo>& cps,
                                        std::vector<Hyphenator::BreakInfo>& outBreaks) {
   constexpr size_t kMinLeftSegmentLen = 3;
@@ -178,7 +172,6 @@ void appendApostropheContractionBreaks(const std::vector<CodepointInfo>& cps,
           }
         }
 
-        // Avoid stranding short clitics like "l'"/"d'" or contraction tails like "'ve"/"'re"/"'ll".
         if (leftPrefixLen >= kMinLeftSegmentLen && rightSuffixLen >= kMinRightSegmentLen) {
           outBreaks.push_back({cps[i + 1].byteOffset, false});
         }
@@ -240,9 +233,6 @@ struct HungarianCompoundStemRule {
   const char32_t* rightStem;
 };
 
-// Hungarian compound boundaries cannot be inferred safely from compact doubled
-// digraph spellings alone (e.g. meggy is a genuine doubled gy). These stem pairs
-// cover verified compound families while allowing inflected/derived right parts.
 static constexpr HungarianCompoundStemRule kHungarianCompoundStemRules[] = {
     {U"meg", U"gyull"},       {U"meg", U"gyón"},         {U"meg", U"győz"},
     {U"meg", U"gyaláz"},      {U"kis", U"szék"},         {U"kis", U"szoba"},
@@ -296,9 +286,6 @@ void appendHungarianCompoundBoundaryBreaks(const std::vector<CodepointInfo>& cps
   }
 }
 
-// Returns the number of Unicode codepoints occupied by one Hungarian consonant
-// grapheme starting at `start`. Multi-letter consonants (cs, dz, dzs, gy, ly,
-// ny, sz, ty, zs) count as one phonological consonant for syllable boundaries.
 size_t hungarianConsonantGraphemeLength(const std::vector<CodepointInfo>& cps, const size_t start) {
   if (start >= cps.size()) return 0;
   const uint32_t first = asciiLower(cps[start].value);
@@ -317,11 +304,6 @@ size_t hungarianConsonantGraphemeLength(const std::vector<CodepointInfo>& cps, c
   return 1;
 }
 
-// huhyphn intentionally suppresses one-letter edge syllables for traditional
-// print typography. On a narrow e-reader, an explicit 1/x minimum means the user
-// opted into those legal breaks. Restore only the safe V-C-V case, treating
-// Hungarian digraphs/trigraphs as one consonant. Examples: a-lak, o-lyan,
-// u-gyan, A-nyámnak. Counterexamples such as em-ber, ab-lak and asz-tal stay blocked.
 void appendHungarianSingleLetterPrefixBreak(const std::vector<CodepointInfo>& cps,
                                              const LanguageHyphenator& hyphenator,
                                              std::vector<Hyphenator::BreakInfo>& outBreaks) {
@@ -337,10 +319,6 @@ void appendHungarianSingleLetterPrefixBreak(const std::vector<CodepointInfo>& cp
   outBreaks.push_back({byteOffsetForIndex(cps, 1), true});
 }
 
-// Extended Hungarian replacement hyphenation may add a special break only
-// when the compact doubled multi-letter consonant is directly surrounded by
-// Hungarian vowels. This keeps real cases such as asszony -> asz-szony while
-// rejecting compound-boundary false positives such as rosszfiúi -> rosz-szfiúi.
 void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
                                    std::vector<Hyphenator::BreakInfo>& outBreaks) {
   struct Rule {
@@ -368,18 +346,12 @@ void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
       }
       if (!matches) continue;
 
-      // The doubled consonant must be directly between vowels. This excludes
-      // rosszfiúi (ssz followed by f) and gally (lly at the end), while allowing
-      // asszony, asszonnyal, hosszú, mennyi, meccsen and gallyak.
       if (i == 0 || i + rule.length >= cps.size()) continue;
       if (!isHungarianVowel(cps[i - 1].value) || !isHungarianVowel(cps[i + rule.length].value)) continue;
 
       const size_t split = i + 1;
       if (split == 0 || split >= cps.size()) continue;
-      // A verified compound boundary at the same compact spelling is a normal
-      // hyphenation point, not a doubled-digraph replacement break.
       if (isHungarianCompoundBoundary(cps, split) || isInsideHungarianCompoundLeft(cps, split)) continue;
-      // Secondary readability guard: both rendered word parts must contain a vowel.
       if (!hasHungarianVowel(cps, 0, split) || !hasHungarianVowel(cps, split, cps.size())) continue;
       outBreaks.push_back({byteOffsetForIndex(cps, split), true, rule.replacement});
     }
@@ -409,8 +381,6 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     return {};
   }
 
-  // Convert to codepoints. Hungarian legacy accents are normalized only in
-  // this processing copy; the original UTF-8 word remains untouched for rendering.
   auto cps = collectCodepoints(word);
   if (!softHyphenEnabled_) {
     cps.erase(std::remove_if(cps.begin(), cps.end(), [](const CodepointInfo& cp) { return isSoftHyphen(cp.value); }), cps.end());
@@ -422,71 +392,55 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   const auto* hyphenator = cachedHyphenator_;
   const bool useHungarianExtended = hungarianExtended_ && preferredLanguageIsHungarian_;
 
-  // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;
+  bool hasHungarianSlashSeparator = false;
   for (const auto& cp : cps) {
     if (isApostrophe(cp.value)) {
       hasApostropheLikeSeparator = true;
-      break;
+    }
+    if (useHungarianExtended && cp.value == '/') {
+      hasHungarianSlashSeparator = true;
     }
   }
 
-  // Explicit hyphen markers (soft or hard) take precedence over language breaks.
   auto explicitBreakInfos = buildExplicitBreakInfos(cps, useHungarianExtended);
   if (!explicitBreakInfos.empty()) {
-    // When a word contains explicit hyphens we also run Liang patterns on each alphabetic
-    // segment between them. Without this, "US-Satellitensystems" would only offer one split
-    // point (after "US-"), making it impossible to break mid-"Satellitensystems" even when
-    // "US-Satelliten-" would fit on the line.
-    //
-    // Example: "US-Satellitensystems"
-    //   Segments: ["US", "Satellitensystems"]
-    //   Explicit break: after "US-"           -> @3  (no inserted hyphen)
-    //   Pattern breaks on "Satellitensystems" -> @5  Sa|tel  (+hyphen)
-    //                                            @8  Satel|li  (+hyphen)
-    //                                            @10 Satelli|ten  (+hyphen)
-    //                                            @13 Satelliten|sys  (+hyphen)
-    //                                            @16 Satellitensys|tems  (+hyphen)
-    //   Result: 6 sorted break points; the line-breaker picks the widest prefix that fits.
     if (hyphenator) {
-      appendSegmentPatternBreaks(cps, *hyphenator, /*includeFallback=*/false, explicitBreakInfos);
+      appendSegmentPatternBreaks(cps, *hyphenator, /*includeFallback=*/false, useHungarianExtended,
+                                 explicitBreakInfos);
     }
-    // Also add apostrophe contraction breaks when present (e.g. "l'état-major"
-    // has both an explicit hyphen and an apostrophe that can independently break).
     if (hasApostropheLikeSeparator) {
       appendApostropheContractionBreaks(cps, explicitBreakInfos);
     }
     if (useHungarianExtended) {
+      appendHungarianSlashBreaks(cps, explicitBreakInfos);
       appendHungarianExtendedBreaks(cps, explicitBreakInfos);
     }
     sortAndDedupeBreakInfos(explicitBreakInfos);
     return explicitBreakInfos;
   }
 
-  // Apostrophe-like separators split compounds into alphabetic segments; run Liang on each segment.
-  // This allows words like "all'improvviso" to hyphenate within "improvviso" instead of becoming
-  // completely unsplittable due to the apostrophe punctuation. Apostrophe contraction breaks are
-  // applied regardless of whether a language hyphenator is available.
-  if (hasApostropheLikeSeparator) {
+  if (hasApostropheLikeSeparator || hasHungarianSlashSeparator) {
     std::vector<BreakInfo> segmentedBreaks;
     if (hyphenator) {
-      appendSegmentPatternBreaks(cps, *hyphenator, includeFallback, segmentedBreaks);
+      appendSegmentPatternBreaks(cps, *hyphenator, includeFallback, useHungarianExtended, segmentedBreaks);
     }
-    appendApostropheContractionBreaks(cps, segmentedBreaks);
+    if (hasApostropheLikeSeparator) {
+      appendApostropheContractionBreaks(cps, segmentedBreaks);
+    }
     if (useHungarianExtended) {
+      appendHungarianSlashBreaks(cps, segmentedBreaks);
       appendHungarianExtendedBreaks(cps, segmentedBreaks);
     }
     sortAndDedupeBreakInfos(segmentedBreaks);
     return segmentedBreaks;
   }
 
-  // Ask language hyphenator for legal break points.
   std::vector<size_t> indexes;
   if (hyphenator) {
     indexes = hyphenator->breakIndexes(cps);
   }
 
-  // Only add fallback breaks if needed.
   if (includeFallback && indexes.empty()) {
     const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
     const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
@@ -510,9 +464,6 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
 
   breaks.reserve(breaks.size() + indexes.size());
   for (const size_t idx : indexes) {
-    // CJK characters can break without inserting a visible hyphen.
-    // Check the codepoint at the break position: if it's a CJK character,
-    // no hyphen is needed since CJK scripts don't use hyphenation.
     bool needsHyphen = true;
     if (idx < cps.size() && utf8IsCjkBreakable(cps[idx].value)) {
       needsHyphen = false;
