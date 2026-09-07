@@ -35,3 +35,24 @@ TEST(HungarianSinglePrefix, RejectsNonSingletonFirstSyllables) {
     EXPECT_FALSE(hasBreakAfterFirstCodepoint(word)) << word;
   }
 }
+
+
+TEST(HungarianExtendedExplicitHyphen, AllowsNumericSuffixBreakAfterExistingHyphen) {
+  constexpr size_t kExpectedOffset = 5;  // "2007-|ben"
+
+  Hyphenator::setHungarianExtended(false);
+  const auto basicBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
+  EXPECT_FALSE(std::any_of(basicBreaks.begin(), basicBreaks.end(), [](const Hyphenator::BreakInfo& info) {
+    return info.byteOffset == kExpectedOffset;
+  }));
+
+  Hyphenator::setHungarianExtended(true);
+  const auto extendedBreaks = Hyphenator::breakOffsetsForLanguage("2007-ben", false, "hu");
+  Hyphenator::setHungarianExtended(false);
+
+  const auto it = std::find_if(extendedBreaks.begin(), extendedBreaks.end(), [](const Hyphenator::BreakInfo& info) {
+    return info.byteOffset == kExpectedOffset;
+  });
+  ASSERT_NE(it, extendedBreaks.end());
+  EXPECT_FALSE(it->requiresInsertedHyphen);
+}

@@ -93,12 +93,19 @@ void normalizeHungarianProcessingCodepoints(std::vector<CodepointInfo>& cps) {
 // Example: "Satel\u00ADliten" (soft-hyphen between 'l' and 'l')
 //   -> returns one BreakInfo with requiresInsertedHyphen=true (soft-hyphen
 //      is invisible and needs a visible '-' when the break is used).
-std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps) {
+std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<CodepointInfo>& cps,
+                                                            const bool allowHungarianNumericPrefix) {
   std::vector<Hyphenator::BreakInfo> breaks;
 
   for (size_t i = 1; i + 1 < cps.size(); ++i) {
     const uint32_t cp = cps[i].value;
-    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i - 1].value) || !isAlphabetic(cps[i + 1].value)) {
+    if (!isExplicitHyphen(cp) || !isAlphabetic(cps[i + 1].value)) {
+      continue;
+    }
+    const bool hasAlphabeticLeft = isAlphabetic(cps[i - 1].value);
+    const bool hasHungarianNumericLeft =
+        allowHungarianNumericPrefix && !isSoftHyphen(cp) && isAsciiDigit(cps[i - 1].value);
+    if (!hasAlphabeticLeft && !hasHungarianNumericLeft) {
       continue;
     }
     // Offset points to the next codepoint so rendering starts after the hyphen marker.
@@ -425,7 +432,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   }
 
   // Explicit hyphen markers (soft or hard) take precedence over language breaks.
-  auto explicitBreakInfos = buildExplicitBreakInfos(cps);
+  auto explicitBreakInfos = buildExplicitBreakInfos(cps, useHungarianExtended);
   if (!explicitBreakInfos.empty()) {
     // When a word contains explicit hyphens we also run Liang patterns on each alphabetic
     // segment between them. Without this, "US-Satellitensystems" would only offer one split
