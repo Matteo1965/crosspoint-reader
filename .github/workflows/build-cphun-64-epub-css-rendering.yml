@@ -3,7 +3,9 @@ name: Build CPHUN-64 EPUB CSS Rendering
 on:
   push:
     branches: [agent/cphun-64-epub-css-rendering]
-    paths: ['.github/workflows/build-cphun-64-epub-css-rendering.yml']
+    paths:
+      - '.github/workflows/build-cphun-64-epub-css-rendering.yml'
+      - '.github/scripts/cphun64_integrate.sh'
   workflow_dispatch:
 
 permissions:
