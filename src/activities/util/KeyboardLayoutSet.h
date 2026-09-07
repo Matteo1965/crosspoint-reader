@@ -63,7 +63,16 @@ inline const KeyboardLayout& builtinKeyboardLayoutCphun(const KeyboardLayoutId i
   }
   return builtinKeyboardLayout(id, shifted, symbols, numberRow, langKey);
 }
+
+// CPHUN-69: FreeInkUI renders KeyboardKey::alt as a corner hint. Hungarian
+// keeps those fields empty and resolves the same long-press outputs here, so
+// the key faces stay uncluttered without losing Ő/Ű/Í/Ó/Ú or number-row alts.
+inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const int16_t value) {
+  if (const char* huAlt = keyboard_layouts::hu_keyboard::altOutputFor(layout, value)) return huAlt;
+  return keyboardAltOutputFor(layout, value);
+}
 }  // namespace ui
 }  // namespace freeink
 
 #define builtinKeyboardLayout builtinKeyboardLayoutCphun
+#define keyboardAltOutputFor keyboardAltOutputForCphun
