@@ -72,10 +72,10 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-73: on the Hungarian letter layers, keep FreeInkUI's exact keyboard
-// behavior but move each row's integer-division remainder from the last key to
-// the second key. This gives W and S the few spare pixels symmetrically around
-// their centered labels, while Ö and Á return to the normal key width.
+// CPHUN-73/74: on the Hungarian letter layers, keep FreeInkUI's exact keyboard
+// behavior but move each row's integer-division remainder away from the final
+// key. Row 1 gives it to W; row 2 gives it to A. Ö and Á therefore keep the
+// normal key width, while the requested optical spacing is preserved.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
@@ -186,14 +186,14 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const int16_t rowRight = static_cast<int16_t>(rect.right() - layoutRow.insetUnits * unitW);
     const int16_t remainder = static_cast<int16_t>(rowRight - x - gap * (layoutRow.count - 1) -
                                                    unitW * keyUnitsTotal);
-    const bool rebalanceToSecondKey = row == 1 || row == 2;
+    const int8_t remainderTargetCol = row == 1 ? 1 : (row == 2 ? 0 : -1);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
       const uint8_t keyUnits = key.widthUnits ? key.widthUnits : 1;
       int16_t w = static_cast<int16_t>(unitW * keyUnits);
-      if (rebalanceToSecondKey) {
-        if (col == 1) w = static_cast<int16_t>(w + remainder);
+      if (remainderTargetCol >= 0) {
+        if (col == static_cast<uint8_t>(remainderTargetCol)) w = static_cast<int16_t>(w + remainder);
       } else if (col == layoutRow.count - 1) {
         w = static_cast<int16_t>(rowRight - x);
       }
