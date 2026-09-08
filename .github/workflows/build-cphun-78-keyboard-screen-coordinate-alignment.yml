@@ -1,0 +1,63 @@
+name: Build CPHUN-78 Keyboard Screen Coordinate Alignment
+
+on:
+  push:
+    branches: [agent/cphun-78-keyboard-screen-coordinate-alignment]
+    paths:
+      - '.github/workflows/build-cphun-78-keyboard-screen-coordinate-alignment.yml'
+      - 'src/activities/util/HungarianShiftIconClean.h'
+      - 'src/activities/util/HungarianKeyboardIcons.h'
+      - 'src/activities/util/HungarianKeyboardLayout.h'
+      - 'src/activities/util/KeyboardLayoutSet.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-78-keyboard-screen-coordinate-alignment
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check diff whitespace
+        run: git diff --check origin/agent/cphun-77-hungarian-keyboard-fixed-widths...HEAD
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-78 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload CPHUN-78 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260908-78-Keyboard-Screen-Coordinate-Alignment-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
