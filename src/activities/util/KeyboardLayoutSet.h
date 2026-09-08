@@ -14,14 +14,9 @@ struct LayoutInfo {
   Language language;
 };
 
-// The SDK currently defines ids 0..8. Keep Hungarian app-local until FreeInk
-// grows an upstream Hungarian id; the proxy below intercepts it before the SDK
-// switch sees it.
 inline constexpr freeink::ui::KeyboardLayoutId HUNGARIAN_ID =
     static_cast<freeink::ui::KeyboardLayoutId>(9);
 
-// Table position is the persisted bit assignment. Keep existing rows in place
-// and append new layouts so SDK enum changes cannot reinterpret saved masks.
 inline constexpr LayoutInfo ALL[] = {
     {freeink::ui::KeyboardLayoutId::QwertyEn, Language::EN},
     {freeink::ui::KeyboardLayoutId::AzertyFr, Language::FR},
@@ -38,8 +33,6 @@ inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
 static_assert(COUNT <= 16, "keyboard layout mask is uint16_t");
 
 inline constexpr uint16_t bitAt(const uint8_t i) { return static_cast<uint16_t>(1u << i); }
-// Symbol layers have no Latin letters, so credentials and URLs require at
-// least one of these layouts to remain enabled.
 inline constexpr uint16_t LATIN_BITS = bitAt(0) | bitAt(1) | bitAt(2) | bitAt(3) | bitAt(9);
 
 uint16_t enabled();
@@ -48,44 +41,49 @@ freeink::ui::KeyboardLayoutId next(freeink::ui::KeyboardLayoutId current);
 
 }  // namespace keyboard_layouts
 
-// CrossPoint uses FreeInkUI's public data-driven KeyboardLayout API for the
-// Hungarian tables. Redirect only calls made after this header is included;
-// all SDK declarations have already been parsed, and all ordinary ids still
-// delegate to the unmodified SDK implementation.
 namespace freeink {
 namespace ui {
 inline const KeyboardLayout& builtinKeyboardLayoutCphun(const KeyboardLayoutId id, const bool shifted = false,
                                                         const bool symbols = false, const bool numberRow = false,
                                                         const bool langKey = false) {
   if (id == keyboard_layouts::HUNGARIAN_ID) {
-    (void)numberRow;  // Hungarian's approved layout always carries its 11-key number row.
+    (void)numberRow;
     return keyboard_layouts::hu_keyboard::layout(shifted, symbols, langKey);
   }
   return builtinKeyboardLayout(id, shifted, symbols, numberRow, langKey);
 }
 
-// CPHUN-69: FreeInkUI renders KeyboardKey::alt as a corner hint. Hungarian
-// keeps those fields empty and resolves the same long-press outputs here, so
-// the key faces stay uncluttered without losing Ő/Ű/Í/Ó/Ú or number-row alts.
 inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const int16_t value) {
   if (const char* huAlt = keyboard_layouts::hu_keyboard::altOutputFor(layout, value)) return huAlt;
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-73/74: on the Hungarian letter layers, keep FreeInkUI's exact keyboard
-// behavior but move each row's integer-division remainder away from the final
-// key. Row 1 gives it to W; row 2 gives it to A. Ö and Á therefore keep the
-// normal key width, while the requested optical spacing is preserved.
+// CPHUN-75 X4 trial: expand only Hungarian keyboard rendering from the theme's
+// 451 px band to exactly 462 px (9 px margins on a 480 px panel). The 22-unit
+// letter/number rows then divide exactly: 21 px/unit, 42 px/ordinary key.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
-  if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
+  if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
+    keyboard(frame, rect, props);
+    return;
+  }
+
+  if (rect.width >= 440 && rect.width < 462) {
+    const int16_t extra = static_cast<int16_t>(462 - rect.width);
+    rect.x = static_cast<int16_t>(rect.x - extra / 2);
+    rect.width = 462;
+  }
+
+  // Symbol pages keep their established FreeInkUI rendering; only their outer
+  // Hungarian keyboard band follows the 462 px trial width.
+  if (!keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
     keyboard(frame, rect, props);
     return;
   }
 
   KeyboardProps huProps = props;
-  huProps.shiftLabel = "Sh";
-  huProps.modeLabel = "Fn";
+  huProps.shiftLabel = nullptr;
+  huProps.modeLabel = "fn";
 
   if (!huProps.layout->rows || huProps.layout->rowCount == 0) return;
   StyleSet styles = huProps.keyStyles.unset() ? defaultButtonStyles() : huProps.keyStyles;
@@ -116,11 +114,11 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     if (!key.enabled || key.kind == KeyKind::Disabled) state |= StateDisabled;
     const ActionId action = actionFor(key.kind);
     ButtonProps bp;
-    bp.label = (key.kind == KeyKind::Space || key.kind == KeyKind::Delete || key.kind == KeyKind::Lang)
+    bp.label = (key.kind == KeyKind::Space || key.kind == KeyKind::Delete || key.kind == KeyKind::Lang ||
+                key.kind == KeyKind::Shift)
                    ? nullptr
                    : key.label;
     if (key.kind == KeyKind::Ok && huProps.okLabel) bp.label = huProps.okLabel;
-    if (key.kind == KeyKind::Shift && huProps.shiftLabel) bp.label = huProps.shiftLabel;
     if (key.kind == KeyKind::Mode && huProps.modeLabel) bp.label = huProps.modeLabel;
     bp.action = action;
     bp.value = key.value;
@@ -134,8 +132,22 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     bp.enabled = key.enabled && key.kind != KeyKind::Disabled;
     button(frame, keyRect, bp);
 
+    const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
+
+    if (key.kind == KeyKind::Shift) {
+      // Compact Shift glyph: upward arrow, drawn as geometry so it matches the
+      // existing Delete/Space glyph-art approach and needs no font character.
+      const int16_t cx = static_cast<int16_t>(keyRect.x + keyRect.width / 2);
+      const int16_t cy = static_cast<int16_t>(keyRect.y + keyRect.height / 2);
+      frame.target().line(Point{cx, static_cast<int16_t>(cy + 8)}, Point{cx, static_cast<int16_t>(cy - 6)}, 2, ink);
+      frame.target().line(Point{cx, static_cast<int16_t>(cy - 6)},
+                          Point{static_cast<int16_t>(cx - 6), cy}, 2, ink);
+      frame.target().line(Point{cx, static_cast<int16_t>(cy - 6)},
+                          Point{static_cast<int16_t>(cx + 6), cy}, 2, ink);
+      return;
+    }
+
     if (key.kind == KeyKind::Delete || key.kind == KeyKind::Lang) {
-      const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
       const int16_t lh = frame.target().lineHeight(keyText.font);
       const int16_t desired = static_cast<int16_t>(lh + lh / 8);
       int16_t iconSize = static_cast<int16_t>(((desired + 8) / 16) * 16);
@@ -152,7 +164,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
       TextStyle altStyle = huProps.altText;
       altStyle.align = TextAlign::Right;
       altStyle.maxLines = 1;
-      altStyle.color = styles.resolve(frame.stateFor(action, key.value, state)).foreground.color;
+      altStyle.color = ink.color;
       const int16_t altLh = frame.target().lineHeight(altStyle.font);
       frame.target().text(Rect{static_cast<int16_t>(keyRect.x + 2), static_cast<int16_t>(keyRect.y + 2),
                                static_cast<int16_t>(keyRect.width - 3), altLh},
@@ -161,12 +173,11 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     }
 
     if (key.kind != KeyKind::Space) return;
-    const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
-    const int16_t cx = static_cast<int16_t>(keyRect.x + keyRect.width / 2);
-    const int16_t cy = static_cast<int16_t>(keyRect.y + keyRect.height / 2);
-    const int16_t half = static_cast<int16_t>(keyRect.width * 9 / 20);
-    frame.target().line(Point{static_cast<int16_t>(cx - half), static_cast<int16_t>(cy + 3)},
-                        Point{static_cast<int16_t>(cx + half), static_cast<int16_t>(cy + 3)}, 3, ink);
+    // 11 px high, 2 px outline rounded Space glyph, centered in the full key.
+    const int16_t glyphW = static_cast<int16_t>(keyRect.width * 4 / 5);
+    const Rect glyph{static_cast<int16_t>(keyRect.x + (keyRect.width - glyphW) / 2),
+                     static_cast<int16_t>(keyRect.y + (keyRect.height - 11) / 2), glyphW, 11};
+    frame.target().stroke(glyph, ink, 2, 5);
   };
 
   for (uint8_t row = 0; row < huProps.layout->rowCount; ++row) {
@@ -174,29 +185,19 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     if (!layoutRow.keys || layoutRow.count == 0) continue;
     rowHitOverflow = row == huProps.layout->rowCount - 1 ? huProps.bottomHitOverflow : 0;
     uint16_t units = static_cast<uint16_t>(layoutRow.insetUnits * 2);
-    uint16_t keyUnitsTotal = 0;
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
-      const uint8_t keyUnits = layoutRow.keys[col].widthUnits ? layoutRow.keys[col].widthUnits : 1;
-      keyUnitsTotal = static_cast<uint16_t>(keyUnitsTotal + keyUnits);
-      units = static_cast<uint16_t>(units + keyUnits);
+      units = static_cast<uint16_t>(units + (layoutRow.keys[col].widthUnits ? layoutRow.keys[col].widthUnits : 1));
     }
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
     int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW);
     const int16_t rowRight = static_cast<int16_t>(rect.right() - layoutRow.insetUnits * unitW);
-    const int16_t remainder = static_cast<int16_t>(rowRight - x - gap * (layoutRow.count - 1) -
-                                                   unitW * keyUnitsTotal);
-    const int8_t remainderTargetCol = row == 1 ? 1 : (row == 2 ? 0 : -1);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
       const uint8_t keyUnits = key.widthUnits ? key.widthUnits : 1;
-      int16_t w = static_cast<int16_t>(unitW * keyUnits);
-      if (remainderTargetCol >= 0) {
-        if (col == static_cast<uint8_t>(remainderTargetCol)) w = static_cast<int16_t>(w + remainder);
-      } else if (col == layoutRow.count - 1) {
-        w = static_cast<int16_t>(rowRight - x);
-      }
+      const int16_t w = col == layoutRow.count - 1 ? static_cast<int16_t>(rowRight - x)
+                                                   : static_cast<int16_t>(unitW * keyUnits);
       drawKey(Rect{x, y, w, rowH}, key, logicalIndex++);
       x = static_cast<int16_t>(x + w + gap);
     }
