@@ -1,0 +1,71 @@
+name: Build CPHUN-81 Version Info + 48x36 Icons
+
+on:
+  push:
+    branches: [agent/cphun-81-version-info-icons48]
+    paths:
+      - '.github/workflows/build-cphun-81-version-info-icons48.yml'
+      - 'src/CPHUNBuildId.h'
+      - 'src/activities/settings/CrossPointVersionActivity.cpp'
+      - 'src/activities/util/HungarianKeyboardIcons.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-81-version-info-icons48
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check CPHUN-81 scope and whitespace
+        run: |
+          git diff --check origin/agent/cphun-80-keyboard-top-three-plus5...HEAD
+          test "$(grep -c 'screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0))' src/activities/util/KeyboardLayoutSet.h)" -eq 1
+          grep -q 'CPHUN-260908-81' src/CPHUNBuildId.h
+          grep -q 'constexpr int PAGE_COUNT = 5' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Újdonságok és javítások' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Beágyazott elválasztás (Soft hyphen)' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'Optikai margó (Hanging punctuation)' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'SHIFT_ICON_48X36' src/activities/util/HungarianKeyboardIcons.h
+          grep -q 'BACKSPACE_ICON_48X36' src/activities/util/HungarianKeyboardIcons.h
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-81 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-81 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260908-81-Version-Info-Icons48-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
