@@ -1,0 +1,62 @@
+name: Build CPHUN-77 Hungarian Keyboard Fixed Widths
+
+on:
+  push:
+    branches: [agent/cphun-77-hungarian-keyboard-fixed-widths]
+    paths:
+      - '.github/workflows/build-cphun-77-hungarian-keyboard-fixed-widths.yml'
+      - 'src/activities/util/HungarianKeyboardIcons.h'
+      - 'src/activities/util/HungarianKeyboardLayout.h'
+      - 'src/activities/util/KeyboardLayoutSet.h'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-77-hungarian-keyboard-fixed-widths
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Check diff whitespace
+        run: git diff --check origin/agent/cphun-76-hungarian-keyboard-custom-icons...HEAD
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-77 firmware
+        run: .venv/bin/pio run -e gh_release_rc
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release_rc/firmware.bin
+
+      - name: Upload CPHUN-77 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260908-77-Hungarian-Keyboard-Fixed-Widths-FW
+          path: .pio/build/gh_release_rc/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
