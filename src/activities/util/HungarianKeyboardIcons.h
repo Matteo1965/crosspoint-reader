@@ -47,11 +47,13 @@ inline constexpr uint8_t BACKSPACE_ICON_48X36[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
 };
 
-inline const freeink::ui::BitmapRef shiftIcon48x36() {
+// Keep the existing renderer API and #80 geometry unchanged. BitmapMode::Contain
+// centers these native 48x36 masks inside the existing 63x36 icon target.
+inline const freeink::ui::BitmapRef shiftIcon63x36() {
   return freeink::ui::BitmapRef{SHIFT_ICON_48X36, 48, 36, freeink::ui::BitmapFormat::Mask1, true};
 }
 
-inline const freeink::ui::BitmapRef backspaceIcon48x36() {
+inline const freeink::ui::BitmapRef backspaceIcon63x36() {
   return freeink::ui::BitmapRef{BACKSPACE_ICON_48X36, 48, 36, freeink::ui::BitmapFormat::Mask1, true};
 }
 
