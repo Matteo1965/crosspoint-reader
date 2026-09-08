@@ -5,6 +5,7 @@
 
 #include <cstdint>
 
+#include "HungarianKeyboardIcons.h"
 #include "HungarianKeyboardLayout.h"
 
 namespace keyboard_layouts {
@@ -58,9 +59,9 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-75 X4 trial: expand only Hungarian keyboard rendering from the theme's
-// 451 px band to exactly 462 px (9 px margins on a 480 px panel). The 22-unit
-// letter/number rows then divide exactly: 21 px/unit, 42 px/ordinary key.
+// CPHUN-76: keep the 462 px Hungarian keyboard trial. Letter/number rows use
+// 21 px/unit = 42 px/ordinary key. On the bottom row fn and OK are 3 units
+// (63 px), matching Shift/Backspace; Space absorbs the difference.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
@@ -74,8 +75,6 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     rect.width = 462;
   }
 
-  // Symbol pages keep their established FreeInkUI rendering; only their outer
-  // Hungarian keyboard band follows the 462 px trial width.
   if (!keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
     keyboard(frame, rect, props);
     return;
@@ -135,19 +134,18 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
 
     if (key.kind == KeyKind::Shift) {
-      // Compact Shift glyph: upward arrow, drawn as geometry so it matches the
-      // existing Delete/Space glyph-art approach and needs no font character.
-      const int16_t cx = static_cast<int16_t>(keyRect.x + keyRect.width / 2);
-      const int16_t cy = static_cast<int16_t>(keyRect.y + keyRect.height / 2);
-      frame.target().line(Point{cx, static_cast<int16_t>(cy + 8)}, Point{cx, static_cast<int16_t>(cy - 6)}, 2, ink);
-      frame.target().line(Point{cx, static_cast<int16_t>(cy - 6)},
-                          Point{static_cast<int16_t>(cx - 6), cy}, 2, ink);
-      frame.target().line(Point{cx, static_cast<int16_t>(cy - 6)},
-                          Point{static_cast<int16_t>(cx + 6), cy}, 2, ink);
+      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
+                            keyboard_layouts::hu_keyboard::shiftIcon63x36(), BitmapMode::Contain, ink);
       return;
     }
 
-    if (key.kind == KeyKind::Delete || key.kind == KeyKind::Lang) {
+    if (key.kind == KeyKind::Delete) {
+      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
+                            keyboard_layouts::hu_keyboard::backspaceIcon63x36(), BitmapMode::Contain, ink);
+      return;
+    }
+
+    if (key.kind == KeyKind::Lang) {
       const int16_t lh = frame.target().lineHeight(keyText.font);
       const int16_t desired = static_cast<int16_t>(lh + lh / 8);
       int16_t iconSize = static_cast<int16_t>(((desired + 8) / 16) * 16);
@@ -155,8 +153,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
       const int16_t maxSize = keyRect.height < keyRect.width ? keyRect.height : keyRect.width;
       while (iconSize > maxSize && iconSize > 16) iconSize = static_cast<int16_t>(iconSize - 16);
       if (iconSize > maxSize) iconSize = maxSize;
-      const BitmapRef icon = key.kind == KeyKind::Delete ? lucideDeleteIcon16() : lucideGlobeIcon32();
-      frame.target().bitmap(centeredRect(keyRect, Size{iconSize, iconSize}), icon, BitmapMode::Contain, ink);
+      frame.target().bitmap(centeredRect(keyRect, Size{iconSize, iconSize}), lucideGlobeIcon32(), BitmapMode::Contain, ink);
       return;
     }
 
@@ -173,7 +170,6 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     }
 
     if (key.kind != KeyKind::Space) return;
-    // 11 px high, 2 px outline rounded Space glyph, centered in the full key.
     const int16_t glyphW = static_cast<int16_t>(keyRect.width * 4 / 5);
     const Rect glyph{static_cast<int16_t>(keyRect.x + (keyRect.width - glyphW) / 2),
                      static_cast<int16_t>(keyRect.y + (keyRect.height - 11) / 2), glyphW, 11};
@@ -183,10 +179,20 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
   for (uint8_t row = 0; row < huProps.layout->rowCount; ++row) {
     const KeyboardRow& layoutRow = huProps.layout->rows[row];
     if (!layoutRow.keys || layoutRow.count == 0) continue;
-    rowHitOverflow = row == huProps.layout->rowCount - 1 ? huProps.bottomHitOverflow : 0;
+    const bool bottomRow = row == huProps.layout->rowCount - 1;
+    rowHitOverflow = bottomRow ? huProps.bottomHitOverflow : 0;
+
+    auto effectiveUnits = [&](const KeyboardKey& key) -> uint8_t {
+      if (bottomRow) {
+        if (key.kind == KeyKind::Mode || key.kind == KeyKind::Ok) return 3;
+        if (key.kind == KeyKind::Space) return layoutRow.count == 7 ? 8 : 6;
+      }
+      return key.widthUnits ? key.widthUnits : 1;
+    };
+
     uint16_t units = static_cast<uint16_t>(layoutRow.insetUnits * 2);
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
-      units = static_cast<uint16_t>(units + (layoutRow.keys[col].widthUnits ? layoutRow.keys[col].widthUnits : 1));
+      units = static_cast<uint16_t>(units + effectiveUnits(layoutRow.keys[col]));
     }
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
@@ -195,7 +201,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
-      const uint8_t keyUnits = key.widthUnits ? key.widthUnits : 1;
+      const uint8_t keyUnits = effectiveUnits(key);
       const int16_t w = col == layoutRow.count - 1 ? static_cast<int16_t>(rowRight - x)
                                                    : static_cast<int16_t>(unitW * keyUnits);
       drawKey(Rect{x, y, w, rowH}, key, logicalIndex++);
