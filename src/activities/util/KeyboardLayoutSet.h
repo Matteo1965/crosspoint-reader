@@ -60,13 +60,9 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-78: preserve the #77 fixed-width geometry, then calibrate the two
-// lower rows against the measured X4 screen coordinates. In the five device
-// screenshots, the selected '-' / 'Ö' / 'Á' reference edge is x=460, while
-// Backspace ended at x=450 and OK at x=464. Shift the complete 10-key row
-// +10 px and the complete bottom row -4 px so their visible right edges land
-// on the same x=460 reference without changing any key widths. The four corner
-// controls therefore remain equal-width (63 px) and ordinary keys remain 42 px.
+// CPHUN-80: exact CPHUN-78 geometry with one isolated calibration change:
+// move only rows 0-2 by +5 px. Row 3 and the bottom row retain their #78
+// offsets (+10 px and -4 px respectively); key widths and icon rendering are unchanged.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
@@ -203,9 +199,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
 
-    // Device-screen calibration from the five active-last-key screenshots:
-    // rows 0-2 are the x=460 reference; row 3 needs +10 px; bottom needs -4 px.
-    const int16_t screenOffsetX = row == 3 ? 10 : (bottomRow ? -4 : 0);
+    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));
     int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW + screenOffsetX);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
