@@ -5,9 +5,8 @@
 
 #include <cstdint>
 
-#include "HungarianKeyboardIcons.h"
+#include "HungarianKeyboardIconsSafe.h"
 #include "HungarianKeyboardLayout.h"
-#include "HungarianShiftIconClean.h"
 
 namespace keyboard_layouts {
 
@@ -60,13 +59,11 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-78: preserve the #77 fixed-width geometry, then calibrate the two
-// lower rows against the measured X4 screen coordinates. In the five device
-// screenshots, the selected '-' / 'Ö' / 'Á' reference edge is x=460, while
-// Backspace ended at x=450 and OK at x=464. Shift the complete 10-key row
-// +10 px and the complete bottom row -4 px so their visible right edges land
-// on the same x=460 reference without changing any key widths. The four corner
-// controls therefore remain equal-width (63 px) and ordinary keys remain 42 px.
+// CPHUN-79 X4 geometry: all Hungarian letter rows share the same absolute
+// horizontal anchors. The first drawable pixel is x=15 and the last is x=466,
+// so the key band is 452 px wide in half-open Rect coordinates [15,467).
+// Ordinary keys stay equal at 41 px. Shift/Backspace/fn/OK are equal at 62 px.
+// The 11-key rows use one neutral 1 px center spacer to fill 452 exactly.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
@@ -74,10 +71,10 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     return;
   }
 
-  if (rect.width >= 440 && rect.width < 462) {
-    const int16_t extra = static_cast<int16_t>(462 - rect.width);
-    rect.x = static_cast<int16_t>(rect.x - extra / 2);
-    rect.width = 462;
+  // X4 portrait keyboard band: use the measured device coordinates directly.
+  if (rect.width >= 440 && rect.width <= 470) {
+    rect.x = 15;
+    rect.width = 452;
   }
 
   if (!keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
@@ -140,14 +137,16 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const Paint ink = styles.resolve(frame.stateFor(action, key.value, state)).foreground;
 
     if (key.kind == KeyKind::Shift) {
-      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
-                            keyboard_layouts::hu_keyboard::shiftIconClean63x36(), BitmapMode::Contain, ink);
+      // Render inside a smaller safe box. The backing mask is 64 px wide and
+      // byte-aligned, preventing the 63 px row-padding artifact seen on device.
+      frame.target().bitmap(centeredRect(keyRect, Size{60, 32}),
+                            keyboard_layouts::hu_keyboard::shiftIconSafe64x36(), BitmapMode::Contain, ink);
       return;
     }
 
     if (key.kind == KeyKind::Delete) {
-      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
-                            keyboard_layouts::hu_keyboard::backspaceIcon63x36(), BitmapMode::Contain, ink);
+      frame.target().bitmap(centeredRect(keyRect, Size{60, 32}),
+                            keyboard_layouts::hu_keyboard::backspaceIconSafe64x36(), BitmapMode::Contain, ink);
       return;
     }
 
@@ -187,33 +186,32 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     if (!layoutRow.keys || layoutRow.count == 0) continue;
     const bool bottomRow = row == huProps.layout->rowCount - 1;
     rowHitOverflow = bottomRow ? huProps.bottomHitOverflow : 0;
-
-    auto effectiveUnits = [&](const KeyboardKey& key) -> uint8_t {
-      if (bottomRow) {
-        if (key.kind == KeyKind::Mode || key.kind == KeyKind::Ok) return 3;
-        if (key.kind == KeyKind::Space) return layoutRow.count == 7 ? 8 : 6;
-      }
-      return key.widthUnits ? key.widthUnits : 1;
-    };
-
-    uint16_t units = static_cast<uint16_t>(layoutRow.insetUnits * 2);
-    for (uint8_t col = 0; col < layoutRow.count; ++col) {
-      units = static_cast<uint16_t>(units + effectiveUnits(layoutRow.keys[col]));
-    }
-    const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
-
-    // Device-screen calibration from the five active-last-key screenshots:
-    // rows 0-2 are the x=460 reference; row 3 needs +10 px; bottom needs -4 px.
-    const int16_t screenOffsetX = row == 3 ? 10 : (bottomRow ? -4 : 0);
-    int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW + screenOffsetX);
+    int16_t x = rect.x;
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
-      const uint8_t keyUnits = effectiveUnits(key);
-      const int16_t w = static_cast<int16_t>(unitW * keyUnits);
+      int16_t w = 41;
+
+      if (row == 3) {
+        // 62 + (8 x 41) + 62 = 452.
+        if (key.kind == KeyKind::Shift || key.kind == KeyKind::Delete) w = 62;
+      } else if (bottomRow) {
+        // No-language row: 62 + 41 + 41 + 164 + 41 + 41 + 62 = 452.
+        // Language row:    62 + 41 + 41 + 41 + 123 + 41 + 41 + 62 = 452.
+        if (key.kind == KeyKind::Mode || key.kind == KeyKind::Ok) {
+          w = 62;
+        } else if (key.kind == KeyKind::Space) {
+          w = layoutRow.count == 7 ? 164 : 123;
+        }
+      }
+
       drawKey(Rect{x, y, w, rowH}, key, logicalIndex++);
       x = static_cast<int16_t>(x + w + gap);
+
+      // 11 equal 41 px keys total 451 px; put the remaining neutral pixel in
+      // the middle of the row instead of widening '-', Ö or Á.
+      if (row < 3 && layoutRow.count == 11 && col == 5) x = static_cast<int16_t>(x + 1);
     }
   }
 }
