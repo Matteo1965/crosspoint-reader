@@ -13,7 +13,7 @@
 
 namespace {
 
-constexpr int PAGE_COUNT = 4;
+constexpr int PAGE_COUNT = 5;
 constexpr int SIDE_PADDING = 20;
 
 }  // namespace
@@ -120,8 +120,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
     drawLabelValue(tr(STR_EDITION), "Hungarian Edition");
     drawWrapped(UI_12_FONT_ID, CPHUN_BUILD_ID);
-    const std::string buildDate = std::string(__DATE__) + " " + __TIME__ + " GMT";
-    drawLabelValue(hu ? "Dátum" : "Date", buildDate.c_str());
+    drawLabelValue(hu ? "Dátum" : "Date", "Sep-8 2026");
 
     y += bodyLineHeight;
     drawWrapped(UI_12_FONT_ID, tr(STR_GITHUB_RELEASES), true);
@@ -136,6 +135,7 @@ void CrossPointVersionActivity::render(RenderLock&&) {
         hu ? "- Magyar szótár és szótövezés → 2. oldal" : "- Hungarian dictionary and stemming → page 2",
         hu ? "- Magyar elválasztás → 3. oldal" : "- Hungarian hyphenation → page 3",
         hu ? "- Sorkizárás és tipográfia → 4. oldal" : "- Justification and typography → page 4",
+        hu ? "- Újdonságok és javítások  5. oldal" : "- New features and fixes  page 5",
     };
     for (const char* feature : features) drawWrapped(UI_12_FONT_ID, feature);
   } else if (currentPage == 1) {
@@ -160,13 +160,13 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
                 hu ? "Nagy Bence Huhyphn elválasztási mintái, saját kiegészítésekkel és továbbfejlesztésekkel. A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
                    : "Bence Nagy's Huhyphn patterns with custom additions and improvements, including correct Hungarian hyphenation of long multigraph consonants.");
-    drawSection(hu ? "Beágyazott elválasztás - Soft hyphen" : "Embedded hyphenation (Soft hyphen)",
+    drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
                 hu ? "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként."
                    : "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
     drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
                 hu ? "Angol és magyar elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
                    : "English and Hungarian hyphenation are supported. The firmware contains no hyphenation patterns for other languages.");
-  } else {
+  } else if (currentPage == 3) {
     drawWrapped(UI_12_FONT_ID, hu ? "Sorkizárás és tipográfia" : "Justification and typography", true);
     y += bodyLineHeight;
     drawSection(hu ? "Javított sorkizárt szedés" : "Improved justified text",
@@ -181,9 +181,30 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
                 hu ? "A bekezdések közötti térköz növelése."
                    : "Increases spacing between paragraphs.");
-    drawSection(hu ? "Optikai margó - Hanging punctuation" : "Hanging punctuation",
+    drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
                 hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszélek."
                    : "Places punctuation into the margin for a more even text edge.");
+  } else {
+    drawWrapped(UI_12_FONT_ID, hu ? "Újdonságok és javítások" : "New features and fixes", true);
+    y += bodyLineHeight;
+    const char* updates[] = {
+        hu ? "- Magyar billentyűzet" : "- Hungarian keyboard",
+        hu ? "- Opcionális rövid / hosszú elválasztójel" : "- Optional short / long hyphen",
+        hu ? "- Alsó gombok beállítása: 1×, 2× és Hosszú nyomás" : "- Bottom button setup: 1×, 2× and Long press",
+        hu ? "- Sorköz 6 fokozatban állítható" : "- Line spacing adjustable in 6 steps",
+        hu ? "- Automatikus Fejezet generálás" : "- Automatic Chapter generation",
+    };
+    for (const char* update : updates) drawWrapped(UI_12_FONT_ID, update);
+
+    y += bodyLineHeight;
+    drawWrapped(UI_12_FONT_ID, "CrossPoint 1.6.0:", true);
+    const char* releaseUpdates[] = {
+        hu ? "- Éjszakai mód" : "- Night Mode",
+        hu ? "- Átlátszó alvóképernyők" : "- Transparent sleep screens",
+        hu ? "- Továbbfejlesztett StarDict szótárkezelés" : "- Improved StarDict dictionary handling",
+        hu ? "- Stabilitási és hibajavítások" : "- Stability and bug fixes",
+    };
+    for (const char* update : releaseUpdates) drawWrapped(UI_12_FONT_ID, update);
   }
 
   const auto labels =
