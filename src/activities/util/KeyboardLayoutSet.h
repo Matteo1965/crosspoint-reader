@@ -59,9 +59,10 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-76: keep the 462 px Hungarian keyboard trial. Letter/number rows use
-// 21 px/unit = 42 px/ordinary key. On the bottom row fn and OK are 3 units
-// (63 px), matching Shift/Backspace; Space absorbs the difference.
+// CPHUN-77: keep the 462 px Hungarian keyboard band, but make that the exact
+// drawable key width. Every 22-unit row therefore uses 21 px/unit with no
+// last-key remainder: ordinary keys are 42 px and the four corner controls
+// (Shift, Backspace, fn, OK) are 63 px.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
@@ -83,6 +84,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
   KeyboardProps huProps = props;
   huProps.shiftLabel = nullptr;
   huProps.modeLabel = "fn";
+  huProps.padding = Insets{0, 0, 0, 0};
 
   if (!huProps.layout->rows || huProps.layout->rowCount == 0) return;
   StyleSet styles = huProps.keyStyles.unset() ? defaultButtonStyles() : huProps.keyStyles;
@@ -197,13 +199,11 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
     int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW);
-    const int16_t rowRight = static_cast<int16_t>(rect.right() - layoutRow.insetUnits * unitW);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
       const uint8_t keyUnits = effectiveUnits(key);
-      const int16_t w = col == layoutRow.count - 1 ? static_cast<int16_t>(rowRight - x)
-                                                   : static_cast<int16_t>(unitW * keyUnits);
+      const int16_t w = static_cast<int16_t>(unitW * keyUnits);
       drawKey(Rect{x, y, w, rowH}, key, logicalIndex++);
       x = static_cast<int16_t>(x + w + gap);
     }
