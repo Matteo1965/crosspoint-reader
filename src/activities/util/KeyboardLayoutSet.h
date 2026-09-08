@@ -7,6 +7,7 @@
 
 #include "HungarianKeyboardIcons.h"
 #include "HungarianKeyboardLayout.h"
+#include "HungarianShiftIconClean.h"
 
 namespace keyboard_layouts {
 
@@ -59,10 +60,13 @@ inline const char* keyboardAltOutputForCphun(const KeyboardLayout& layout, const
   return keyboardAltOutputFor(layout, value);
 }
 
-// CPHUN-77: keep the 462 px Hungarian keyboard band, but make that the exact
-// drawable key width. Every 22-unit row therefore uses 21 px/unit with no
-// last-key remainder: ordinary keys are 42 px and the four corner controls
-// (Shift, Backspace, fn, OK) are 63 px.
+// CPHUN-78: preserve the #77 fixed-width geometry, then calibrate the two
+// lower rows against the measured X4 screen coordinates. In the five device
+// screenshots, the selected '-' / 'Ö' / 'Á' reference edge is x=460, while
+// Backspace ended at x=450 and OK at x=464. Shift the complete 10-key row
+// +10 px and the complete bottom row -4 px so their visible right edges land
+// on the same x=460 reference without changing any key widths. The four corner
+// controls therefore remain equal-width (63 px) and ordinary keys remain 42 px.
 template <size_t MaxInteractions>
 void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps& props) {
   if (!props.layout || !keyboard_layouts::hu_keyboard::isHungarianLayout(*props.layout)) {
@@ -137,7 +141,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
 
     if (key.kind == KeyKind::Shift) {
       frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
-                            keyboard_layouts::hu_keyboard::shiftIcon63x36(), BitmapMode::Contain, ink);
+                            keyboard_layouts::hu_keyboard::shiftIconClean63x36(), BitmapMode::Contain, ink);
       return;
     }
 
@@ -198,7 +202,11 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     }
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
-    int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW);
+
+    // Device-screen calibration from the five active-last-key screenshots:
+    // rows 0-2 are the x=460 reference; row 3 needs +10 px; bottom needs -4 px.
+    const int16_t screenOffsetX = row == 3 ? 10 : (bottomRow ? -4 : 0);
+    int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW + screenOffsetX);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {
       const KeyboardKey& key = layoutRow.keys[col];
