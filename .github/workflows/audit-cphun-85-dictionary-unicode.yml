@@ -1,0 +1,32 @@
+name: Audit CPHUN-85 Dictionary Unicode
+
+on:
+  push:
+    branches: [agent/cphun-85-dictionary-unicode]
+    paths:
+      - '.github/workflows/audit-cphun-85-dictionary-unicode.yml'
+      - 'tools/dictionary_unicode_audit.py'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-85-dictionary-unicode
+          fetch-depth: 0
+
+      - name: Audit current built-in Noto Serif coverage
+        run: |
+          python3 tools/dictionary_unicode_audit.py | tee CPHUN-85-NotoSerif-Unicode-audit.txt
+          grep -q '^dictionary_non_ascii=1333$' CPHUN-85-NotoSerif-Unicode-audit.txt
+          grep -q $'U+2212\t−\tPRESENT' CPHUN-85-NotoSerif-Unicode-audit.txt
+
+      - name: Upload Unicode audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-85-NotoSerif-Unicode-audit
+          path: CPHUN-85-NotoSerif-Unicode-audit.txt
+          if-no-files-found: error
+          retention-days: 90
