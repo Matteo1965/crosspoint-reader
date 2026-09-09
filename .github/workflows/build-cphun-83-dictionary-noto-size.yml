@@ -1,0 +1,157 @@
+name: Build CPHUN-83 Dictionary Noto Size
+
+on:
+  push:
+    branches: [agent/cphun-83-dictionary-noto-size]
+    paths:
+      - '.github/workflows/build-cphun-83-dictionary-noto-size.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-83-dictionary-noto-size
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-83 dictionary font changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:160]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace('src/CPHUNBuildId.h',
+                  '#define CPHUN_BUILD_ID "CPHUN-260909-82"',
+                  '#define CPHUN_BUILD_ID "CPHUN-260909-83"')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  'constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;\n',
+                  'constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;\n\n'
+                  '// Dictionary definitions always use the built-in Noto Serif family so glyph\n'
+                  '// availability never depends on the selected reading font or an SD-card font.\n'
+                  '// Preserve the reader point size by selecting the nearest built-in Noto Serif size.\n'
+                  'int dictionaryBodyFontId() {\n'
+                  '  const int size = SETTINGS.fontPointSize;\n'
+                  '  if (size <= 13) return NOTOSERIF_12_FONT_ID;\n'
+                  '  if (size <= 15) return NOTOSERIF_14_FONT_ID;\n'
+                  '  if (size <= 17) return NOTOSERIF_16_FONT_ID;\n'
+                  '  return NOTOSERIF_18_FONT_ID;\n'
+                  '}\n')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  '                      renderer.getLineHeight(SETTINGS.getReaderFontId());',
+                  '                      renderer.getLineHeight(dictionaryBodyFontId());')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  '  if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),\n'
+                  '                                static_cast<uint16_t>(body.height), pages)) {',
+                  '  if (!buildDictionaryHtmlPages(renderer, definition, dictionaryBodyFontId(),\n'
+                  '                                static_cast<uint16_t>(body.width), static_cast<uint16_t>(body.height), pages)) {')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  '  const int fontId = SETTINGS.getReaderFontId();\n'
+                  '  // SD-card fonts: merge every definition codepoint into the persistent\n'
+                  '  // advance table up front. Otherwise each unseen codepoint measured below\n'
+                  '  // falls back to an on-demand glyph load from SD (8-slot overflow ring).\n'
+                  '  renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x01 /* REGULAR */);\n',
+                  '  const int fontId = dictionaryBodyFontId();\n')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  '  const int fontId = SETTINGS.getReaderFontId();\n'
+                  '  // Keep one empty body line below the enlarged headword for clear visual separation.\n',
+                  '  const int fontId = dictionaryBodyFontId();\n'
+                  '  // Keep one empty body line below the enlarged headword for clear visual separation.\n')
+
+          replace('src/util/DictHtmlPages.h',
+                  'bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, uint16_t viewportWidth,\n'
+                  '                              uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut);',
+                  'bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, int fontId,\n'
+                  '                              uint16_t viewportWidth, uint16_t viewportHeight,\n'
+                  '                              std::vector<std::unique_ptr<Page>>& pagesOut);')
+
+          replace('src/util/DictHtmlPages.cpp',
+                  'bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,\n'
+                  '                              const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut) {',
+                  'bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const int fontId,\n'
+                  '                              const uint16_t viewportWidth, const uint16_t viewportHeight,\n'
+                  '                              std::vector<std::unique_ptr<Page>>& pagesOut) {')
+
+          replace('src/util/DictHtmlPages.cpp',
+                  '        nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),',
+                  '        nullptr, tmpPath, renderer, fontId, SETTINGS.getReaderLineCompression(),')
+          PY
+
+          git diff --check
+
+      - name: Commit CPHUN-83 source changes
+        shell: bash
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h src/activities/reader/DictionaryDefinitionActivity.cpp src/util/DictHtmlPages.h src/util/DictHtmlPages.cpp
+            git commit -m "CPHUN-83: use size-matched built-in Noto Serif for dictionary"
+            git push origin HEAD:agent/cphun-83-dictionary-noto-size
+          fi
+
+      - name: Verify CPHUN-83 scope
+        shell: bash
+        run: |
+          git diff --check origin/agent/cphun-82-ui-fit-tabs-keyboard...HEAD
+          grep -q 'CPHUN-260909-83' src/CPHUNBuildId.h
+          grep -q 'int dictionaryBodyFontId()' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'size <= 13.*NOTOSERIF_12_FONT_ID' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'size <= 15.*NOTOSERIF_14_FONT_ID' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'size <= 17.*NOTOSERIF_16_FONT_ID' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'return NOTOSERIF_18_FONT_ID' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'buildDictionaryHtmlPages(renderer, definition, dictionaryBodyFontId()' src/activities/reader/DictionaryDefinitionActivity.cpp
+          ! grep -q 'const int fontId = SETTINGS.getReaderFontId();' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'renderer, fontId, SETTINGS.getReaderLineCompression()' src/util/DictHtmlPages.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-83 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-83 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260909-83-Dictionary-Noto-Size-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
