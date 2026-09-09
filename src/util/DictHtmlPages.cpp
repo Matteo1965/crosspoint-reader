@@ -194,8 +194,9 @@ bool writeNormalizedXhtml(const std::string& html, HalFile& file) {
 
 }  // namespace
 
-bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,
-                              const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut) {
+bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const int fontId,
+                              const uint16_t viewportWidth, const uint16_t viewportHeight,
+                              std::vector<std::unique_ptr<Page>>& pagesOut) {
   if (ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
     LOG_ERR("DHTML", "Low heap for styled definition (%u free, %u max block)", ESP.getFreeHeap(),
             ESP.getMaxAllocHeap());
@@ -228,7 +229,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // a stack local. Null epub is safe: imageRendering=2 suppresses <img>
     // handling, the only path that dereferences it.
     auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-        nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+        nullptr, tmpPath, renderer, fontId, SETTINGS.getReaderLineCompression(),
         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
         SETTINGS.hyphenationEnabled, SETTINGS.softHyphenEnabled != 0, SETTINGS.focusReadingEnabled,
         /*hangingPunctuationLimitPx=*/0, SETTINGS.fixedDialogueSpacing != 0, SETTINGS.letterSpacingLimitPercent,

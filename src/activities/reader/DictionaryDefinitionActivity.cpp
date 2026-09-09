@@ -27,6 +27,17 @@ constexpr int SIDE_PADDING = 20;
 
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
 
+// Dictionary definitions always use the built-in Noto Serif family so glyph
+// availability never depends on the selected reading font or an SD-card font.
+// Preserve the reader point size by selecting the nearest built-in Noto Serif size.
+int dictionaryBodyFontId() {
+  const int size = SETTINGS.fontPointSize;
+  if (size <= 13) return NOTOSERIF_12_FONT_ID;
+  if (size <= 15) return NOTOSERIF_14_FONT_ID;
+  if (size <= 17) return NOTOSERIF_16_FONT_ID;
+  return NOTOSERIF_18_FONT_ID;
+}
+
 // Uppercase the Hungarian alphabet without depending on a locale (the ESP32
 // C locale only knows ASCII). Hungarian accented lower/uppercase pairs have
 // equal UTF-8 byte lengths, so the conversion can safely happen in place.
@@ -93,7 +104,7 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
-                      renderer.getLineHeight(SETTINGS.getReaderFontId());
+                      renderer.getLineHeight(dictionaryBodyFontId());
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
   return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING,
           renderer.getScreenHeight() - topArea - bottomArea};
@@ -102,8 +113,8 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
 bool DictionaryDefinitionActivity::layoutHtmlPages() {
   const BodyArea body = bodyArea();
   if (body.width <= 0 || body.height <= 0) return false;
-  if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
-                                static_cast<uint16_t>(body.height), pages)) {
+  if (!buildDictionaryHtmlPages(renderer, definition, dictionaryBodyFontId(),
+                                static_cast<uint16_t>(body.width), static_cast<uint16_t>(body.height), pages)) {
     return false;
   }
   definition.clear();
@@ -129,11 +140,7 @@ void DictionaryDefinitionActivity::wrapText() {
   lines.clear();
   lines.reserve(definition.size() / 32 + 8);
 
-  const int fontId = SETTINGS.getReaderFontId();
-  // SD-card fonts: merge every definition codepoint into the persistent
-  // advance table up front. Otherwise each unseen codepoint measured below
-  // falls back to an on-demand glyph load from SD (8-slot overflow ring).
-  renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x01 /* REGULAR */);
+  const int fontId = dictionaryBodyFontId();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
@@ -435,7 +442,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = dictionaryBodyFontId();
   // Keep one empty body line below the enlarged headword for clear visual separation.
   const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight + renderer.getLineHeight(fontId);
   auto* fcm = renderer.getFontCacheManager();
