@@ -17,6 +17,8 @@ jobs:
           ref: agent/cphun-85-dictionary-unicode
           fetch-depth: 0
 
+      # Compare the dictionary's exact Unicode union against the glyphs actually
+      # compiled into the four built-in Noto Serif regular font headers.
       - name: Audit current built-in Noto Serif coverage
         run: |
           python3 tools/dictionary_unicode_audit.py | tee CPHUN-85-NotoSerif-Unicode-audit.txt
