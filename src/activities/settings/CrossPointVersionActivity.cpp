@@ -111,6 +111,15 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     y += bodyLineHeight;
   };
 
+  const auto drawMixedSection = [&](const char* title, const char* suffix, const char* text) {
+    renderer.drawText(UI_12_FONT_ID, x, y, title, true, EpdFontFamily::BOLD);
+    const int suffixX = x + renderer.getTextAdvanceX(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
+    renderer.drawText(UI_12_FONT_ID, suffixX, y, suffix);
+    y += bodyLineHeight;
+    drawWrapped(UI_12_FONT_ID, text);
+    y += bodyLineHeight;
+  };
+
   if (currentPage == 0) {
     const auto drawLabelValue = [&](const char* label, const char* value) {
       const std::string line = std::string(label) + ": " + value;
@@ -160,9 +169,13 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
                 hu ? "Nagy Bence Huhyphn elválasztási mintái, saját kiegészítésekkel és továbbfejlesztésekkel. A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
                    : "Bence Nagy's Huhyphn patterns with custom additions and improvements, including correct Hungarian hyphenation of long multigraph consonants.");
-    drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",
-                hu ? "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként."
-                   : "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
+    if (hu) {
+      drawMixedSection("Beágyazott elválasztás", " (Soft hyphen)",
+                       "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként.");
+    } else {
+      drawSection("Embedded hyphenation (Soft hyphen)",
+                  "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
+    }
     drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
                 hu ? "Angol és magyar elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
                    : "English and Hungarian hyphenation are supported. The firmware contains no hyphenation patterns for other languages.");
@@ -181,9 +194,13 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
                 hu ? "A bekezdések közötti térköz növelése."
                    : "Increases spacing between paragraphs.");
-    drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",
-                hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszélek."
-                   : "Places punctuation into the margin for a more even text edge.");
+    if (hu) {
+      drawMixedSection("Optikai margó", " (Hanging punctuation)",
+                       "Az írásjelek margóba helyezésével egyenletesebb szövegszélek.");
+    } else {
+      drawSection("Hanging punctuation",
+                  "Places punctuation into the margin for a more even text edge.");
+    }
   } else {
     drawWrapped(UI_12_FONT_ID, hu ? "Újdonságok és javítások" : "New features and fixes", true);
     y += bodyLineHeight;

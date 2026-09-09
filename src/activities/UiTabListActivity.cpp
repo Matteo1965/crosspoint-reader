@@ -187,6 +187,29 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   if (tabsFocused && !metrics.tabPillFullSlot) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
-  fui::tabBar(screen.frame(), tabRect, tabProps);
+  int widthTotal = 0;
+  bool weightedTabs = count > 0;
+  for (int i = 0; i < count; ++i) {
+    const int width = tabWidthPercent(i);
+    if (width <= 0) { weightedTabs = false; break; }
+    widthTotal += width;
+  }
+  weightedTabs = weightedTabs && widthTotal == 100;
+  if (weightedTabs) {
+    int cumulative = 0;
+    for (int i = 0; i < count; ++i) {
+      const int width = tabWidthPercent(i);
+      const int slotX = tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;
+      cumulative += width;
+      const int slotRight = tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;
+      fui::TabBarProps singleProps = tabProps;
+      singleProps.tabs = &tabs[i];
+      singleProps.count = 1;
+      fui::tabBar(screen.frame(), fui::Rect{static_cast<int16_t>(slotX), tabRect.y,
+                  static_cast<int16_t>(slotRight - slotX), tabRect.height}, singleProps);
+    }
+  } else {
+    fui::tabBar(screen.frame(), tabRect, tabProps);
+  }
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 }

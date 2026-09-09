@@ -199,7 +199,7 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     const int16_t unitW = static_cast<int16_t>((rect.width - gap * (layoutRow.count - 1)) / units);
     const int16_t y = static_cast<int16_t>(rect.y + row * (rowH + gap));
 
-    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));
+    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 7 : (bottomRow ? -4 : 0));
     int16_t x = static_cast<int16_t>(rect.x + layoutRow.insetUnits * unitW + screenOffsetX);
 
     for (uint8_t col = 0; col < layoutRow.count; ++col) {

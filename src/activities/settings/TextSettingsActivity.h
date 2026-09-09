@@ -48,6 +48,7 @@ class TextSettingsActivity final : public UiTabListActivity {
   int tabCount() const override { return static_cast<int>(Tab::Count); }
   int activeTab() const override { return static_cast<int>(tab_); }
   const char* tabLabel(int index) const override;
+  int tabWidthPercent(int index) const override;
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onTabAction(int index) override;

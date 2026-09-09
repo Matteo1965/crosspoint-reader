@@ -93,7 +93,18 @@ TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputMan
                                            const SdCardFontRegistry* registry, Tab initialTab)
     : UiTabListActivity("TextSettings", renderer, mappedInput), registry_(registry), tab_(initialTab) {}
 
-const char* TextSettingsActivity::tabLabel(const int index) const { return I18N.get(TAB_NAME_IDS[index]); }
+const char* TextSettingsActivity::tabLabel(const int index) const {
+  const char* label = I18N.get(TAB_NAME_IDS[index]);
+  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF &&
+      index == static_cast<int>(Tab::Layout) && strcmp(label, "Rendez.") == 0) return "Rendezés";
+  return label;
+}
+
+int TextSettingsActivity::tabWidthPercent(const int index) const {
+  if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;
+  constexpr int kRoundedRaffTextTabWidths[] = {23, 23, 31, 23};
+  return index >= 0 && index < static_cast<int>(Tab::Count) ? kRoundedRaffTextTabWidths[index] : 0;
+}
 
 void TextSettingsActivity::onEnter() {
   UiTabListActivity::onEnter();
@@ -289,14 +300,17 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
-  props.rowHeight = 40;
+  const bool compactLyraLayout = tab_ == Tab::Layout &&
+      (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::LYRA_3_COVERS);
+  const int16_t textSettingsRowHeight = compactLyraLayout ? 36 : 40;
+  props.rowHeight = textSettingsRowHeight;
   props.rowGap = 0;
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (see SettingsActivity).
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 2;
-  syncTabListViewport(screen, props, false, 40);
+  syncTabListViewport(screen, props, false, textSettingsRowHeight);
   screen.list(props);
 }
 
