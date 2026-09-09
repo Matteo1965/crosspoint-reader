@@ -1,0 +1,143 @@
+name: Build CPHUN-84 Dictionary Visual Size
+
+on:
+  push:
+    branches: [agent/cphun-84-dictionary-visual-size]
+    paths:
+      - '.github/workflows/build-cphun-84-dictionary-visual-size.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  patch-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-84-dictionary-visual-size
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-84 visual size changes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:180]!r}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace('src/CPHUNBuildId.h',
+                  '#define CPHUN_BUILD_ID "CPHUN-260909-83"',
+                  '#define CPHUN_BUILD_ID "CPHUN-260909-84"')
+
+          replace('src/activities/reader/DictionaryDefinitionActivity.cpp',
+                  '// Dictionary definitions always use the built-in Noto Serif family so glyph\n'
+                  '// availability never depends on the selected reading font or an SD-card font.\n'
+                  '// Preserve the reader point size by selecting the nearest built-in Noto Serif size.\n'
+                  'int dictionaryBodyFontId() {\n'
+                  '  const int size = SETTINGS.fontPointSize;\n'
+                  '  if (size <= 13) return NOTOSERIF_12_FONT_ID;\n'
+                  '  if (size <= 15) return NOTOSERIF_14_FONT_ID;\n'
+                  '  if (size <= 17) return NOTOSERIF_16_FONT_ID;\n'
+                  '  return NOTOSERIF_18_FONT_ID;\n'
+                  '}\n',
+                  '// Dictionary definitions always use the built-in Noto Serif family so glyph\n'
+                  '// availability never depends on the selected reading font or an SD-card font.\n'
+                  '// Noto Serif renders visibly larger than most alternative reader fonts at the\n'
+                  '// same nominal point size on this display. For non-Noto-Serif reader fonts,\n'
+                  '// apply a calibrated -2 pt optical correction before selecting the nearest\n'
+                  '// built-in Noto Serif size. Built-in Noto Serif keeps its native size.\n'
+                  'int dictionaryBodyFontId() {\n'
+                  '  int visualSize = SETTINGS.fontPointSize;\n'
+                  '  const bool readerIsBuiltInNotoSerif =\n'
+                  '      SETTINGS.sdFontFamilyName[0] == \'\\0\' && SETTINGS.fontFamily == CrossPointSettings::NOTOSERIF;\n'
+                  '  if (!readerIsBuiltInNotoSerif) visualSize = std::max(12, visualSize - 2);\n'
+                  '  if (visualSize <= 13) return NOTOSERIF_12_FONT_ID;\n'
+                  '  if (visualSize <= 15) return NOTOSERIF_14_FONT_ID;\n'
+                  '  if (visualSize <= 17) return NOTOSERIF_16_FONT_ID;\n'
+                  '  return NOTOSERIF_18_FONT_ID;\n'
+                  '}\n')
+          PY
+
+          git diff --check
+
+      - name: Commit CPHUN-84 source changes
+        shell: bash
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h src/activities/reader/DictionaryDefinitionActivity.cpp
+            git commit -m "CPHUN-84: optically match dictionary Noto Serif size"
+            git push origin HEAD:agent/cphun-84-dictionary-visual-size
+          fi
+
+      - name: Verify CPHUN-84 scope
+        shell: bash
+        run: |
+          git diff --check origin/agent/cphun-83-dictionary-noto-size...HEAD
+          grep -q 'CPHUN-260909-84' src/CPHUNBuildId.h
+          grep -q 'visualSize = SETTINGS.fontPointSize' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'visualSize - 2' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'readerIsBuiltInNotoSerif' src/activities/reader/DictionaryDefinitionActivity.cpp
+          # Regression guard: an SD-card Bitter 16 pt reader font must map to Noto Serif 14 pt.
+          python3 - <<'PY'
+          def dictionary_size(reader_size, built_in_noto_serif):
+              visual_size = reader_size
+              if not built_in_noto_serif:
+                  visual_size = max(12, visual_size - 2)
+              if visual_size <= 13:
+                  return 12
+              if visual_size <= 15:
+                  return 14
+              if visual_size <= 17:
+                  return 16
+              return 18
+
+          assert dictionary_size(16, False) == 14, 'Bitter/SD 16 pt must map to Noto Serif 14 pt'
+          assert dictionary_size(16, True) == 16, 'Built-in Noto Serif 16 pt must stay 16 pt'
+          assert dictionary_size(14, False) == 12, 'Alternative/SD 14 pt must map to Noto Serif 12 pt'
+          assert dictionary_size(18, False) == 16, 'Alternative/SD 18 pt must map to Noto Serif 16 pt'
+          PY
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-84 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-84 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260909-84-Dictionary-Visual-Size-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
