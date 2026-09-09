@@ -46,8 +46,8 @@ jobs:
           # Hungarian keyboard: only row 4 moves 3px left (+10 -> +7).
           replace(
               'src/activities/util/KeyboardLayoutSet.h',
-              'const int screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));',
-              'const int screenOffsetX = row < 3 ? 5 : (row == 3 ? 7 : (bottomRow ? -4 : 0));')
+              '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));',
+              '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 7 : (bottomRow ? -4 : 0));')
 
           # Shared tab activity: allow a subclass to provide a percentage width profile.
           replace(
