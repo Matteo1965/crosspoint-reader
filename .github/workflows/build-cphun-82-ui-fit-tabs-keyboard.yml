@@ -37,147 +37,122 @@ jobs:
                   raise SystemExit(f'Expected block not found in {path}: {old[:120]!r}')
               p.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          # Build identifier.
-          replace(
-              'src/CPHUNBuildId.h',
-              '#define CPHUN_BUILD_ID "CPHUN-260908-81"',
-              '#define CPHUN_BUILD_ID "CPHUN-260909-82"')
+          replace('src/CPHUNBuildId.h', '#define CPHUN_BUILD_ID "CPHUN-260908-81"', '#define CPHUN_BUILD_ID "CPHUN-260909-82"')
 
-          # Hungarian keyboard: only row 4 moves 3px left (+10 -> +7).
-          replace(
-              'src/activities/util/KeyboardLayoutSet.h',
-              '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));',
-              '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 7 : (bottomRow ? -4 : 0));')
+          replace('src/activities/util/KeyboardLayoutSet.h',
+                  '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 10 : (bottomRow ? -4 : 0));',
+                  '    const int16_t screenOffsetX = row < 3 ? 5 : (row == 3 ? 7 : (bottomRow ? -4 : 0));')
 
-          # Shared tab activity: allow a subclass to provide a percentage width profile.
-          replace(
-              'src/activities/UiTabListActivity.h',
-              '  virtual const char* tabLabel(int index) const = 0;\n',
-              '  virtual const char* tabLabel(int index) const = 0;\n'
-              '  // Optional per-tab width percentage. Return 0 to keep the theme\'s default layout.\n'
-              '  virtual int tabWidthPercent(int index) const {\n'
-              '    (void)index;\n'
-              '    return 0;\n'
-              '  }\n')
+          replace('src/activities/UiTabListActivity.h',
+                  '  virtual const char* tabLabel(int index) const = 0;\n',
+                  '  virtual const char* tabLabel(int index) const = 0;\n'
+                  '  virtual int tabWidthPercent(int index) const {\n'
+                  '    (void)index;\n'
+                  '    return 0;\n'
+                  '  }\n')
 
-          replace(
-              'src/activities/UiTabListActivity.cpp',
-              '  fui::tabBar(screen.frame(), tabRect, tabProps);\n'
-              '  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));\n',
-              '  // A subclass may request exact percentage slots. Rendering each weighted\n'
-              '  // slot as a one-item tab bar preserves FreeInkUI\'s pill centering and\n'
-              '  // hit testing while keeping the default path untouched for all other screens.\n'
-              '  int widthTotal = 0;\n'
-              '  bool weightedTabs = count > 0;\n'
-              '  for (int i = 0; i < count; ++i) {\n'
-              '    const int width = tabWidthPercent(i);\n'
-              '    if (width <= 0) {\n'
-              '      weightedTabs = false;\n'
-              '      break;\n'
-              '    }\n'
-              '    widthTotal += width;\n'
-              '  }\n'
-              '  weightedTabs = weightedTabs && widthTotal == 100;\n'
-              '  if (weightedTabs) {\n'
-              '    int cumulative = 0;\n'
-              '    for (int i = 0; i < count; ++i) {\n'
-              '      const int width = tabWidthPercent(i);\n'
-              '      const int slotX = tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;\n'
-              '      cumulative += width;\n'
-              '      const int slotRight =\n'
-              '          tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;\n'
-              '      fui::TabBarProps singleProps = tabProps;\n'
-              '      singleProps.tabs = &tabs[i];\n'
-              '      singleProps.count = 1;\n'
-              '      fui::tabBar(screen.frame(),\n'
-              '                  fui::Rect{static_cast<int16_t>(slotX), tabRect.y,\n'
-              '                            static_cast<int16_t>(slotRight - slotX), tabRect.height},\n'
-              '                  singleProps);\n'
-              '    }\n'
-              '  } else {\n'
-              '    fui::tabBar(screen.frame(), tabRect, tabProps);\n'
-              '  }\n'
-              '  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));\n')
+          replace('src/activities/UiTabListActivity.cpp',
+                  '  fui::tabBar(screen.frame(), tabRect, tabProps);\n'
+                  '  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));\n',
+                  '  int widthTotal = 0;\n'
+                  '  bool weightedTabs = count > 0;\n'
+                  '  for (int i = 0; i < count; ++i) {\n'
+                  '    const int width = tabWidthPercent(i);\n'
+                  '    if (width <= 0) { weightedTabs = false; break; }\n'
+                  '    widthTotal += width;\n'
+                  '  }\n'
+                  '  weightedTabs = weightedTabs && widthTotal == 100;\n'
+                  '  if (weightedTabs) {\n'
+                  '    int cumulative = 0;\n'
+                  '    for (int i = 0; i < count; ++i) {\n'
+                  '      const int width = tabWidthPercent(i);\n'
+                  '      const int slotX = tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;\n'
+                  '      cumulative += width;\n'
+                  '      const int slotRight = tabRect.x + (static_cast<int>(tabRect.width) * cumulative) / 100;\n'
+                  '      fui::TabBarProps singleProps = tabProps;\n'
+                  '      singleProps.tabs = &tabs[i];\n'
+                  '      singleProps.count = 1;\n'
+                  '      fui::tabBar(screen.frame(), fui::Rect{static_cast<int16_t>(slotX), tabRect.y,\n'
+                  '                  static_cast<int16_t>(slotRight - slotX), tabRect.height}, singleProps);\n'
+                  '    }\n'
+                  '  } else {\n'
+                  '    fui::tabBar(screen.frame(), tabRect, tabProps);\n'
+                  '  }\n'
+                  '  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));\n')
 
-          # Text Settings: RoundedRaff gets 23/23/31/23 and the full Hungarian "Rendezés" label.
-          replace(
-              'src/activities/settings/TextSettingsActivity.h',
-              '  const char* tabLabel(int index) const override;\n',
-              '  const char* tabLabel(int index) const override;\n'
-              '  int tabWidthPercent(int index) const override;\n')
+          replace('src/activities/settings/TextSettingsActivity.h',
+                  '  const char* tabLabel(int index) const override;\n',
+                  '  const char* tabLabel(int index) const override;\n'
+                  '  int tabWidthPercent(int index) const override;\n')
 
-          replace(
-              'src/activities/settings/TextSettingsActivity.cpp',
-              'const char* TextSettingsActivity::tabLabel(const int index) const { return I18N.get(TAB_NAME_IDS[index]); }\n',
-              'const char* TextSettingsActivity::tabLabel(const int index) const {\n'
-              '  const char* label = I18N.get(TAB_NAME_IDS[index]);\n'
-              '  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF &&\n'
-              '      index == static_cast<int>(Tab::Layout) && strcmp(label, "Rendez.") == 0) {\n'
-              '    return "Rendezés";\n'
-              '  }\n'
-              '  return label;\n'
-              '}\n\n'
-              'int TextSettingsActivity::tabWidthPercent(const int index) const {\n'
-              '  if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;\n'
-              '  constexpr int kRoundedRaffTextTabWidths[] = {23, 23, 31, 23};\n'
-              '  return index >= 0 && index < static_cast<int>(Tab::Count) ? kRoundedRaffTextTabWidths[index] : 0;\n'
-              '}\n')
+          replace('src/activities/settings/TextSettingsActivity.cpp',
+                  'const char* TextSettingsActivity::tabLabel(const int index) const { return I18N.get(TAB_NAME_IDS[index]); }\n',
+                  'const char* TextSettingsActivity::tabLabel(const int index) const {\n'
+                  '  const char* label = I18N.get(TAB_NAME_IDS[index]);\n'
+                  '  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF &&\n'
+                  '      index == static_cast<int>(Tab::Layout) && strcmp(label, "Rendez.") == 0) return "Rendezés";\n'
+                  '  return label;\n'
+                  '}\n\n'
+                  'int TextSettingsActivity::tabWidthPercent(const int index) const {\n'
+                  '  if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;\n'
+                  '  constexpr int kRoundedRaffTextTabWidths[] = {23, 23, 31, 23};\n'
+                  '  return index >= 0 && index < static_cast<int>(Tab::Count) ? kRoundedRaffTextTabWidths[index] : 0;\n'
+                  '}\n')
 
-          replace(
-              'src/activities/settings/TextSettingsActivity.cpp',
-              '  props.rowHeight = 40;\n'
-              '  props.rowGap = 0;\n',
-              '  const bool compactLyraLayout =\n'
-              '      tab_ == Tab::Layout &&\n'
-              '      (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::LYRA_3_COVERS);\n'
-              '  const int16_t textSettingsRowHeight = compactLyraLayout ? 36 : 40;\n'
-              '  props.rowHeight = textSettingsRowHeight;\n'
-              '  props.rowGap = 0;\n')
+          replace('src/activities/settings/TextSettingsActivity.cpp',
+                  '  props.rowHeight = 40;\n  props.rowGap = 0;\n',
+                  '  const bool compactLyraLayout = tab_ == Tab::Layout &&\n'
+                  '      (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::LYRA_3_COVERS);\n'
+                  '  const int16_t textSettingsRowHeight = compactLyraLayout ? 36 : 40;\n'
+                  '  props.rowHeight = textSettingsRowHeight;\n  props.rowGap = 0;\n')
+          replace('src/activities/settings/TextSettingsActivity.cpp',
+                  '  syncTabListViewport(screen, props, false, 40);\n',
+                  '  syncTabListViewport(screen, props, false, textSettingsRowHeight);\n')
 
-          replace(
-              'src/activities/settings/TextSettingsActivity.cpp',
-              '  syncTabListViewport(screen, props, false, 40);\n',
-              '  syncTabListViewport(screen, props, false, textSettingsRowHeight);\n')
+          # Current version screen uses local lambdas. Add a mixed-weight heading helper after drawSection.
+          replace('src/activities/settings/CrossPointVersionActivity.cpp',
+                  '  const auto drawSection = [&](const char* title, const char* text) {\n'
+                  '    drawWrapped(UI_12_FONT_ID, title, true);\n'
+                  '    drawWrapped(UI_12_FONT_ID, text);\n'
+                  '    y += bodyLineHeight;\n'
+                  '  };\n',
+                  '  const auto drawSection = [&](const char* title, const char* text) {\n'
+                  '    drawWrapped(UI_12_FONT_ID, title, true);\n'
+                  '    drawWrapped(UI_12_FONT_ID, text);\n'
+                  '    y += bodyLineHeight;\n'
+                  '  };\n\n'
+                  '  const auto drawMixedSection = [&](const char* title, const char* suffix, const char* text) {\n'
+                  '    renderer.drawText(UI_12_FONT_ID, x, y, title, true, EpdFontFamily::BOLD);\n'
+                  '    const int suffixX = x + renderer.getTextAdvanceX(UI_12_FONT_ID, title, EpdFontFamily::BOLD);\n'
+                  '    renderer.drawText(UI_12_FONT_ID, suffixX, y, suffix);\n'
+                  '    y += bodyLineHeight;\n'
+                  '    drawWrapped(UI_12_FONT_ID, text);\n'
+                  '    y += bodyLineHeight;\n'
+                  '  };\n')
 
-          # Version info: Hungarian heading stays bold; parenthesized English suffix is normal weight.
-          replace(
-              'src/activities/settings/CrossPointVersionActivity.cpp',
-              'void drawSection(GfxRenderer& renderer, int x, int rightX, int y, const char* heading, const char* detail) {\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, y, heading, true, EpdFontFamily::BOLD);\n\n'
-              '  const int detailY = y + LINE_H;\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, detailY, detail);\n'
-              '  renderer.drawLine(x, detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, rightX,\n'
-              '                    detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, true);\n'
-              '}\n',
-              'void drawSection(GfxRenderer& renderer, int x, int rightX, int y, const char* heading, const char* detail) {\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, y, heading, true, EpdFontFamily::BOLD);\n\n'
-              '  const int detailY = y + LINE_H;\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, detailY, detail);\n'
-              '  renderer.drawLine(x, detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, rightX,\n'
-              '                    detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, true);\n'
-              '}\n\n'
-              'void drawMixedHeadingSection(GfxRenderer& renderer, int x, int rightX, int y, const char* heading,\n'
-              '                             const char* suffix, const char* detail) {\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, y, heading, true, EpdFontFamily::BOLD);\n'
-              '  const int suffixX = x + renderer.getTextWidth(UI_12_FONT_ID, heading, EpdFontFamily::BOLD);\n'
-              '  renderer.drawText(UI_12_FONT_ID, suffixX, y, suffix);\n\n'
-              '  const int detailY = y + LINE_H;\n'
-              '  renderer.drawText(UI_12_FONT_ID, x, detailY, detail);\n'
-              '  renderer.drawLine(x, detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, rightX,\n'
-              '                    detailY + renderer.getLineHeight(UI_12_FONT_ID) + DIVIDER_GAP, true);\n'
-              '}\n')
+          replace('src/activities/settings/CrossPointVersionActivity.cpp',
+                  '    drawSection(hu ? "Beágyazott elválasztás (Soft hyphen)" : "Embedded hyphenation (Soft hyphen)",\n'
+                  '                hu ? "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként."\n'
+                  '                   : "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");',
+                  '    if (hu) {\n'
+                  '      drawMixedSection("Beágyazott elválasztás", " (Soft hyphen)",\n'
+                  '                       "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként.");\n'
+                  '    } else {\n'
+                  '      drawSection("Embedded hyphenation (Soft hyphen)",\n'
+                  '                  "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");\n'
+                  '    }')
 
-          replace(
-              'src/activities/settings/CrossPointVersionActivity.cpp',
-              'drawSection(renderer, x, rightX, y, "Beágyazott elválasztás (Soft hyphen)", "HU: kiemelt (ELSŐDLEGES)");',
-              'drawMixedHeadingSection(renderer, x, rightX, y, "Beágyazott elválasztás", " (Soft hyphen)",\n'
-              '                          "HU: kiemelt (ELSŐDLEGES)");')
-
-          replace(
-              'src/activities/settings/CrossPointVersionActivity.cpp',
-              'drawSection(renderer, x, rightX, y, "Optikai margó (Hanging punctuation)", "Több írásjel kifuttatása");',
-              'drawMixedHeadingSection(renderer, x, rightX, y, "Optikai margó", " (Hanging punctuation)",\n'
-              '                          "Több írásjel kifuttatása");')
+          replace('src/activities/settings/CrossPointVersionActivity.cpp',
+                  '    drawSection(hu ? "Optikai margó (Hanging punctuation)" : "Hanging punctuation",\n'
+                  '                hu ? "Az írásjelek margóba helyezésével egyenletesebb szövegszélek."\n'
+                  '                   : "Places punctuation into the margin for a more even text edge.");',
+                  '    if (hu) {\n'
+                  '      drawMixedSection("Optikai margó", " (Hanging punctuation)",\n'
+                  '                       "Az írásjelek margóba helyezésével egyenletesebb szövegszélek.");\n'
+                  '    } else {\n'
+                  '      drawSection("Hanging punctuation",\n'
+                  '                  "Places punctuation into the margin for a more even text edge.");\n'
+                  '    }')
           PY
 
           git diff --check
@@ -188,13 +163,7 @@ jobs:
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/CPHUNBuildId.h \
-                    src/activities/UiTabListActivity.h \
-                    src/activities/UiTabListActivity.cpp \
-                    src/activities/settings/TextSettingsActivity.h \
-                    src/activities/settings/TextSettingsActivity.cpp \
-                    src/activities/settings/CrossPointVersionActivity.cpp \
-                    src/activities/util/KeyboardLayoutSet.h
+            git add src/CPHUNBuildId.h src/activities/UiTabListActivity.h src/activities/UiTabListActivity.cpp src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp src/activities/settings/CrossPointVersionActivity.cpp src/activities/util/KeyboardLayoutSet.h
             git commit -m "CPHUN-82: fit Lyra layout and tune RoundedRaff tabs"
             git push origin HEAD:agent/cphun-82-ui-fit-tabs-keyboard
           fi
@@ -205,13 +174,10 @@ jobs:
           git diff --check origin/agent/cphun-81-version-info-icons48...HEAD
           grep -q 'CPHUN-260909-82' src/CPHUNBuildId.h
           grep -q 'row == 3 ? 7' src/activities/util/KeyboardLayoutSet.h
-          grep -q 'kRoundedRaffTextTabWidths.*23, 23, 31, 23' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '23, 23, 31, 23' src/activities/settings/TextSettingsActivity.cpp
           grep -q 'return "Rendezés"' src/activities/settings/TextSettingsActivity.cpp
           grep -q 'compactLyraLayout' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'textSettingsRowHeight = compactLyraLayout ? 36 : 40' src/activities/settings/TextSettingsActivity.cpp
-          grep -q 'drawMixedHeadingSection' src/activities/settings/CrossPointVersionActivity.cpp
-          grep -q '" (Soft hyphen)"' src/activities/settings/CrossPointVersionActivity.cpp
-          grep -q '" (Hanging punctuation)"' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -q 'drawMixedSection' src/activities/settings/CrossPointVersionActivity.cpp
 
       - name: Unit tests
         run: |
