@@ -175,7 +175,27 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  bool found = false;
+
+  // CPHUN-88: prefer a two-token exact phrase beginning at the selected word.
+  // Dictionary::lookup() already tries exact lookup before stemming, so a
+  // dictionary headword such as "formális logika" wins over "formális".
+  if (ok && selected + 1 < static_cast<int>(words.size()) &&
+      words[selected].row == words[selected + 1].row) {
+    const std::string phrase = std::string(words[selected].text) + " " + words[selected + 1].text;
+    found = dict.lookup(phrase.c_str(), definition, headword, &result);
+    if (!found && result != Dictionary::LookupResult::NotFound) {
+      // A real SD/decompression/OOM failure must not be hidden by a second
+      // lookup that happens to miss or succeed.
+      ok = false;
+    }
+  }
+  if (ok && !found) {
+    definition.clear();
+    headword.clear();
+    result = Dictionary::LookupResult::NotFound;
+    found = dict.lookup(words[selected].text, definition, headword, &result);
+  }
 
   if (found) {
     popup = Popup::None;

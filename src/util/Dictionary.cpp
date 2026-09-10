@@ -574,6 +574,8 @@ std::string Dictionary::cleanWord(const char* word) {
   // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
   // from the edges too, or EPUB text like garage.” never matches a headword.
   while (start < end) {
+    if (b[start] == '-' && start + 1 < end && isWordByte(b[start + 1]))
+      break;
     if (!isWordByte(b[start]))
       start++;
     else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
@@ -582,6 +584,8 @@ std::string Dictionary::cleanWord(const char* word) {
       break;
   }
   while (end > start) {
+    if (b[end - 1] == '-' && end - start > 1 && isWordByte(b[end - 2]))
+      break;
     if (!isWordByte(b[end - 1]))
       end--;
     else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
