@@ -1,0 +1,172 @@
+name: Generate CPHUN-85 Noto Serif 14 Unicode
+
+on:
+  push:
+    branches: [agent/cphun-85-dictionary-unicode]
+    paths:
+      - '.github/workflows/generate-cphun-85-noto14-unicode.yml'
+      - 'tools/dictionary_unicode_audit.py'
+      - 'lib/EpdFont/scripts/fontconvert.py'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-85-dictionary-unicode
+          fetch-depth: 0
+
+      - name: Install font tooling and Noto families
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-core fonts-noto-extra fonts-noto-cjk fonts-noto-color-emoji python3-pip
+          python3 -m pip install --break-system-packages freetype-py fonttools zopfli
+
+      - name: Build minimal Noto fallback stack and generate extended 14 pt Regular
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util, re, subprocess, sys
+          from fontTools.ttLib import TTFont, TTCollection
+
+          root = Path.cwd()
+          audit_path = root / 'tools/dictionary_unicode_audit.py'
+          spec = importlib.util.spec_from_file_location('du', audit_path)
+          du = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(du)
+
+          wanted = du.dictionary_codepoints()
+          current_header = root / 'lib/EpdFont/builtinFonts/notoserif_14_regular.h'
+          current = du.header_codepoints(current_header)
+          missing = set(wanted - current)
+          print(f'wanted={len(wanted)} current_dictionary_present={len(wanted & current)} missing={len(missing)}')
+
+          primary = root / 'lib/EpdFont/builtinFonts/source/NotoSerif/NotoSerif-Regular.ttf'
+          tmp = root / 'build/cphun85-fonts'
+          tmp.mkdir(parents=True, exist_ok=True)
+
+          candidates = []
+          search_roots = [Path('/usr/share/fonts/truetype/noto'), Path('/usr/share/fonts/opentype/noto')]
+          files = []
+          for d in search_roots:
+              if d.exists():
+                  files += [p for p in d.rglob('*') if p.suffix.lower() in ('.ttf','.otf','.ttc','.otc')]
+
+          for p in files:
+              try:
+                  if p.suffix.lower() in ('.ttc','.otc'):
+                      coll = TTCollection(str(p), lazy=True)
+                      for idx, f in enumerate(coll.fonts):
+                          cmap = set((f.getBestCmap() or {}).keys())
+                          cover = cmap & missing
+                          if cover:
+                              candidates.append([len(cover), p, idx, cover])
+                      coll.close()
+                  else:
+                      f = TTFont(str(p), lazy=True)
+                      cmap = set((f.getBestCmap() or {}).keys())
+                      cover = cmap & missing
+                      if cover:
+                          candidates.append([len(cover), p, None, cover])
+                      f.close()
+              except Exception as e:
+                  print(f'skip {p}: {e}', file=sys.stderr)
+
+          uncovered = set(missing)
+          selected = []
+          while uncovered:
+              best = None
+              best_cover = set()
+              for _, p, idx, cover in candidates:
+                  c = cover & uncovered
+                  if len(c) > len(best_cover):
+                      best = (p, idx)
+                      best_cover = c
+              if not best or not best_cover:
+                  break
+              selected.append((best[0], best[1], set(best_cover)))
+              uncovered -= best_cover
+              print(f'select {best[0]} face={best[1]} covers={len(best_cover)} remain={len(uncovered)}')
+
+          stack = [str(primary)]
+          for n,(p,idx,cover) in enumerate(selected,1):
+              if idx is None:
+                  stack.append(str(p))
+              else:
+                  coll = TTCollection(str(p))
+                  f = coll.fonts[idx]
+                  out = tmp / f'fallback_{n}.ttf'
+                  f.save(str(out))
+                  coll.close()
+                  stack.append(str(out))
+
+          # Merge wanted code points into compact additional intervals.
+          cps = sorted(wanted)
+          intervals=[]
+          if cps:
+              a=b=cps[0]
+              for cp in cps[1:]:
+                  if cp == b+1:
+                      b=cp
+                  else:
+                      intervals.append((a,b)); a=b=cp
+              intervals.append((a,b))
+
+          out = root / 'CPHUN-85-notoserif_14_regular_unicode.h'
+          cmd = [sys.executable, 'lib/EpdFont/scripts/fontconvert.py',
+                 'notoserif_14_regular_unicode', '14', *stack,
+                 '--2bit','--compress','--pnum','--zopfli']
+          for a,b in intervals:
+              cmd += ['--additional-intervals', f'0x{a:X},0x{b:X}']
+          print('font stack entries:', len(stack))
+          with out.open('w', encoding='utf-8') as fh:
+              subprocess.run(cmd, stdout=fh, check=True)
+
+          generated = du.header_codepoints(out)
+          still_missing = sorted(wanted - generated)
+
+          def bitmap_size(path):
+              text = Path(path).read_text(encoding='utf-8', errors='replace')
+              m = re.search(r'Bitmaps\[(\d+)\]', text)
+              return int(m.group(1)) if m else -1
+
+          old_file = current_header.stat().st_size
+          new_file = out.stat().st_size
+          old_bitmap = bitmap_size(current_header)
+          new_bitmap = bitmap_size(out)
+
+          report = root / 'CPHUN-85-NotoSerif14-Unicode-size-report.txt'
+          with report.open('w', encoding='utf-8') as r:
+              r.write(f'dictionary_non_ascii={len(wanted)}\n')
+              r.write(f'baseline_dictionary_present={len(wanted & current)}\n')
+              r.write(f'baseline_missing={len(missing)}\n')
+              r.write(f'generated_dictionary_present={len(wanted & generated)}\n')
+              r.write(f'generated_missing={len(still_missing)}\n')
+              r.write(f'baseline_header_bytes={old_file}\n')
+              r.write(f'extended_header_bytes={new_file}\n')
+              r.write(f'header_growth_bytes={new_file-old_file}\n')
+              r.write(f'baseline_bitmap_bytes={old_bitmap}\n')
+              r.write(f'extended_bitmap_bytes={new_bitmap}\n')
+              r.write(f'bitmap_growth_bytes={new_bitmap-old_bitmap}\n')
+              r.write(f'fontstack_entries={len(stack)}\n')
+              for i,s in enumerate(stack): r.write(f'fontstack_{i}={s}\n')
+              r.write(f'uncovered_by_installed_noto={len(uncovered)}\n')
+              for cp in sorted(uncovered): r.write(f'uncovered=U+{cp:04X}\n')
+              r.write(f'still_missing_after_generation={len(still_missing)}\n')
+              for cp in still_missing: r.write(f'still_missing=U+{cp:04X}\n')
+          print(report.read_text(encoding='utf-8'))
+          PY
+
+      - name: Upload generated font and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-85-NotoSerif14-Regular-Unicode
+          path: |
+            CPHUN-85-notoserif_14_regular_unicode.h
+            CPHUN-85-NotoSerif14-Unicode-size-report.txt
+          if-no-files-found: error
+          retention-days: 90
