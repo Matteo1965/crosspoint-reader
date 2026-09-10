@@ -200,6 +200,11 @@ void DictionaryWordSelectActivity::performLookup() {
     candidates.reserve(10);
 
     // Restore a hyphenated orthographic unit from hidden punctuation tokens.
+    // Same-line compounds stay inside one TextBlock. CPHUN-91 additionally
+    // bridges an explicit hyphen at a rendered line/TextBlock boundary, so a
+    // lexical unit such as `Márvány-tenger` remains searchable even when the
+    // reader wraps immediately after the visible hyphen. The bridge is strict:
+    // no ordinary neighbouring words are ever concatenated.
     const WordBox& current = words[selected];
     if (current.block) {
       const TextBlock* block = current.block;
@@ -215,6 +220,37 @@ void DictionaryWordSelectActivity::performLookup() {
         std::string compound;
         for (int i = start; i <= end; ++i) compound += block->wordText(i);
         appendUnique(candidates, std::move(compound));
+      }
+
+      // Selected right half on the first token of a new rendered line:
+      // previous selectable word + explicit hyphen at previous block end + current.
+      if (current.tokenIndex == 0 && selected > 0) {
+        const WordBox& previous = words[selected - 1];
+        if (previous.block && previous.block != block && previous.row + 1 == current.row &&
+            previous.block->wordCount() >= 2) {
+          const uint16_t hyphenIndex = previous.block->wordCount() - 1;
+          if (previous.tokenIndex + 1 == hyphenIndex &&
+              isExplicitHyphenToken(previous.block->wordText(hyphenIndex))) {
+            std::string compound = previous.text;
+            compound += previous.block->wordText(hyphenIndex);
+            compound += current.text;
+            appendUnique(candidates, std::move(compound));
+          }
+        }
+      }
+
+      // Selected left half immediately before an explicit hyphen that ends the
+      // rendered line: current + hyphen + first selectable token of next line.
+      if (selected + 1 < static_cast<int>(words.size()) && block->wordCount() >= 2 &&
+          current.tokenIndex + 1 == block->wordCount() - 1 &&
+          isExplicitHyphenToken(block->wordText(block->wordCount() - 1))) {
+        const WordBox& next = words[selected + 1];
+        if (next.block && next.block != block && next.row == current.row + 1 && next.tokenIndex == 0) {
+          std::string compound = current.text;
+          compound += block->wordText(block->wordCount() - 1);
+          compound += next.text;
+          appendUnique(candidates, std::move(compound));
+        }
       }
     }
 
