@@ -22,8 +22,11 @@ jobs:
       - name: Install font tooling and Noto families
         run: |
           sudo apt-get update
-          sudo apt-get install -y fonts-noto-core fonts-noto-extra fonts-noto-cjk fonts-noto-color-emoji python3-pip
+          sudo apt-get install -y fonts-noto-core fonts-noto-extra fonts-noto-cjk python3-pip curl
           python3 -m pip install --break-system-packages freetype-py fonttools zopfli
+          mkdir -p build/cphun85-fonts
+          curl -fL 'https://raw.githubusercontent.com/google/fonts/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf' \
+            -o build/cphun85-fonts/NotoEmoji-Variable.ttf
 
       - name: Build minimal Noto fallback stack and generate extended 14 pt Regular
         shell: bash
@@ -50,13 +53,15 @@ jobs:
           tmp.mkdir(parents=True, exist_ok=True)
 
           candidates = []
-          search_roots = [Path('/usr/share/fonts/truetype/noto'), Path('/usr/share/fonts/opentype/noto')]
+          search_roots = [Path('/usr/share/fonts/truetype/noto'), Path('/usr/share/fonts/opentype/noto'), tmp]
           files = []
           for d in search_roots:
               if d.exists():
                   files += [p for p in d.rglob('*') if p.suffix.lower() in ('.ttf','.otf','.ttc','.otc')]
 
           for p in files:
+              if 'ColorEmoji' in p.name:
+                  continue
               try:
                   if p.suffix.lower() in ('.ttc','.otc'):
                       coll = TTCollection(str(p), lazy=True)
@@ -64,14 +69,14 @@ jobs:
                           cmap = set((f.getBestCmap() or {}).keys())
                           cover = cmap & missing
                           if cover:
-                              candidates.append([len(cover), p, idx, cover])
+                              candidates.append([p, idx, cover])
                       coll.close()
                   else:
                       f = TTFont(str(p), lazy=True)
                       cmap = set((f.getBestCmap() or {}).keys())
                       cover = cmap & missing
                       if cover:
-                          candidates.append([len(cover), p, None, cover])
+                          candidates.append([p, None, cover])
                       f.close()
               except Exception as e:
                   print(f'skip {p}: {e}', file=sys.stderr)
@@ -81,16 +86,25 @@ jobs:
           while uncovered:
               best = None
               best_cover = set()
-              for _, p, idx, cover in candidates:
+              best_pref = -1
+              for p, idx, cover in candidates:
                   c = cover & uncovered
-                  if len(c) > len(best_cover):
+                  # Prefer Regular/variable Noto faces when coverage is equal.
+                  pref = 2 if ('Regular' in p.name or 'Variable' in p.name) else 1
+                  if len(c) > len(best_cover) or (len(c) == len(best_cover) and len(c) > 0 and pref > best_pref):
                       best = (p, idx)
                       best_cover = c
+                      best_pref = pref
               if not best or not best_cover:
                   break
               selected.append((best[0], best[1], set(best_cover)))
               uncovered -= best_cover
               print(f'select {best[0]} face={best[1]} covers={len(best_cover)} remain={len(uncovered)}')
+
+          if uncovered:
+              print('UNSUPPORTED BY AVAILABLE NOTO OUTLINE FONTS:')
+              for cp in sorted(uncovered):
+                  print(f'  U+{cp:04X} {chr(cp)!r}')
 
           stack = [str(primary)]
           for n,(p,idx,cover) in enumerate(selected,1):
@@ -99,13 +113,14 @@ jobs:
               else:
                   coll = TTCollection(str(p))
                   f = coll.fonts[idx]
-                  out = tmp / f'fallback_{n}.ttf'
-                  f.save(str(out))
+                  out_face = tmp / f'fallback_{n}.ttf'
+                  f.save(str(out_face))
                   coll.close()
-                  stack.append(str(out))
+                  stack.append(str(out_face))
 
-          # Merge wanted code points into compact additional intervals.
-          cps = sorted(wanted)
+          # Export only drawable characters available in the chosen stack.
+          export_wanted = wanted - uncovered
+          cps = sorted(export_wanted)
           intervals=[]
           if cps:
               a=b=cps[0]
@@ -154,7 +169,7 @@ jobs:
               r.write(f'bitmap_growth_bytes={new_bitmap-old_bitmap}\n')
               r.write(f'fontstack_entries={len(stack)}\n')
               for i,s in enumerate(stack): r.write(f'fontstack_{i}={s}\n')
-              r.write(f'uncovered_by_installed_noto={len(uncovered)}\n')
+              r.write(f'uncovered_by_available_noto={len(uncovered)}\n')
               for cp in sorted(uncovered): r.write(f'uncovered=U+{cp:04X}\n')
               r.write(f'still_missing_after_generation={len(still_missing)}\n')
               for cp in still_missing: r.write(f'still_missing=U+{cp:04X}\n')
