@@ -657,6 +657,14 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
     fontCacheManager_->recordText(renderedText, resolvedFontId, style);
+    // Prewarm the regular fallback face as a second style/font group. Recording
+    // the full rendered string is deliberate: recordText de-duplicates
+    // codepoints and this guarantees compressed fallback bitmaps are resident
+    // before the paint pass without changing measurement/layout.
+    if (missingGlyphFallbackFontId_ != 0 &&
+        (missingGlyphFallbackFontId_ != resolvedFontId || style != EpdFontFamily::REGULAR)) {
+      fontCacheManager_->recordText(renderedText, missingGlyphFallbackFontId_, EpdFontFamily::REGULAR);
+    }
     return;
   }
 
@@ -672,6 +680,13 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
   const auto& font = fontIt->second;
+  const EpdFontFamily* missingGlyphFallback = nullptr;
+  if (missingGlyphFallbackFontId_ != 0) {
+    const auto fallbackIt = fontMap.find(missingGlyphFallbackFontId_);
+    if (fallbackIt != fontMap.end()) {
+      missingGlyphFallback = &fallbackIt->second;
+    }
+  }
 
   const char* textCursor = renderedText;
   uint32_t cp;
@@ -685,14 +700,24 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     // font-native position. Fonts without their glyphs — the built-ins — miss
     // the getGlyph lookup and skip them, as before.
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
+      const EpdFontFamily* combiningFont = &font;
+      EpdFontFamily::Style combiningStyle = style;
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
+      if (!combiningGlyph && missingGlyphFallback != nullptr) {
+        combiningGlyph = missingGlyphFallback->getGlyph(cp, EpdFontFamily::REGULAR);
+        if (combiningGlyph) {
+          combiningFont = missingGlyphFallback;
+          combiningStyle = EpdFontFamily::REGULAR;
+        }
+      }
       if (!combiningGlyph) continue;
       const auto anchor = combiningMark::anchorFor(cp);
       const int raiseBy =
           combiningMark::raiseAboveBase(anchor, combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                        combiningGlyph->left, combiningGlyph->width);
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
+      renderCharImpl<TextRotation::None>(*this, renderMode, *combiningFont, cp, combiningX, yPos - raiseBy, black,
+                                         combiningStyle);
       continue;
     }
 
@@ -706,14 +731,28 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
     }
 
+    const EpdFontFamily* glyphFont = &font;
+    EpdFontFamily::Style glyphStyle = style;
     const EpdGlyph* glyph = font.getGlyph(cp, style);
+    bool usingMissingGlyphFallback = false;
+    if (!glyph && missingGlyphFallback != nullptr) {
+      glyph = missingGlyphFallback->getGlyph(cp, EpdFontFamily::REGULAR);
+      if (glyph) {
+        glyphFont = missingGlyphFallback;
+        glyphStyle = EpdFontFamily::REGULAR;
+        usingMissingGlyphFallback = true;
+      }
+    }
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
-    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+    // The fallback is deliberately the literal 14 pt Regular glyph, even when
+    // the missing source glyph was bold/italic/sup/sub. Only native glyphs keep
+    // the requested SUP/SUB half-scale treatment.
+    const bool isSupSub = !usingMissingGlyphFallback && (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     if (isSupSub) {
       // Halve the advance so the cursor advances by the same amount the scaled glyph
       // actually occupies, keeping spacing correct without needing a separate smaller font.
@@ -722,9 +761,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     if (isSupSub) {
       // yPos already carries the vertical offset applied by TextBlock::render().
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+      renderCharScaled(*this, renderMode, *glyphFont, cp, lastBaseX, yPos, black, glyphStyle);
     } else {
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+      renderCharImpl<TextRotation::None>(*this, renderMode, *glyphFont, cp, lastBaseX, yPos, black, glyphStyle);
     }
     prevCp = cp;
   }

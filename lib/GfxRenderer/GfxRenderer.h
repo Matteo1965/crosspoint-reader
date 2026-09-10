@@ -84,6 +84,13 @@ class GfxRenderer {
   // app-level SD font setup when an SD family is loaded. See resolveTextFontId().
   std::map<int, int> fallbackFontMap_;
 
+  // Optional render-only fallback used by the dictionary. Unlike the CJK UI
+  // fallback above, this is character-by-character: the requested font/style
+  // remains untouched for every glyph it owns, and only a missing glyph is
+  // rendered with REGULAR from this font id. Measurements intentionally stay
+  // on the requested font for the first CPHUN-86 iteration.
+  int missingGlyphFallbackFontId_ = 0;
+
   // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
   // has a registered fallback, returns the fallback id; otherwise returns
   // fontId unchanged. The whole string is routed as a unit so each draw/measure
@@ -168,6 +175,10 @@ class GfxRenderer {
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
   void clearFallbackFonts() { fallbackFontMap_.clear(); }
+  // Render-only per-glyph fallback. A value of 0 disables it. This is scoped
+  // by DictionaryDefinitionActivity so normal reader/UI rendering is unchanged.
+  void setMissingGlyphFallbackFont(int fontId) { missingGlyphFallbackFontId_ = fontId; }
+  void clearMissingGlyphFallbackFont() { missingGlyphFallbackFontId_ = 0; }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).

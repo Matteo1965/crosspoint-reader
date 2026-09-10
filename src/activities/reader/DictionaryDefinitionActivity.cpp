@@ -27,22 +27,10 @@ constexpr int SIDE_PADDING = 20;
 
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
 
-// Dictionary definitions always use the built-in Noto Serif family so glyph
-// availability never depends on the selected reading font or an SD-card font.
-// Noto Serif renders visibly larger than most alternative reader fonts at the
-// same nominal point size on this display. For non-Noto-Serif reader fonts,
-// apply a calibrated -2 pt optical correction before selecting the nearest
-// built-in Noto Serif size. Built-in Noto Serif keeps its native size.
-int dictionaryBodyFontId() {
-  int visualSize = SETTINGS.fontPointSize;
-  const bool readerIsBuiltInNotoSerif =
-      SETTINGS.sdFontFamilyName[0] == '\0' && SETTINGS.fontFamily == CrossPointSettings::NOTOSERIF;
-  if (!readerIsBuiltInNotoSerif) visualSize = std::max(12, visualSize - 2);
-  if (visualSize <= 13) return NOTOSERIF_12_FONT_ID;
-  if (visualSize <= 15) return NOTOSERIF_14_FONT_ID;
-  if (visualSize <= 17) return NOTOSERIF_16_FONT_ID;
-  return NOTOSERIF_18_FONT_ID;
-}
+// Dictionary definition body is intentionally fixed at Noto Serif 14 pt
+// Regular. Missing glyphs in any font/style used while the dictionary is open
+// are rendered character-by-character from the expanded 14 pt Regular face.
+int dictionaryBodyFontId() { return NOTOSERIF_14_FONT_ID; }
 
 // Uppercase the Hungarian alphabet without depending on a locale (the ESP32
 // C locale only knows ASCII). Hungarian accented lower/uppercase pairs have
@@ -85,6 +73,9 @@ std::string uppercaseHungarian(std::string text) {
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  // CPHUN-86: enable render-only, per-glyph fallback for the complete
+  // dictionary activity (plain text, styled HTML, source lines and headings).
+  renderer.setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID);
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
@@ -96,6 +87,7 @@ void DictionaryDefinitionActivity::onEnter() {
 }
 
 void DictionaryDefinitionActivity::onExit() {
+  renderer.clearMissingGlyphFallbackFont();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) {
     fcm->releaseSdFontCaches();
