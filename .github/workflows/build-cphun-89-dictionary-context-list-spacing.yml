@@ -1,0 +1,97 @@
+name: Build CPHUN-89 Dictionary Context and List Spacing
+
+on:
+  push:
+    branches: [agent/cphun-89-dictionary-context-list-spacing]
+    paths:
+      - '.github/workflows/build-cphun-89-dictionary-context-list-spacing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-89-dictionary-context-list-spacing
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-89 fixes
+        run: |
+          python3 tools/cphun89_dictionary_list_spacing_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-89 scope
+        run: |
+          grep -q 'CPHUN-260910-89' src/CPHUNBuildId.h
+          grep -q 'SECTION_FILE_VERSION = 55' lib/Epub/Epub/Section.cpp
+          grep -q 'isFixedLeadingMarkerBoundary' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'cp == 0x2022' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'findExactHeadwords' src/util/Dictionary.cpp
+          grep -q 'selected - 2' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'selected + 2' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'isExplicitHyphenToken' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'DictionaryMatchSelectActivity' src/activities/reader/DictionaryWordSelectActivity.cpp
+          test -f src/activities/reader/DictionaryMatchSelectActivity.cpp
+          test -f src/activities/reader/DictionaryMatchSelectActivity.h
+          # Accepted inherited behavior must remain present.
+          grep -q "b\[start\] == '-'" src/util/Dictionary.cpp
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'breakOffsetsForLanguageExtended(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-89 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h \
+                    lib/Epub/Epub/Section.cpp \
+                    lib/Epub/Epub/ParsedText.cpp \
+                    src/activities/ActivityResult.h \
+                    src/util/Dictionary.h src/util/Dictionary.cpp \
+                    src/activities/reader/DictionaryWordSelectActivity.h \
+                    src/activities/reader/DictionaryWordSelectActivity.cpp \
+                    src/activities/reader/DictionaryMatchSelectActivity.h \
+                    src/activities/reader/DictionaryMatchSelectActivity.cpp
+            git commit -m "CPHUN-89: dictionary context choices and fixed list spacing"
+            git push origin HEAD:agent/cphun-89-dictionary-context-list-spacing
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-89 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-89 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-89-Dictionary-Context-List-Spacing-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
