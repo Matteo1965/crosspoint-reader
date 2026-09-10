@@ -36,6 +36,9 @@ class Epub {
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
   CssParser::ParseResult parseCssFiles(CssParser::CacheStatus existingCacheStatus) const;
+  bool computeSourceFingerprint(uint64_t& hash, uint32_t& entryCount) const;
+  bool sourceFingerprintMatches() const;
+  bool writeSourceFingerprint() const;
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -46,6 +49,9 @@ class Epub {
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;
+  // Close all live cache handles, remove the entire per-book cache, and restore
+  // progress.bin so a manual clear does not lose the current reading position.
+  bool clearCachePreservingProgress();
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;

@@ -1088,14 +1088,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       {
         RenderLock lock;
         if (epub && section) {
-          uint16_t backupSpine = currentSpineIndex;
-          uint16_t backupPage = section->currentPage;
-          uint16_t backupPageCount = section->pageCount;
-          section.reset();
-          epub->clearCache();
-          epub->setupCacheDir();
+          const uint16_t backupSpine = currentSpineIndex;
+          const uint16_t backupPage = section->currentPage;
+          const uint16_t backupPageCount = section->pageCount;
+          // Persist the newest position while the cache is still intact; the cache
+          // clear below snapshots and restores progress.bin.
           if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
             LOG_ERR("ERS", "Failed to save progress before cache clear");
+          }
+          section.reset();
+          if (!epub->clearCachePreservingProgress()) {
+            LOG_ERR("ERS", "Failed to clear current book cache");
           }
         }
       }
