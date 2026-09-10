@@ -28,6 +28,19 @@ jobs:
           curl -fL 'https://raw.githubusercontent.com/google/fonts/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf' \
             -o build/cphun85-fonts/NotoEmoji-Variable.ttf
 
+      - name: Guard incomplete fallback GPOS ClassDef tables
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('lib/EpdFont/scripts/fontconvert.py')
+          s = p.read_text(encoding='utf-8')
+          old = """        class_def1 = subtable.ClassDef1.classDefs if subtable.ClassDef1 else {}\n        class_def2 = subtable.ClassDef2.classDefs if subtable.ClassDef2 else {}"""
+          new = """        class_def1_obj = getattr(subtable, 'ClassDef1', None)\n        class_def2_obj = getattr(subtable, 'ClassDef2', None)\n        class_def1 = class_def1_obj.classDefs if class_def1_obj else {}\n        class_def2 = class_def2_obj.classDefs if class_def2_obj else {}"""
+          if old not in s:
+              raise SystemExit('Expected ClassDef block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
+
       - name: Build minimal Noto fallback stack and generate extended 14 pt Regular
         shell: bash
         run: |
@@ -89,7 +102,6 @@ jobs:
               best_pref = -1
               for p, idx, cover in candidates:
                   c = cover & uncovered
-                  # Prefer Regular/variable Noto faces when coverage is equal.
                   pref = 2 if ('Regular' in p.name or 'Variable' in p.name) else 1
                   if len(c) > len(best_cover) or (len(c) == len(best_cover) and len(c) > 0 and pref > best_pref):
                       best = (p, idx)
@@ -118,7 +130,6 @@ jobs:
                   coll.close()
                   stack.append(str(out_face))
 
-          # Export only drawable characters available in the chosen stack.
           export_wanted = wanted - uncovered
           cps = sorted(export_wanted)
           intervals=[]
