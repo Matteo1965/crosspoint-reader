@@ -202,7 +202,7 @@ void DictionaryDefinitionActivity::wrapText() {
     const int spaceWidth = renderer.getSpaceWidth(wrapFontId, EpdFontFamily::REGULAR);
     const int hyphenWidth = renderer.getTextAdvanceX(wrapFontId, "-", EpdFontFamily::REGULAR);
     const auto breakInfos = sourceParagraph ? std::vector<Hyphenator::BreakInfo>{}
-                                            : Hyphenator::breakOffsetsForLanguage(token, false, "hu");
+                                            : Hyphenator::breakOffsetsForLanguageExtended(token, false, "hu");
 
     uint32_t consumed = 0;
     while (consumed < tokenLen) {

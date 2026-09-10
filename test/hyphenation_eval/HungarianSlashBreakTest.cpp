@@ -108,6 +108,82 @@ TEST(HungarianSlashBreak, NumericHyphenRegressionRemainsValid) {
   Hyphenator::setHungarianExtended(false);
 }
 
+TEST(HungarianParentheses, ExtendedRunsLiangInsideBothAlphabeticSegments) {
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(true);
+
+  const std::string left = "terület";
+  const std::string right = "részterület";
+  const auto leftBreaks = Hyphenator::breakOffsets(left, false);
+  const auto rightBreaks = Hyphenator::breakOffsets(right, false);
+  ASSERT_FALSE(leftBreaks.empty());
+  ASSERT_FALSE(rightBreaks.empty());
+
+  const std::string prefix = left + "(";
+  const std::string combined = prefix + right + ")";
+  const auto combinedBreaks = Hyphenator::breakOffsets(combined, false);
+
+  for (const auto& info : leftBreaks) {
+    ASSERT_NE(findBreak(combinedBreaks, info.byteOffset), nullptr)
+        << "Parenthesis segmentation lost a break in the left segment";
+  }
+  for (const auto& info : rightBreaks) {
+    ASSERT_NE(findBreak(combinedBreaks, prefix.size() + info.byteOffset), nullptr)
+        << "Parenthesis segmentation lost a break in the right segment";
+  }
+
+  EXPECT_EQ(findBreak(combinedBreaks, left.size()), nullptr)
+      << "Do not insert a break directly before '('";
+  EXPECT_EQ(findBreak(combinedBreaks, prefix.size()), nullptr)
+      << "Do not insert a break directly after '('";
+
+  Hyphenator::setHungarianExtended(false);
+}
+
+TEST(HungarianParentheses, BasicDoesNotEnableParenthesisSegmentation) {
+  Hyphenator::setPreferredLanguage("hu");
+  Hyphenator::setHungarianExtended(false);
+
+  const auto breaks = Hyphenator::breakOffsets("terület(részterület)", false);
+  EXPECT_TRUE(breaks.empty()) << "Parenthesis segmentation must remain Hungarian-Extended-only";
+}
+
+TEST(HungarianDictionaryHyphenation, ExplicitHungarianEnablesDoubledMultigraphCorrection) {
+  Hyphenator::setPreferredLanguage("en");
+  Hyphenator::setHungarianExtended(false);
+
+  for (const std::string& word : {std::string("összes"), std::string("mindösszesen")}) {
+    const auto breaks = Hyphenator::breakOffsetsForLanguageExtended(word, false, "hu");
+    const size_t split = word == "összes" ? std::string("ös").size() : std::string("mindös").size();
+    const auto* info = findBreak(breaks, split);
+    ASSERT_NE(info, nullptr) << "Missing doubled-sz correction for " << word;
+    EXPECT_TRUE(info->requiresInsertedHyphen);
+    EXPECT_EQ(info->replacement, Hyphenator::Replacement::AppendZ);
+  }
+
+  // The explicit dictionary call must restore the reader's current mode.
+  const auto englishModeBreaks = Hyphenator::breakOffsets("összes", false);
+  for (const auto& info : englishModeBreaks) {
+    EXPECT_NE(info.replacement, Hyphenator::Replacement::AppendZ);
+  }
+}
+
+TEST(HungarianDictionaryHyphenation, ExplicitHungarianAlsoSegmentsParentheses) {
+  Hyphenator::setPreferredLanguage("en");
+  Hyphenator::setHungarianExtended(false);
+
+  const std::string left = "terület";
+  const std::string right = "részterület";
+  const auto rightBreaks = Hyphenator::breakOffsetsForLanguageExtended(right, false, "hu");
+  ASSERT_FALSE(rightBreaks.empty());
+
+  const std::string prefix = left + "(";
+  const auto combinedBreaks = Hyphenator::breakOffsetsForLanguageExtended(prefix + right + ")", false, "hu");
+  for (const auto& info : rightBreaks) {
+    ASSERT_NE(findBreak(combinedBreaks, prefix.size() + info.byteOffset), nullptr);
+  }
+}
+
 TEST(HungarianQuotedSuffix, ExtendedPreservesLiangBreaksBeforeClosingQuoteSuffix) {
   Hyphenator::setPreferredLanguage("hu");
   Hyphenator::setHungarianExtended(true);

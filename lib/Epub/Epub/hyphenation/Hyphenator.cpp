@@ -123,8 +123,13 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
   return breaks;
 }
 
-bool isSegmentSeparator(const uint32_t cp, const bool includeHungarianSlash = false) {
-  return isExplicitHyphen(cp) || isApostrophe(cp) || (includeHungarianSlash && cp == '/');
+bool isHungarianExtendedSegmentSeparator(const uint32_t cp) {
+  return cp == '/' || cp == '(' || cp == ')';
+}
+
+bool isSegmentSeparator(const uint32_t cp, const bool includeHungarianExtendedSeparators = false) {
+  return isExplicitHyphen(cp) || isApostrophe(cp) ||
+         (includeHungarianExtendedSeparators && isHungarianExtendedSegmentSeparator(cp));
 }
 
 void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const LanguageHyphenator& hyphenator,
@@ -424,13 +429,13 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   }
 
   bool hasApostropheLikeSeparator = false;
-  bool hasHungarianSlashSeparator = false;
+  bool hasHungarianExtendedSegmentSeparator = false;
   for (const auto& cp : cps) {
     if (isApostrophe(cp.value)) {
       hasApostropheLikeSeparator = true;
     }
-    if (useHungarianExtended && cp.value == '/') {
-      hasHungarianSlashSeparator = true;
+    if (useHungarianExtended && isHungarianExtendedSegmentSeparator(cp.value)) {
+      hasHungarianExtendedSegmentSeparator = true;
     }
   }
 
@@ -451,7 +456,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     return explicitBreakInfos;
   }
 
-  if (hasApostropheLikeSeparator || hasHungarianSlashSeparator) {
+  if (hasApostropheLikeSeparator || hasHungarianExtendedSegmentSeparator) {
     std::vector<BreakInfo> segmentedBreaks;
     if (hyphenator) {
       appendSegmentPatternBreaks(cps, *hyphenator, includeFallback, useHungarianExtended, segmentedBreaks);
@@ -528,6 +533,21 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage(const std
   auto breaks = breakOffsets(word, includeFallback);
   cachedHyphenator_ = previousHyphenator;
   preferredLanguageIsHungarian_ = previousHungarian;
+  return breaks;
+}
+
+std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguageExtended(const std::string& word,
+                                                                               const bool includeFallback,
+                                                                               const std::string& language) {
+  const auto* previousHyphenator = cachedHyphenator_;
+  const bool previousHungarian = preferredLanguageIsHungarian_;
+  const bool previousHungarianExtended = hungarianExtended_;
+  setPreferredLanguage(language);
+  if (preferredLanguageIsHungarian_) hungarianExtended_ = true;
+  auto breaks = breakOffsets(word, includeFallback);
+  cachedHyphenator_ = previousHyphenator;
+  preferredLanguageIsHungarian_ = previousHungarian;
+  hungarianExtended_ = previousHungarianExtended;
   return breaks;
 }
 

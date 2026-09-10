@@ -45,6 +45,8 @@ class Hyphenator {
   // definitions whose language is known independently of the open book.
   static std::vector<BreakInfo> breakOffsetsForLanguage(const std::string& word, bool includeFallback,
                                                         const std::string& language);
+  static std::vector<BreakInfo> breakOffsetsForLanguageExtended(const std::string& word, bool includeFallback,
+                                                                const std::string& language);
 
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
