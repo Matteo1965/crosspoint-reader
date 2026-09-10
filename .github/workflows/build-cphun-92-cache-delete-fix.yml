@@ -1,0 +1,97 @@
+name: Build CPHUN-92 Cache Invalidation and Delete Fix
+
+on:
+  push:
+    branches: [agent/cphun-92-cache-delete-fix]
+    paths:
+      - '.github/workflows/build-cphun-92-cache-delete-fix.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-92-cache-delete-fix
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-92 cache fixes
+        run: |
+          python3 tools/cphun92_cache_fix.py
+          git diff --check
+
+      - name: Verify CPHUN-92 scope
+        run: |
+          grep -q 'CPHUN-260910-92' src/CPHUNBuildId.h
+          grep -q 'STR_CLEAR_READING_CACHE: "Összes olvasási cache törlése"' lib/I18n/translations/hungarian.yaml
+          grep -q 'STR_DELETE_CACHE: "Aktuális könyv cache törlése"' lib/I18n/translations/hungarian.yaml
+          grep -q 'SOURCE_FINGERPRINT_FILE.*source.fp' lib/Epub/Epub.cpp
+          grep -q 'enumerateFileEntries' lib/Epub/Epub.cpp
+          grep -q 'sourceFingerprintMatches' lib/Epub/Epub.cpp
+          grep -q 'clearCachePreservingProgress' lib/Epub/Epub.cpp
+          grep -q 'std::vector<std::string> targets' src/activities/settings/ClearCacheActivity.cpp
+          grep -q 'failedCount == 0 ? SUCCESS : FAILED' src/activities/settings/ClearCacheActivity.cpp
+          # Accepted #90 list fix must remain unchanged.
+          grep -q 'SECTION_FILE_VERSION = 56' lib/Epub/Epub/Section.cpp
+          grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
+          # Accepted inherited dictionary / Unicode / Hungarian hyphenation features stay present.
+          grep -q 'findExactHeadwords' src/util/Dictionary.cpp
+          grep -q 'DictionaryMatchSelectActivity' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'breakOffsetsForLanguageExtended(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+          # #91's failed cross-line hyphen bridge is intentionally excluded from this #90-based build.
+          ! grep -q 'bridge hyphenated dictionary headwords across lines' src/activities/reader/DictionaryWordSelectActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-92 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h \
+                    lib/Epub/Epub.h lib/Epub/Epub.cpp \
+                    src/activities/settings/ClearCacheActivity.cpp \
+                    src/activities/reader/EpubReaderActivity.cpp \
+                    lib/I18n/translations/hungarian.yaml
+            git commit -m "CPHUN-92: reliable cache deletion and source invalidation"
+            git push origin HEAD:agent/cphun-92-cache-delete-fix
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-92 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-92 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-92-Cache-Invalidation-Delete-Fix-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
