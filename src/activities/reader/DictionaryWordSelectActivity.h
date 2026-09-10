@@ -38,6 +38,8 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t width;
     uint16_t row;
     const char* text;
+    const TextBlock* block;
+    uint16_t tokenIndex;
     EpdFontFamily::Style style;
   };
 

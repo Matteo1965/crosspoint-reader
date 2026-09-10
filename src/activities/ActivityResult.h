@@ -17,6 +17,10 @@ struct KeyboardResult {
   std::string text;
 };
 
+struct DictionaryHeadwordResult {
+  std::string headword;
+};
+
 struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
@@ -68,8 +72,9 @@ struct FilePathResult {
 };
 
 using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+    std::variant<std::monostate, WifiResult, KeyboardResult, DictionaryHeadwordResult, MenuResult, ChapterResult,
+                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                 FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

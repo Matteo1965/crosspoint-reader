@@ -1255,6 +1255,42 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
     if (out.size() < MAX_STEM_VARIANTS) addUnique(out, c);
 }
 
+bool Dictionary::findExactHeadwords(const std::vector<std::string>& candidates, std::vector<std::string>& matches,
+                                        LookupResult* outResult) {
+  const auto setResult = [outResult](LookupResult r) {
+    if (outResult) *outResult = r;
+  };
+  setResult(LookupResult::NotFound);
+  matches.clear();
+  if (!isOpen()) {
+    setResult(LookupResult::ReadError);
+    return false;
+  }
+
+  LookupSession session;
+  if (!openSession(session)) {
+    setResult(LookupResult::ReadError);
+    return false;
+  }
+
+  for (const auto& candidate : candidates) {
+    const std::string cleaned = cleanWord(candidate.c_str());
+    if (cleaned.empty()) continue;
+    std::string matched;
+    const DictLocation location = locate(session, cleaned.c_str(), &matched);
+    if (location.readError) {
+      setResult(LookupResult::ReadError);
+      return false;
+    }
+    if (!location.found) continue;
+    if (std::find(matches.begin(), matches.end(), matched) == matches.end())
+      matches.push_back(std::move(matched));
+  }
+
+  setResult(matches.empty() ? LookupResult::NotFound : LookupResult::Found);
+  return true;
+}
+
 bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
                         LookupResult* outResult) {
   const auto setResult = [outResult](LookupResult r) {

@@ -263,6 +263,39 @@ bool isStandaloneDialogueDash(const std::string& word) {
   return (first == 0x2013 || first == 0x2014) && first == lastCodepoint(word);
 }
 
+// CPHUN-89: fixed-width leading marker spacing. Besides the existing dialogue
+// dash, protect one source space after common paragraph-leading list markers:
+// 1. / 12. / 1) / 12) / a) / bullet.
+bool isAsciiDigitsToken(const std::string& token) {
+  if (token.empty()) return false;
+  for (const unsigned char c : token)
+    if (c < '0' || c > '9') return false;
+  return true;
+}
+
+bool isSingleAsciiAlphaToken(const std::string& token) {
+  return token.size() == 1 &&
+         ((token[0] >= 'a' && token[0] <= 'z') || (token[0] >= 'A' && token[0] <= 'Z'));
+}
+
+template <typename WordContainer>
+bool isFixedLeadingMarkerBoundary(const WordContainer& tokens, const size_t boundary) {
+  if (boundary == 1 && !tokens.empty()) {
+    if (isStandaloneDialogueDash(tokens[0])) return true;
+    const uint32_t cp = firstCodepoint(tokens[0]);
+    if (cp == 0x2022 && cp == lastCodepoint(tokens[0])) return true;
+  }
+  if (boundary == 2 && tokens.size() >= 2) {
+    const std::string& leader = tokens[0];
+    const std::string& suffix = tokens[1];
+    if ((suffix == "." && isAsciiDigitsToken(leader)) ||
+        (suffix == ")" && (isAsciiDigitsToken(leader) || isSingleAsciiAlphaToken(leader)))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int computeJustifyExtra(const int spareSpace, const size_t gapCount) {
   if (gapCount < MIN_JUSTIFY_GAPS || spareSpace <= 0) return 0;
   // Distribute the spare space evenly across gaps. Do NOT bail out to 0 when the
@@ -526,15 +559,11 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   bool effectiveAttachToPrevious = attachToPrevious;
   bool effectiveNoSpaceBefore = false;
 
-  // Dialogue typography: when a paragraph begins with a standalone en/em dash,
-  // keep the following normal source space fixed-width and non-breaking. In the
-  // token boundary model continues=true/noSpace=false is exactly that: a regular
-  // space is drawn, but it is neither a line-break opportunity nor a justify gap.
-  if (fixedDialogueSpacing && words.size() == 1 && !attachToPrevious) {
-    const uint32_t first = firstCodepoint(words.front());
-    if ((first == 0x2013 || first == 0x2014) && first == lastCodepoint(words.front())) {
-      effectiveAttachToPrevious = true;
-    }
+  // CPHUN-89: keep exactly one source space after a paragraph-leading
+  // dialogue/list marker fixed-width and non-breaking.
+  if (fixedDialogueSpacing && !attachToPrevious &&
+      isFixedLeadingMarkerBoundary(words, words.size())) {
+    effectiveAttachToPrevious = true;
   }
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
@@ -1092,7 +1121,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       // Add space before word j, unless it's the first word on the line or a continuation
       int gap = 0;
       if (j > static_cast<size_t>(i) && continuesVec[j]) {
-        if (fixedDialogueSpacing && j == 1 && isStandaloneDialogueDash(words[0])) {
+        if (fixedDialogueSpacing && isFixedLeadingMarkerBoundary(words, j)) {
           gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
@@ -1205,7 +1234,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       const bool isFirstWord = currentIndex == lineStart;
       int spacing = 0;
       if (!isFirstWord && continuesVec[currentIndex]) {
-        if (fixedDialogueSpacing && currentIndex == 1 && isStandaloneDialogueDash(words[0])) {
+        if (fixedDialogueSpacing && isFixedLeadingMarkerBoundary(words, currentIndex)) {
           spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[0]), firstCodepoint(words[1]), wordStyles[0]);
         } else {
           // Attached and breakable-attached boundaries use kerning when kept on one line.
@@ -1477,7 +1506,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       actualGapCount++;
     }
     if (continuesVec[boundaryIdx]) {
-      if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
+      if (fixedDialogueSpacing && lastBreakAt == 0 && isFixedLeadingMarkerBoundary(lineWords, wordIdx)) {
         totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                      lineWordStyles[0]);
       } else {
@@ -1501,7 +1530,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
       const size_t boundaryIdx = lastBreakAt + wordIdx;
       if (continuesVec[boundaryIdx]) {
-        if (fixedDialogueSpacing && boundaryIdx == 1 && isStandaloneDialogueDash(lineWords[0])) {
+        if (fixedDialogueSpacing && lastBreakAt == 0 && isFixedLeadingMarkerBoundary(lineWords, wordIdx)) {
           natural100 += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                        lineWordStyles[0]);
         } else {
@@ -1832,7 +1861,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
           int advance = wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) * letterSpacingPx : 0);
-          if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 && isStandaloneDialogueDash(lineWords[0])) {
+          if (fixedDialogueSpacing && lastBreakAt == 0 && isFixedLeadingMarkerBoundary(lineWords, wordIdx + 1)) {
             advance += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                          lineWordStyles[0]);
           } else {

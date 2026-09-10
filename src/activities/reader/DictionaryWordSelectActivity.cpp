@@ -6,12 +6,15 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <cctype>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
+#include "DictionaryMatchSelectActivity.h"
 #include "components/UITheme.h"
 
 namespace {
@@ -35,6 +38,17 @@ bool isSelectableToken(const char* text) {
     }
   }
   return false;
+}
+
+bool isExplicitHyphenToken(const char* text) {
+  return std::strcmp(text, "-") == 0 || std::strcmp(text, "\xE2\x80\x90") == 0 ||
+         std::strcmp(text, "\xE2\x80\x91") == 0 || std::strcmp(text, "\xE2\x80\x92") == 0 ||
+         std::strcmp(text, "\xE2\x80\x93") == 0 || std::strcmp(text, "\xE2\x80\x94") == 0;
+}
+
+void appendUnique(std::vector<std::string>& items, std::string value) {
+  if (!value.empty() && std::find(items.begin(), items.end(), value) == items.end())
+    items.push_back(std::move(value));
 }
 
 void indexBuildYield(void*) { vTaskDelay(1); }
@@ -93,6 +107,8 @@ void DictionaryWordSelectActivity::extractWords() {
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
       box.text = text;
+      box.block = block.get();
+      box.tokenIndex = i;
       words.push_back(box);
       rowHasWords = true;
 
@@ -175,34 +191,116 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  bool found = false;
 
-  // CPHUN-88: prefer a two-token exact phrase beginning at the selected word.
-  // Dictionary::lookup() already tries exact lookup before stemming, so a
-  // dictionary headword such as "formális logika" wins over "formális".
-  if (ok && selected + 1 < static_cast<int>(words.size()) &&
-      words[selected].row == words[selected + 1].row) {
-    const std::string phrase = std::string(words[selected].text) + " " + words[selected + 1].text;
-    found = dict.lookup(phrase.c_str(), definition, headword, &result);
-    if (!found && result != Dictionary::LookupResult::NotFound) {
-      // A real SD/decompression/OOM failure must not be hidden by a second
-      // lookup that happens to miss or succeed.
-      ok = false;
-    }
-  }
-  if (ok && !found) {
-    definition.clear();
-    headword.clear();
-    result = Dictionary::LookupResult::NotFound;
-    found = dict.lookup(words[selected].text, definition, headword, &result);
-  }
+  // CPHUN-89: selected word first. Exact context headwords are alternatives.
+  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
 
   if (found) {
+    std::vector<std::string> candidates;
+    candidates.reserve(10);
+
+    // Restore a hyphenated orthographic unit from hidden punctuation tokens.
+    const WordBox& current = words[selected];
+    if (current.block) {
+      const TextBlock* block = current.block;
+      int start = current.tokenIndex;
+      int end = current.tokenIndex;
+      if (start >= 2 && isExplicitHyphenToken(block->wordText(start - 1)) &&
+          isSelectableToken(block->wordText(start - 2)))
+        start -= 2;
+      if (end + 2 < block->wordCount() && isExplicitHyphenToken(block->wordText(end + 1)) &&
+          isSelectableToken(block->wordText(end + 2)))
+        end += 2;
+      if (start != end) {
+        std::string compound;
+        for (int i = start; i <= end; ++i) compound += block->wordText(i);
+        appendUnique(candidates, std::move(compound));
+      }
+    }
+
+    // Search a bounded +/-2 selectable-token window. Space-separated phrases
+    // are only formed across directly adjacent source tokens in the same row;
+    // punctuation therefore cannot be silently discarded.
+    const int first = std::max(0, selected - 2);
+    const int last = std::min(static_cast<int>(words.size()) - 1, selected + 2);
+    for (int left = first; left <= selected; ++left) {
+      for (int right = selected; right <= last; ++right) {
+        if (left == right) continue;
+        bool contiguous = true;
+        for (int i = left; i < right; ++i) {
+          if (words[i].row != words[i + 1].row || words[i].block != words[i + 1].block ||
+              words[i].tokenIndex + 1 != words[i + 1].tokenIndex) {
+            contiguous = false;
+            break;
+          }
+        }
+        if (!contiguous) continue;
+        std::string phrase;
+        for (int i = left; i <= right; ++i) {
+          if (!phrase.empty()) phrase.push_back(' ');
+          phrase += words[i].text;
+        }
+        appendUnique(candidates, std::move(phrase));
+      }
+    }
+
+    std::vector<std::string> exactMatches;
+    Dictionary::LookupResult contextResult = Dictionary::LookupResult::NotFound;
+    if (!candidates.empty()) dict.findExactHeadwords(candidates, exactMatches, &contextResult);
+
+    std::vector<std::string> choices;
+    choices.reserve(1 + exactMatches.size());
+    appendUnique(choices, headword);
+    for (auto& match : exactMatches) appendUnique(choices, std::move(match));
+
     popup = Popup::None;
+    if (choices.size() == 1) {
+      startActivityForResult(
+          std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
+                                                         std::move(definition), dict.definitionsAreHtml()),
+          [this](const ActivityResult&) { requestUpdate(); });
+      return;
+    }
+
+    const std::string primaryHeadword = headword;
     startActivityForResult(
-        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                       std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) { requestUpdate(); });
+        std::make_unique<DictionaryMatchSelectActivity>(renderer, mappedInput, std::move(choices)),
+        [this, primaryHeadword, primaryDefinition = std::move(definition)](const ActivityResult& choiceResult) mutable {
+          if (choiceResult.isCancelled) {
+            requestUpdate();
+            return;
+          }
+          const auto* choice = std::get_if<DictionaryHeadwordResult>(&choiceResult.data);
+          if (!choice) {
+            requestUpdate();
+            return;
+          }
+
+          std::string chosenDefinition;
+          std::string chosenHeadword;
+          if (choice->headword == primaryHeadword) {
+            chosenHeadword = primaryHeadword;
+            chosenDefinition = std::move(primaryDefinition);
+          } else {
+            Dictionary::LookupResult chosenResult = Dictionary::LookupResult::NotFound;
+            if (!dict.lookup(choice->headword.c_str(), chosenDefinition, chosenHeadword, &chosenResult)) {
+              popup = Popup::Error;
+              popupMsg = chosenResult == Dictionary::LookupResult::LowMemory
+                             ? StrId::STR_DICT_LOW_MEMORY
+                             : (chosenResult == Dictionary::LookupResult::Decompress
+                                    ? StrId::STR_DICT_DECOMPRESS_ERROR
+                                    : StrId::STR_DICT_READ_FAILED);
+              popupTime = millis();
+              requestUpdate();
+              return;
+            }
+          }
+
+          startActivityForResult(
+              std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(chosenHeadword),
+                                                             std::move(chosenDefinition), dict.definitionsAreHtml()),
+              [this](const ActivityResult&) { requestUpdate(); });
+        });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but

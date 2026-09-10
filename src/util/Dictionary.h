@@ -84,6 +84,12 @@ class Dictionary {
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
               LookupResult* outResult = nullptr);
 
+  // Probe context candidates using one .idx/.qidx session. True means the scan
+  // completed, even when there are no hits. Only exact headwords are returned;
+  // synonyms and stemming are intentionally excluded.
+  bool findExactHeadwords(const std::vector<std::string>& candidates, std::vector<std::string>& matches,
+                          LookupResult* outResult = nullptr);
+
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
