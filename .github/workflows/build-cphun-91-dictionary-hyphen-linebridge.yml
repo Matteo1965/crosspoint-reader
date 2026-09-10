@@ -1,0 +1,91 @@
+name: Build CPHUN-91 Dictionary Hyphen Line Bridge
+
+on:
+  push:
+    branches: [agent/cphun-91-dictionary-hyphen-linebridge]
+    paths:
+      - '.github/workflows/build-cphun-91-dictionary-hyphen-linebridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-91-dictionary-hyphen-linebridge
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-91 fix
+        run: |
+          python3 tools/cphun91_dictionary_hyphen_linebridge.py
+          git diff --check
+
+      - name: Verify CPHUN-91 scope
+        run: |
+          grep -q 'CPHUN-260910-91' src/CPHUNBuildId.h
+          grep -q 'previous.row + 1 == current.row' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'next.row == current.row + 1' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'previous.tokenIndex + 1 == hyphenIndex' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'current.tokenIndex + 1 == block->wordCount() - 1' src/activities/reader/DictionaryWordSelectActivity.cpp
+          # Accepted inherited dictionary behavior must remain intact.
+          grep -q 'findExactHeadwords' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'selected - 2' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'selected + 2' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'DictionaryMatchSelectActivity' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q "b\[start\] == '-'" src/util/Dictionary.cpp
+          # Accepted CPHUN-90 list-marker fix must remain intact.
+          grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'SECTION_FILE_VERSION = 56' lib/Epub/Epub/Section.cpp
+          # Accepted Unicode fallback and Hungarian dictionary hyphenation remain intact.
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'breakOffsetsForLanguageExtended(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-91 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h src/activities/reader/DictionaryWordSelectActivity.cpp
+            git commit -m "CPHUN-91: bridge hyphenated dictionary headwords across lines"
+            git push origin HEAD:agent/cphun-91-dictionary-hyphen-linebridge
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-91 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-91 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-91-Dictionary-Hyphen-Line-Bridge-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
