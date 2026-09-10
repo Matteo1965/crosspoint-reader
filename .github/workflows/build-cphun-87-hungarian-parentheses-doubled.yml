@@ -1,0 +1,89 @@
+name: Build CPHUN-87 Hungarian Parentheses and Doubled Multigraphs
+
+on:
+  push:
+    branches: [agent/cphun-87-hungarian-parentheses-doubled]
+    paths:
+      - '.github/workflows/build-cphun-87-hungarian-parentheses-doubled.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-87-hungarian-parentheses-doubled
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-87 Hungarian hyphenation fixes
+        shell: bash
+        run: |
+          python3 tools/cphun87_hungarian_hyphenation_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-87 scope
+        shell: bash
+        run: |
+          grep -q 'CPHUN-260910-87' src/CPHUNBuildId.h
+          grep -q "cp == '/' || cp == '(' || cp == ')'" lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'previousHungarianExtended' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'if (preferredLanguageIsHungarian_) hungarianExtended_ = true;' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'HungarianParentheses' test/hyphenation_eval/HungarianSlashBreakTest.cpp
+          grep -q 'ExplicitHungarianEnablesDoubledMultigraphCorrection' test/hyphenation_eval/HungarianSlashBreakTest.cpp
+          # #87 must not alter the accepted #86 dictionary font/fallback implementation.
+          grep -q 'int dictionaryBodyFontId() { return NOTOSERIF_14_FONT_ID; }' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-87 source changes
+        shell: bash
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add \
+              src/CPHUNBuildId.h \
+              lib/Epub/Epub/hyphenation/Hyphenator.cpp \
+              test/hyphenation_eval/HungarianSlashBreakTest.cpp
+            git commit -m "CPHUN-87: fix Hungarian parenthesis and doubled-multigraph hyphenation"
+            git push origin HEAD:agent/cphun-87-hungarian-parentheses-doubled
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-87 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-87 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-87-Hungarian-Parentheses-Doubled-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
