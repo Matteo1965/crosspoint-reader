@@ -1,0 +1,135 @@
+name: Build CPHUN-86 Dictionary Unicode Fallback
+
+on:
+  push:
+    branches: [agent/cphun-86-dictionary-unicode-fallback]
+    paths:
+      - '.github/workflows/build-cphun-86-dictionary-unicode-fallback.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CPHUN85_ARTIFACT_ID: '10144119404'
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-86-dictionary-unicode-fallback
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Download successful CPHUN-85 Unicode font artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p build/cphun86-font
+          curl -fL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${CPHUN85_ARTIFACT_ID}/zip" \
+            -o build/cphun86-font/cphun85.zip
+          unzip -q build/cphun86-font/cphun85.zip -d build/cphun86-font/artifact
+          test -s build/cphun86-font/artifact/CPHUN-85-notoserif_14_regular_unicode.h
+          test -s build/cphun86-font/artifact/CPHUN-85-NotoSerif14-Unicode-size-report.txt
+          grep -q '^generated_dictionary_present=1325$' build/cphun86-font/artifact/CPHUN-85-NotoSerif14-Unicode-size-report.txt
+          grep -q '^generated_missing=8$' build/cphun86-font/artifact/CPHUN-85-NotoSerif14-Unicode-size-report.txt
+
+      - name: Integrate CPHUN-86 fixed dictionary font and render fallback
+        shell: bash
+        run: |
+          python3 tools/cphun86_dictionary_unicode_patch.py \
+            build/cphun86-font/artifact/CPHUN-85-notoserif_14_regular_unicode.h
+          git diff --check
+
+      - name: Verify Unicode coverage and CPHUN-86 scope
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import importlib.util
+
+          spec = importlib.util.spec_from_file_location('du', 'tools/dictionary_unicode_audit.py')
+          du = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(du)
+
+          wanted = du.dictionary_codepoints()
+          generated = du.header_codepoints(Path('lib/EpdFont/builtinFonts/notoserif_14_regular.h'))
+          missing = sorted(wanted - generated)
+          expected_missing = [0xF04C, 0xF056, 0xF062, 0xF065, 0xF06B, 0xF06C, 0xF06F, 0xF075]
+          assert len(wanted & generated) == 1325, len(wanted & generated)
+          assert missing == expected_missing, [f'U+{cp:04X}' for cp in missing]
+          for cp in (0x2194, 0x2192, 0x221A, 0x221E, 0x266A):
+              assert cp in generated, f'U+{cp:04X} missing from expanded font'
+          print('dictionary Unicode coverage:', len(wanted & generated), '/', len(wanted))
+          print('expected PUA remainder:', ' '.join(f'U+{cp:04X}' for cp in missing))
+          PY
+
+          grep -q 'CPHUN-260910-86' src/CPHUNBuildId.h
+          grep -q 'int dictionaryBodyFontId() { return NOTOSERIF_14_FONT_ID; }' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'clearMissingGlyphFallbackFont' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'missingGlyphFallbackFontId_' lib/GfxRenderer/GfxRenderer.h
+          grep -q 'usingMissingGlyphFallback' lib/GfxRenderer/GfxRenderer.cpp
+          grep -q 'glyphStyle = EpdFontFamily::REGULAR' lib/GfxRenderer/GfxRenderer.cpp
+          ! grep -q 'visualSize = SETTINGS.fontPointSize' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'CPHUN-85 dictionary Unicode edition' lib/EpdFont/builtinFonts/notoserif_14_regular.h
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-86 source changes
+        shell: bash
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add \
+              src/CPHUNBuildId.h \
+              src/activities/reader/DictionaryDefinitionActivity.cpp \
+              lib/GfxRenderer/GfxRenderer.h \
+              lib/GfxRenderer/GfxRenderer.cpp \
+              lib/EpdFont/builtinFonts/notoserif_14_regular.h
+            git commit -m "CPHUN-86: embed dictionary Unicode glyph fallback"
+            git push origin HEAD:agent/cphun-86-dictionary-unicode-fallback
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-86 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size and embedded Unicode font
+        run: |
+          stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+          stat -c 'notoserif_14_regular.h bytes=%s' lib/EpdFont/builtinFonts/notoserif_14_regular.h
+          grep -m1 'notoserif_14_regularBitmaps\[' lib/EpdFont/builtinFonts/notoserif_14_regular.h
+
+      - name: Upload CPHUN-86 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-86-Dictionary-Unicode-Fallback-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
