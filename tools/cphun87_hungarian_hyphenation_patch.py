@@ -35,10 +35,25 @@ replace_once(
     "if (hasApostropheLikeSeparator || hasHungarianExtendedSegmentSeparator) {",
 )
 
+# Keep the existing generic breakOffsetsForLanguage() semantics intact.  The
+# dictionary gets a dedicated explicit-language entry point that temporarily
+# enables Hungarian Extended and restores all reader-global hyphenation state.
+replace_once(
+    "lib/Epub/Epub/hyphenation/Hyphenator.h",
+    """  static std::vector<BreakInfo> breakOffsetsForLanguage(const std::string& word, bool includeFallback,\n                                                        const std::string& language);\n""",
+    """  static std::vector<BreakInfo> breakOffsetsForLanguage(const std::string& word, bool includeFallback,\n                                                        const std::string& language);\n  static std::vector<BreakInfo> breakOffsetsForLanguageExtended(const std::string& word, bool includeFallback,\n                                                                const std::string& language);\n""",
+)
+
 replace_once(
     "lib/Epub/Epub/hyphenation/Hyphenator.cpp",
-    """  const auto* previousHyphenator = cachedHyphenator_;\n  const bool previousHungarian = preferredLanguageIsHungarian_;\n  setPreferredLanguage(language);\n  auto breaks = breakOffsets(word, includeFallback);\n  cachedHyphenator_ = previousHyphenator;\n  preferredLanguageIsHungarian_ = previousHungarian;\n  return breaks;\n""",
-    """  const auto* previousHyphenator = cachedHyphenator_;\n  const bool previousHungarian = preferredLanguageIsHungarian_;\n  const bool previousHungarianExtended = hungarianExtended_;\n  setPreferredLanguage(language);\n  // CPHUN-87: explicit Hungarian auxiliary text (currently dictionary\n  // definitions) always gets the Hungarian extended corrections, independent\n  // of the reader book's Alap/Kiterjesztett setting.\n  if (preferredLanguageIsHungarian_) hungarianExtended_ = true;\n  auto breaks = breakOffsets(word, includeFallback);\n  cachedHyphenator_ = previousHyphenator;\n  preferredLanguageIsHungarian_ = previousHungarian;\n  hungarianExtended_ = previousHungarianExtended;\n  return breaks;\n""",
+    """std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage(const std::string& word,\n                                                                       const bool includeFallback,\n                                                                       const std::string& language) {\n  const auto* previousHyphenator = cachedHyphenator_;\n  const bool previousHungarian = preferredLanguageIsHungarian_;\n  setPreferredLanguage(language);\n  auto breaks = breakOffsets(word, includeFallback);\n  cachedHyphenator_ = previousHyphenator;\n  preferredLanguageIsHungarian_ = previousHungarian;\n  return breaks;\n}\n""",
+    """std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguage(const std::string& word,\n                                                                       const bool includeFallback,\n                                                                       const std::string& language) {\n  const auto* previousHyphenator = cachedHyphenator_;\n  const bool previousHungarian = preferredLanguageIsHungarian_;\n  setPreferredLanguage(language);\n  auto breaks = breakOffsets(word, includeFallback);\n  cachedHyphenator_ = previousHyphenator;\n  preferredLanguageIsHungarian_ = previousHungarian;\n  return breaks;\n}\n\nstd::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguageExtended(const std::string& word,\n                                                                               const bool includeFallback,\n                                                                               const std::string& language) {\n  const auto* previousHyphenator = cachedHyphenator_;\n  const bool previousHungarian = preferredLanguageIsHungarian_;\n  const bool previousHungarianExtended = hungarianExtended_;\n  setPreferredLanguage(language);\n  if (preferredLanguageIsHungarian_) hungarianExtended_ = true;\n  auto breaks = breakOffsets(word, includeFallback);\n  cachedHyphenator_ = previousHyphenator;\n  preferredLanguageIsHungarian_ = previousHungarian;\n  hungarianExtended_ = previousHungarianExtended;\n  return breaks;\n}\n""",
+)
+
+replace_once(
+    "src/activities/reader/DictionaryDefinitionActivity.cpp",
+    "Hyphenator::breakOffsetsForLanguage(token, false, \"hu\")",
+    "Hyphenator::breakOffsetsForLanguageExtended(token, false, \"hu\")",
 )
 
 # Add focused regressions to the existing Hungarian hyphenation test target.
@@ -91,25 +106,16 @@ TEST(HungarianDictionaryHyphenation, ExplicitHungarianEnablesDoubledMultigraphCo
   Hyphenator::setPreferredLanguage("en");
   Hyphenator::setHungarianExtended(false);
 
-  for (const std::string word : {std::string("összes"), std::string("mindösszesen")}) {
-    const size_t compactStart = word.find("ssz");
-    ASSERT_NE(compactStart, std::string::npos) << word;
-    const size_t split = compactStart + 1;
-    const auto breaks = Hyphenator::breakOffsetsForLanguage(word, false, "hu");
+  for (const std::string& word : {std::string("összes"), std::string("mindösszesen")}) {
+    const auto breaks = Hyphenator::breakOffsetsForLanguageExtended(word, false, "hu");
+    const size_t split = word == "összes" ? std::string("ös").size() : std::string("mindös").size();
     const auto* info = findBreak(breaks, split);
-    if (word == "összes") {
-      // 'ö' occupies two UTF-8 bytes, so the codepoint split after the first
-      // 's' is one byte further than the byte index returned by find("ssz").
-      info = findBreak(breaks, std::string("ös").size());
-    } else {
-      info = findBreak(breaks, std::string("mindös").size());
-    }
     ASSERT_NE(info, nullptr) << "Missing doubled-sz correction for " << word;
     EXPECT_TRUE(info->requiresInsertedHyphen);
     EXPECT_EQ(info->replacement, Hyphenator::Replacement::AppendZ);
   }
 
-  // The explicit-language call must restore the reader's current mode.
+  // The explicit dictionary call must restore the reader's current mode.
   const auto englishModeBreaks = Hyphenator::breakOffsets("összes", false);
   for (const auto& info : englishModeBreaks) {
     EXPECT_NE(info.replacement, Hyphenator::Replacement::AppendZ);
@@ -122,11 +128,11 @@ TEST(HungarianDictionaryHyphenation, ExplicitHungarianAlsoSegmentsParentheses) {
 
   const std::string left = "terület";
   const std::string right = "részterület";
-  const auto rightBreaks = Hyphenator::breakOffsetsForLanguage(right, false, "hu");
+  const auto rightBreaks = Hyphenator::breakOffsetsForLanguageExtended(right, false, "hu");
   ASSERT_FALSE(rightBreaks.empty());
 
   const std::string prefix = left + "(";
-  const auto combinedBreaks = Hyphenator::breakOffsetsForLanguage(prefix + right + ")", false, "hu");
+  const auto combinedBreaks = Hyphenator::breakOffsetsForLanguageExtended(prefix + right + ")", false, "hu");
   for (const auto& info : rightBreaks) {
     ASSERT_NE(findBreak(combinedBreaks, prefix.size() + info.byteOffset), nullptr);
   }
