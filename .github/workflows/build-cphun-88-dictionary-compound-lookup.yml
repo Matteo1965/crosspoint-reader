@@ -1,0 +1,81 @@
+name: Build CPHUN-88 Dictionary Compound Lookup
+
+on:
+  push:
+    branches: [agent/cphun-88-dictionary-compound-lookup]
+    paths:
+      - '.github/workflows/build-cphun-88-dictionary-compound-lookup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-88-dictionary-compound-lookup
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-88 dictionary lookup fixes
+        run: |
+          python3 tools/cphun88_dictionary_lookup_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-88 scope
+        run: |
+          grep -q 'CPHUN-260910-88' src/CPHUNBuildId.h
+          grep -q "b\[start\] == '-'" src/util/Dictionary.cpp
+          grep -q 'selected + 1' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'formális logika' src/activities/reader/DictionaryWordSelectActivity.cpp
+          # Accepted #86/#87 behavior must remain present.
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'breakOffsetsForLanguageExtended(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-88 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h src/util/Dictionary.cpp src/activities/reader/DictionaryWordSelectActivity.cpp
+            git commit -m "CPHUN-88: improve Hungarian dictionary headword lookup"
+            git push origin HEAD:agent/cphun-88-dictionary-compound-lookup
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-88 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-88 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260910-88-Dictionary-Compound-Lookup-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
