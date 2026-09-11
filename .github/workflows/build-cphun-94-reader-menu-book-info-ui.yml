@@ -1,0 +1,99 @@
+name: Build CPHUN-94 Reader Menu Book Info UI
+
+on:
+  push:
+    branches: [agent/cphun-94-reader-menu-book-info-ui]
+    paths:
+      - '.github/workflows/build-cphun-94-reader-menu-book-info-ui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-94-reader-menu-book-info-ui
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-94 UI features
+        run: |
+          python3 tools/cphun94_reader_ui_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-94 scope
+        run: |
+          grep -q 'CPHUN-260911-94' src/CPHUNBuildId.h
+          grep -q 'UiTabListActivity' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q '"Olvasás"' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q '"Továbbiak"' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'MenuAction::BOOK_INFO' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Fülszöveg' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'Metaadatok' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'Borító megnyitása' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'readBookInfo' lib/Epub/Epub.cpp
+          grep -q 'calibre:series' lib/Epub/Epub/parsers/ContentOpfParser.cpp
+          grep -q 'duplicateTitle' src/activities/home/RecentBooksActivity.cpp
+          grep -q 'fileNameFromPath' src/activities/home/RecentBooksActivity.cpp
+          grep -q 'OptionPopup indexErrorPopup' src/activities/reader/EpubReaderActivity.h
+          grep -q 'NOTOSANS_14_FONT_ID' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Hibás részek kihagyása' src/activities/reader/EpubReaderActivity.cpp
+          # Accepted #93 recovery and #90 list fix remain present.
+          grep -q 'skipped_spines.bin' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SECTION_FILE_VERSION = 56' lib/Epub/Epub/Section.cpp
+          grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-94 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h \
+                    lib/Epub/Epub.h lib/Epub/Epub.cpp \
+                    lib/Epub/Epub/parsers/ContentOpfParser.h lib/Epub/Epub/parsers/ContentOpfParser.cpp \
+                    src/activities/reader/EpubReaderMenuActivity.h src/activities/reader/EpubReaderMenuActivity.cpp \
+                    src/activities/reader/EpubReaderActivity.h src/activities/reader/EpubReaderActivity.cpp \
+                    src/activities/reader/BookInfoActivity.h src/activities/reader/BookInfoActivity.cpp \
+                    src/activities/home/RecentBooksActivity.h src/activities/home/RecentBooksActivity.cpp
+            git commit -m "CPHUN-94: split reader menu add book info and polish recovery UI"
+            git push origin HEAD:agent/cphun-94-reader-menu-book-info-ui
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-94 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-94 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260911-94-Reader-Menu-Book-Info-UI-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
