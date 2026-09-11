@@ -164,14 +164,6 @@ bool EpubReaderMenuActivity::handleButtons() {
     closeCancelled();
     return true;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left) && ringPos() == 0) {
-    stepTab(-1);
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right) && ringPos() == 0) {
-    stepTab(1);
-    return true;
-  }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
       stepTab(1);
@@ -237,15 +229,7 @@ void EpubReaderMenuActivity::drawChrome() {
                  title.c_str());
 }
 
-void EpubReaderMenuActivity::drawFooter() {
-  if (ringPos() == 0) {
-    const char* switchLabel = tab_ == Tab::Reading ? "Könyv" : "Olvasás";
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), switchLabel, "Olvasás", "Könyv");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    return;
-  }
-  UiTabListActivity::drawFooter();
-}
+void EpubReaderMenuActivity::drawFooter() { UiTabListActivity::drawFooter(); }
 
 void EpubReaderMenuActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;

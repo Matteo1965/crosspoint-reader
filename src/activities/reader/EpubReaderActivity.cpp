@@ -1173,13 +1173,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::BOOK_DESCRIPTION: {
       startActivityForResult(
           std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Description),
-          [this](const ActivityResult&) { openReaderMenu(); });
+          [this](const ActivityResult&) { openReaderMenu(true); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_METADATA: {
       startActivityForResult(
           std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Metadata),
-          [this](const ActivityResult&) { openReaderMenu(); });
+          [this](const ActivityResult&) { openReaderMenu(true); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_COVER: {

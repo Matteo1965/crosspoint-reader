@@ -160,12 +160,66 @@ std::string joinTags(const std::vector<std::string>& values) {
     if (!out.empty()) out += ", ";
     out += value;
   }
-  constexpr size_t MAX_BYTES = 150;
-  if (out.size() > MAX_BYTES) {
-    size_t cut = MAX_BYTES;
-    while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0) == 0x80) --cut;
-    out.resize(cut);
-    out += "…";
+  return out;
+}
+
+std::string formatFileSizeMb(const uint64_t bytes) {
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.2f MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
+  std::string out(buf);
+  const auto dot = out.find('.');
+  if (dot != std::string::npos) out[dot] = ',';
+  return out;
+}
+
+std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer, const int maxWidth) {
+  if (value.empty()) return value;
+  const int prefixWidth =
+      renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "Címkék: ", EpdFontFamily::REGULAR);
+  const int spaceWidth = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
+  const int ellipsisWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "…", EpdFontFamily::REGULAR);
+
+  std::vector<std::string> words;
+  size_t pos = 0;
+  while (pos < value.size()) {
+    while (pos < value.size() && value[pos] == ' ') ++pos;
+    const size_t start = pos;
+    while (pos < value.size() && value[pos] != ' ') ++pos;
+    if (pos > start) words.emplace_back(value.substr(start, pos - start));
+  }
+
+  std::string out;
+  int line = 0;
+  int lineWidth = prefixWidth;
+  size_t secondLineStart = std::string::npos;
+  for (size_t i = 0; i < words.size(); ++i) {
+    const int wordWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, words[i].c_str(), EpdFontFamily::REGULAR);
+    int gap = out.empty() ? 0 : spaceWidth;
+    if (lineWidth + gap + wordWidth > maxWidth) {
+      if (line == 0) {
+        line = 1;
+        lineWidth = 0;
+        gap = 0;
+        secondLineStart = out.empty() ? 0 : out.size() + 1;
+      } else {
+        while (!out.empty()) {
+          const size_t tailStart = secondLineStart == std::string::npos ? 0 : secondLineStart;
+          const std::string tail = out.substr(std::min(tailStart, out.size()));
+          const int tailWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, tail.c_str(), EpdFontFamily::REGULAR);
+          if (tailWidth + ellipsisWidth <= maxWidth) break;
+          while (!out.empty() && out.back() == ' ') out.pop_back();
+          if (out.empty()) break;
+          size_t cut = out.size() - 1;
+          while (cut > 0 && (static_cast<unsigned char>(out[cut]) & 0xC0) == 0x80) --cut;
+          out.resize(cut);
+        }
+        out += "…";
+        return out;
+      }
+    }
+    if (!out.empty()) out += ' ';
+    out += words[i];
+    lineWidth += gap + wordWidth;
   }
   return out;
 }
@@ -218,11 +272,17 @@ void BookInfoActivity::buildText() {
   add("Kiadó: ", info_.publisher);
   add("Dátum: ", dateOnly(info_.date));
   add("Nyelv: ", languageName(info_.language));
-  add("Címkék: ", joinTags(info_.subjects));
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
+  const int metadataWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
+  add("Címkék: ", limitTagsToTwoLines(joinTags(info_.subjects), renderer, metadataWidth));
   add("Azonosító: ", info_.identifier);
   add("Fájlnév: ", info_.filename);
   add("Fájl formátum: ", fileFormat(info_.filename));
-  if (info_.fileSize > 0) add("Fájlméret: ", std::to_string(info_.fileSize) + " byte");
+  if (info_.fileSize > 0) add("Fájlméret: ", formatFileSizeMb(info_.fileSize));
   if (text_.empty()) text_ = "Nincs megjeleníthető metaadat.";
 }
 
@@ -250,7 +310,7 @@ void BookInfoActivity::wrapText() {
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
                       metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  linesPerPage_ = std::max(1, (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight);
+  const int availableHeight = renderer.getScreenHeight() - topArea - bottomArea;
 
   const char* text = text_.c_str();
   const uint32_t n = static_cast<uint32_t>(text_.size());
@@ -260,18 +320,32 @@ void BookInfoActivity::wrapText() {
   const int spaceWidth = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
   const int hyphenWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "-", EpdFontFamily::REGULAR);
 
-  const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false, const bool justify = false) {
-    lines_.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, justify});
+  const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false, const bool justify = false,
+                             const bool metadataFieldEnd = false) {
+    lines_.push_back(
+        {lineStart, static_cast<uint16_t>(lineEnd - lineStart), appendHyphen, justify, metadataFieldEnd});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
+  };
+
+  const auto fittingPrefix = [&](const uint32_t start, const uint32_t len, const int width) {
+    uint32_t lastFit = 0;
+    for (uint32_t partLen = 1; partLen <= len; ++partLen) {
+      const bool boundary = partLen == len ||
+                            (static_cast<unsigned char>(text[start + partLen]) & 0xC0) != 0x80;
+      if (!boundary) continue;
+      if (measureSpan(text + start, partLen) > width) break;
+      lastFit = partLen;
+    }
+    return lastFit;
   };
 
   uint32_t i = 0;
   while (i < n) {
     const char c = text[i];
     if (c == '\n' || c == '\0') {
-      flushLine(i + 1, false, false);
+      flushLine(i + 1, false, false, page_ == Page::Metadata);
       ++i;
       continue;
     }
@@ -332,6 +406,17 @@ void BookInfoActivity::wrapText() {
         continue;
       }
 
+      if (page_ == Page::Metadata && !lineEmpty && remainingWidth > maxWidth && availableWidth > 0) {
+        const uint32_t partial = fittingPrefix(tokenStart + consumed, remainingLen, availableWidth);
+        if (partial > 0) {
+          lineEnd = tokenStart + consumed + partial;
+          lineWidth += gapWidth + measureSpan(text + tokenStart + consumed, partial);
+          flushLine(lineEnd, false, false);
+          consumed += partial;
+          continue;
+        }
+      }
+
       if (!lineEmpty) {
         flushLine(tokenStart + consumed, false, page_ == Page::Description);
         continue;
@@ -361,7 +446,20 @@ void BookInfoActivity::wrapText() {
   if (lineEnd > lineStart) flushLine(n, false, false);
   while (!lines_.empty() && lines_.back().len == 0) lines_.pop_back();
 
-  totalPages_ = std::max(1, (static_cast<int>(lines_.size()) + linesPerPage_ - 1) / linesPerPage_);
+  pageStarts_.clear();
+  pageStarts_.push_back(0);
+  int usedHeight = 0;
+  for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
+    const bool addFieldGap = page_ == Page::Metadata && lines_[lineIndex].metadataFieldEnd &&
+                             lineIndex + 1 < static_cast<int>(lines_.size());
+    const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
+    if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
+      pageStarts_.push_back(lineIndex);
+      usedHeight = 0;
+    }
+    usedHeight += rowHeight;
+  }
+  totalPages_ = std::max(1, static_cast<int>(pageStarts_.size()));
 }
 
 void BookInfoActivity::loop() {
@@ -403,8 +501,10 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
   int y = startY;
   char buf[MAX_LINE_BYTES + 1];
   char wordBuf[MAX_LINE_BYTES + 1];
-  const int firstLine = currentPage_ * linesPerPage_;
-  const int lastLine = std::min(firstLine + linesPerPage_, static_cast<int>(lines_.size()));
+  const int firstLine = pageStarts_.empty() ? 0 : pageStarts_[std::min(currentPage_, static_cast<int>(pageStarts_.size()) - 1)];
+  const int lastLine = currentPage_ + 1 < static_cast<int>(pageStarts_.size())
+                           ? pageStarts_[currentPage_ + 1]
+                           : static_cast<int>(lines_.size());
   const int lineHeight = renderer.getLineHeight(NOTOSERIF_14_FONT_ID);
 
   for (int i = firstLine; i < lastLine; ++i) {
@@ -471,6 +571,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         }
         if (line.appendHyphen) renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
         y += lineHeight;
+        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
         continue;
       }
     }
@@ -481,6 +582,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
       renderer.drawText(NOTOSERIF_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
     }
     y += lineHeight;
+    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
   }
 }
 

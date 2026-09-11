@@ -28,6 +28,7 @@ class BookInfoActivity final : public Activity {
     uint16_t len = 0;
     bool appendHyphen = false;
     bool justify = false;
+    bool metadataFieldEnd = false;
   };
 
   void buildText();
@@ -42,6 +43,6 @@ class BookInfoActivity final : public Activity {
   std::vector<Line> lines_;
   int currentPage_ = 0;
   int totalPages_ = 1;
-  int linesPerPage_ = 1;
+  std::vector<int> pageStarts_;
   ButtonNavigator buttonNavigator_;
 };
