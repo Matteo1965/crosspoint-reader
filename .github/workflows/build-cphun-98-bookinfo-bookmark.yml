@@ -31,6 +31,8 @@ jobs:
           else
             echo 'CPHUN-98 source changes already integrated; keeping verified source.'
           fi
+          # Final metadata wording requested for CPHUN-98.
+          sed -i 's/add("Fájl formátum: ", fileFormat(info_\.filename));/add("Formátum: ", fileFormat(info_.filename));/' src/activities/reader/BookInfoActivity.cpp
           git diff --check
 
       - name: Verify CPHUN-98 scope
@@ -40,6 +42,8 @@ jobs:
           grep -q 'metadataFieldEnd.*y += 6' src/activities/reader/BookInfoActivity.cpp
           grep -q 'headerStatusClearWidth = 112' src/activities/reader/BookInfoActivity.cpp
           grep -q 'counterY = headerY' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'add("Formátum: ", fileFormat(info_.filename));' src/activities/reader/BookInfoActivity.cpp
+          ! grep -q 'Fájl formátum:' src/activities/reader/BookInfoActivity.cpp
           grep -q 'bookmarkStatusIconHeight = 16' src/components/themes/BaseTheme.cpp
           grep -q 'renderer.getScreenWidth() - bookmarkStatusIconWidth, 0' src/components/themes/BaseTheme.cpp
           ! grep -q 'bookmarkStatusIconTopCrop' src/components/themes/BaseTheme.cpp
