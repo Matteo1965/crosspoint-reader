@@ -29,6 +29,9 @@ class BookInfoActivity final : public Activity {
     bool appendHyphen = false;
     bool justify = false;
     bool metadataFieldEnd = false;
+    uint32_t metadataLabelStart = 0;
+    uint16_t metadataLabelLen = 0;
+    bool metadataFirstLine = false;
   };
 
   void buildText();

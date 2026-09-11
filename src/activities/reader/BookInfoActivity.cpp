@@ -17,6 +17,7 @@
 namespace {
 constexpr size_t MAX_LINE_BYTES = 191;
 constexpr int SIDE_PADDING = 20;
+constexpr int METADATA_VALUE_X = 184;
 
 std::string trimCopy(std::string value) {
   auto isWs = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -174,8 +175,6 @@ std::string formatFileSizeMb(const uint64_t bytes) {
 
 std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer, const int maxWidth) {
   if (value.empty()) return value;
-  const int prefixWidth =
-      renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "Címkék: ", EpdFontFamily::REGULAR);
   const int spaceWidth = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
   const int ellipsisWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "…", EpdFontFamily::REGULAR);
 
@@ -190,7 +189,7 @@ std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer,
 
   std::string out;
   int line = 0;
-  int lineWidth = prefixWidth;
+  int lineWidth = 0;
   size_t secondLineStart = std::string::npos;
   for (size_t i = 0; i < words.size(); ++i) {
     const int wordWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, words[i].c_str(), EpdFontFamily::REGULAR);
@@ -263,26 +262,29 @@ void BookInfoActivity::buildText() {
     if (value.empty()) return;
     if (!text_.empty()) text_ += '\n';
     text_ += label;
+    text_ += '\t';
     text_ += value;
   };
-  add("Cím: ", info_.title);
-  add("Szerző: ", info_.author);
-  add("Sorozat: ", info_.series);
-  add("Sorozatszám: ", info_.seriesIndex);
-  add("Kiadó: ", info_.publisher);
-  add("Dátum: ", dateOnly(info_.date));
-  add("Nyelv: ", languageName(info_.language));
+  add("Cím:", info_.title);
+  add("Szerző:", info_.author);
+  add("Sorozat:", info_.series);
+  add("Sorozatszám:", info_.seriesIndex);
+  add("Kiadó:", info_.publisher);
+  add("Dátum:", dateOnly(info_.date));
+  add("Nyelv:", languageName(info_.language));
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
-  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
-                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const int metadataWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
-  add("Címkék: ", limitTagsToTwoLines(joinTags(info_.subjects), renderer, metadataWidth));
-  add("Azonosító: ", info_.identifier);
-  add("Fájlnév: ", info_.filename);
-  add("Formátum: ", fileFormat(info_.filename));
-  if (info_.fileSize > 0) add("Fájlméret: ", formatFileSizeMb(info_.fileSize));
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
+  const int metadataValueWidth = std::max(1, contentX + contentWidth - SIDE_PADDING - METADATA_VALUE_X);
+  add("Címkék:", limitTagsToTwoLines(joinTags(info_.subjects), renderer, metadataValueWidth));
+  add("Azonosító:", info_.identifier);
+  add("Fájlnév:", info_.filename);
+  add("Formátum:", fileFormat(info_.filename));
+  if (info_.fileSize > 0) add("Fájlméret:", formatFileSizeMb(info_.fileSize));
   if (text_.empty()) text_ = "Nincs megjeleníthető metaadat.";
 }
 
@@ -314,6 +316,97 @@ void BookInfoActivity::wrapText() {
 
   const char* text = text_.c_str();
   const uint32_t n = static_cast<uint32_t>(text_.size());
+
+  if (page_ == Page::Metadata) {
+    const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+    const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+    const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
+    const int valueWidth = std::max(1, contentX + contentWidth - SIDE_PADDING - METADATA_VALUE_X);
+
+    uint32_t fieldStart = 0;
+    while (fieldStart < n) {
+      uint32_t fieldEnd = fieldStart;
+      while (fieldEnd < n && text[fieldEnd] != '\n') ++fieldEnd;
+
+      uint32_t tabPos = fieldStart;
+      while (tabPos < fieldEnd && text[tabPos] != '\t') ++tabPos;
+      const uint32_t labelStart = fieldStart;
+      const uint16_t labelLen = static_cast<uint16_t>(tabPos - fieldStart);
+      uint32_t valuePos = tabPos < fieldEnd ? tabPos + 1 : fieldStart;
+      bool firstVisualLine = true;
+
+      while (valuePos < fieldEnd) {
+        while (valuePos < fieldEnd && text[valuePos] == ' ') ++valuePos;
+        if (valuePos >= fieldEnd) break;
+
+        const uint32_t visualStart = valuePos;
+        uint32_t scan = valuePos;
+        uint32_t bestEnd = valuePos;
+        uint32_t lastSpace = valuePos;
+
+        while (scan < fieldEnd) {
+          if (text[scan] == ' ') lastSpace = scan;
+          uint32_t next = scan + 1;
+          while (next < fieldEnd && (static_cast<unsigned char>(text[next]) & 0xC0) == 0x80) ++next;
+          if (measureSpan(text + visualStart, next - visualStart) > valueWidth) break;
+          bestEnd = next;
+          scan = next;
+        }
+
+        uint32_t visualEnd = bestEnd;
+        uint32_t nextPos = bestEnd;
+        if (scan < fieldEnd && lastSpace > visualStart && lastSpace < scan) {
+          visualEnd = lastSpace;
+          nextPos = lastSpace + 1;
+        } else if (visualEnd == visualStart) {
+          visualEnd = scan + 1;
+          while (visualEnd < fieldEnd && (static_cast<unsigned char>(text[visualEnd]) & 0xC0) == 0x80) ++visualEnd;
+          nextPos = visualEnd;
+        }
+
+        while (visualEnd > visualStart && text[visualEnd - 1] == ' ') --visualEnd;
+        Line line;
+        line.start = visualStart;
+        line.len = static_cast<uint16_t>(visualEnd - visualStart);
+        line.metadataLabelStart = labelStart;
+        line.metadataLabelLen = firstVisualLine ? labelLen : 0;
+        line.metadataFirstLine = firstVisualLine;
+        line.metadataFieldEnd = nextPos >= fieldEnd;
+        lines_.push_back(line);
+        firstVisualLine = false;
+        valuePos = nextPos;
+      }
+
+      if (firstVisualLine) {
+        Line line;
+        line.start = fieldEnd;
+        line.len = 0;
+        line.metadataLabelStart = labelStart;
+        line.metadataLabelLen = labelLen;
+        line.metadataFirstLine = true;
+        line.metadataFieldEnd = true;
+        lines_.push_back(line);
+      }
+
+      fieldStart = fieldEnd < n ? fieldEnd + 1 : n;
+    }
+
+    pageStarts_.clear();
+    pageStarts_.push_back(0);
+    int usedHeight = 0;
+    for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
+      const bool addFieldGap = lines_[lineIndex].metadataFieldEnd && lineIndex + 1 < static_cast<int>(lines_.size());
+      const int rowHeight = lineHeight + (addFieldGap ? 6 : 0);
+      if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
+        pageStarts_.push_back(lineIndex);
+        usedHeight = 0;
+      }
+      usedHeight += rowHeight;
+    }
+    totalPages_ = std::max(1, static_cast<int>(pageStarts_.size()));
+    return;
+  }
+
   uint32_t lineStart = 0;
   uint32_t lineEnd = 0;
   int lineWidth = 0;
@@ -509,6 +602,26 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
 
   for (int i = firstLine; i < lastLine; ++i) {
     const Line& line = lines_[i];
+
+    if (page_ == Page::Metadata) {
+      if (line.metadataFirstLine && line.metadataLabelLen > 0) {
+        char labelBuf[MAX_LINE_BYTES + 1];
+        const size_t labelLen = std::min(static_cast<size_t>(line.metadataLabelLen), MAX_LINE_BYTES);
+        memcpy(labelBuf, text_.c_str() + line.metadataLabelStart, labelLen);
+        labelBuf[labelLen] = '\0';
+        renderer.drawText(NOTOSERIF_14_FONT_ID, x, y, labelBuf, true, EpdFontFamily::BOLD);
+      }
+      if (line.len > 0) {
+        const size_t valueLen = std::min(static_cast<size_t>(line.len), MAX_LINE_BYTES);
+        memcpy(buf, text_.c_str() + line.start, valueLen);
+        buf[valueLen] = '\0';
+        renderer.drawText(NOTOSERIF_14_FONT_ID, METADATA_VALUE_X, y, buf, true, EpdFontFamily::REGULAR);
+      }
+      y += lineHeight;
+      if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
+      continue;
+    }
+
     if (line.len == 0) {
       y += lineHeight;
       continue;
