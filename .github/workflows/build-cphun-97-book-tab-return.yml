@@ -27,6 +27,22 @@ jobs:
       - name: Integrate revised CPHUN-97
         run: |
           if grep -q 'CPHUN-260911-96' src/CPHUNBuildId.h; then
+            # The repository also has a third, unrelated openReaderMenu(true)
+            # callback. Validate the two callbacks changed by this patch rather
+            # than globally counting every true callback in the reader.
+            python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tools/cphun97_book_tab_return_patch.py')
+          text = path.read_text()
+          old = '''already = reader.count("[this](const ActivityResult&) { openReaderMenu(true); });")
+          if already != 2:
+              raise SystemExit(f"BookInfo return callbacks: expected 2 final callbacks, found {already} (changed {changed})")'''
+          new = '''if changed != 2:
+              raise SystemExit(f"BookInfo return callbacks: expected 2 targeted changes, found {changed}")'''
+          if old not in text:
+              raise SystemExit('Expected legacy callback validation block was not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
             python3 tools/cphun97_book_tab_return_patch.py
             python3 tools/cphun97_metadata_hotfix.py
           else
@@ -37,7 +53,18 @@ jobs:
       - name: Verify CPHUN-97 scope
         run: |
           grep -q 'CPHUN-260911-97' src/CPHUNBuildId.h
-          test "$(grep -F -c '[this](const ActivityResult&) { openReaderMenu(true); });' src/activities/reader/EpubReaderActivity.cpp)" -eq 2
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          text = Path('src/activities/reader/EpubReaderActivity.cpp').read_text()
+          for page in ('Description', 'Metadata'):
+              pattern = re.compile(
+                  rf'BookInfoActivity::Page::{page}\),\s*\n\s*'
+                  r'\[this\]\(const ActivityResult&\) \{ openReaderMenu\(true\); \}\);'
+              )
+              if not pattern.search(text):
+                  raise SystemExit(f'{page}: BookInfo return does not target the Könyv tab')
+          PY
           grep -q 'BookInfoActivity::Page::Description' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'BookInfoActivity::Page::Metadata' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'startOnBookTab ? Tab::Book : Tab::Reading' src/activities/reader/EpubReaderMenuActivity.cpp
