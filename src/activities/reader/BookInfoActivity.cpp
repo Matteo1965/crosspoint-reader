@@ -281,7 +281,7 @@ void BookInfoActivity::buildText() {
   add("Címkék: ", limitTagsToTwoLines(joinTags(info_.subjects), renderer, metadataWidth));
   add("Azonosító: ", info_.identifier);
   add("Fájlnév: ", info_.filename);
-  add("Fájl formátum: ", fileFormat(info_.filename));
+  add("Formátum: ", fileFormat(info_.filename));
   if (info_.fileSize > 0) add("Fájlméret: ", formatFileSizeMb(info_.fileSize));
   if (text_.empty()) text_ = "Nincs megjeleníthető metaadat.";
 }
