@@ -811,7 +811,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   // Draw Bookmark as a full 16x16 corner marker. It no longer consumes
   // status-bar layout width and sits flush with the upper-right screen edge.
   if (isPageBookmarked) {
-    drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 2);
+    drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth - 2, 4);
   }
 
   // Draw Title
