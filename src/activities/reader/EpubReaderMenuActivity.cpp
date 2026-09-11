@@ -14,10 +14,12 @@ namespace fui = freeink::ui;
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool hasBookmarks)
+                                               const bool hasFootnotes, const bool hasBookmarks,
+                                               const bool startOnBookTab)
     : UiTabListActivity("EpubReaderMenu", renderer, mappedInput),
       readingItems(buildReadingItems(hasFootnotes, hasBookmarks)),
       moreItems(buildMoreItems()),
+      tab_(startOnBookTab ? Tab::Book : Tab::Reading),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -47,7 +49,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMoreI
   return {
       {MenuAction::BOOK_DESCRIPTION, StrId::STR_TEXT_SETTINGS, "Fülszöveg"},
       {MenuAction::BOOK_METADATA, StrId::STR_TEXT_SETTINGS, "Metaadatok"},
-      {MenuAction::BOOK_COVER, StrId::STR_TEXT_SETTINGS, "Borító"},
+      {MenuAction::BOOK_COVER, StrId::STR_TEXT_SETTINGS, "Borító megjelenítése"},
       {MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS},
       {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
       {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
@@ -233,6 +235,16 @@ void EpubReaderMenuActivity::drawChrome() {
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
                  title.c_str());
+}
+
+void EpubReaderMenuActivity::drawFooter() {
+  if (ringPos() == 0) {
+    const char* switchLabel = tab_ == Tab::Reading ? "Könyv" : "Olvasás";
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), switchLabel, "Olvasás", "Könyv");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+  UiTabListActivity::drawFooter();
 }
 
 void EpubReaderMenuActivity::render(RenderLock&&) {

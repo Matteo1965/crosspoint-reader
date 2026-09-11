@@ -103,7 +103,7 @@ class EpubReaderActivity final : public ReaderActivity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
-  void openReaderMenu();
+  void openReaderMenu(bool startOnBookTab = false);
   void openDictionaryWordSelect();
   bool launchKOReaderSync();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);

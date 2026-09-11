@@ -35,7 +35,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   int currentPage, int totalPages, int bookProgressPercent, uint8_t currentOrientation,
-                                  bool hasFootnotes, bool hasBookmarks);
+                                  bool hasFootnotes, bool hasBookmarks, bool startOnBookTab = false);
 
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
@@ -70,6 +70,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   bool handleCustomInput() override;
   bool handleButtons() override;
   void drawChrome() override;
+  void drawFooter() override;
   void closeCancelled();
 
   std::vector<MenuItem> readingItems;

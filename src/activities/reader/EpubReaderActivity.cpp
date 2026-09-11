@@ -232,7 +232,7 @@ bool EpubReaderActivity::loadBook() {
   return true;
 }
 
-void EpubReaderActivity::openReaderMenu() {
+void EpubReaderActivity::openReaderMenu(const bool startOnBookTab) {
   pendingManualTurn = 0;
   const int currentPage = section ? section->currentPage + 1 : 0;
   const int totalPages = section ? section->estimatedTotalPages() : 0;
@@ -245,7 +245,7 @@ void EpubReaderActivity::openReaderMenu() {
   const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
+                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),
                          [this](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
                            if (SETTINGS.orientation != menu.orientation) {
@@ -1187,7 +1187,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (!Storage.exists(coverPath.c_str())) epub->generateCoverBmp(false);
       if (Storage.exists(coverPath.c_str())) {
         startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
-                               [this](const ActivityResult&) { requestUpdate(); });
+                               [this](const ActivityResult&) { openReaderMenu(true); });
       } else {
         openReaderMenu();
       }
