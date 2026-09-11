@@ -1,0 +1,101 @@
+name: Build CPHUN-93 Cache Recents and Index Repair
+
+on:
+  push:
+    branches: [agent/cphun-93-cache-recents-index-repair]
+    paths:
+      - '.github/workflows/build-cphun-93-cache-recents-index-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-93-cache-recents-index-repair
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-93 fixes
+        run: |
+          python3 tools/cphun93_cache_recents_index_repair.py
+          git diff --check
+
+      - name: Verify CPHUN-93 scope
+        run: |
+          grep -q 'CPHUN-260911-93' src/CPHUNBuildId.h
+          # Recents: import, add and removal all remove duplicate exact paths.
+          grep -q 'Dropping duplicate recent-book entry' src/RecentBooksStore.cpp
+          grep -q 'Remove every existing entry for this exact path' src/RecentBooksStore.cpp
+          # Cache clear keeps progress but verifies no stale index/layout survives.
+          grep -q 'cacheReadyForCleanRebuild' lib/Epub/Epub.h
+          grep -q 'Stale cache artifact remains after clear' lib/Epub/Epub.cpp
+          grep -q 'Current-book cache verified clean for rebuild' src/activities/reader/EpubReaderActivity.cpp
+          # Recoverable malformed-spine UI and persistence.
+          grep -q 'Indexelési hiba - hibás könyv' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Hibás részek kihagyása' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Az eredeti EPUB nem módosul.' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'skipped_spines.bin' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'persistSkippedSpine' src/activities/reader/EpubReaderActivity.cpp
+          # Accepted #90/#92 features remain present.
+          grep -q 'SECTION_FILE_VERSION = 56' lib/Epub/Epub/Section.cpp
+          grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'SOURCE_FINGERPRINT_FILE.*source.fp' lib/Epub/Epub.cpp
+          grep -q 'clearCachePreservingProgress' lib/Epub/Epub.cpp
+          grep -q 'findExactHeadwords' src/util/Dictionary.cpp
+          grep -q 'DictionaryMatchSelectActivity' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID)' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'breakOffsetsForLanguageExtended(token, false, "hu")' src/activities/reader/DictionaryDefinitionActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-93 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h \
+                    src/RecentBooksStore.cpp \
+                    lib/Epub/Epub.h lib/Epub/Epub.cpp \
+                    src/activities/reader/EpubReaderActivity.h \
+                    src/activities/reader/EpubReaderActivity.cpp
+            git commit -m "CPHUN-93: dedupe recents verify cache and recover malformed sections"
+            git push origin HEAD:agent/cphun-93-cache-recents-index-repair
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-93 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-93 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260911-93-Cache-Recents-Index-Repair-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
