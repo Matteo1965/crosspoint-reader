@@ -1,4 +1,4 @@
-name: Build CPHUN-100 Final Bookmark
+name: Build CPHUN-101 Final BookInfo Polish
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -24,29 +24,40 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Verify CPHUN-100 scope
+      - name: Apply CPHUN-101 finalized changes
+        run: python3 tools/cphun101_bookinfo_polish_patch.py
+
+      - name: Verify CPHUN-101 scope
         run: |
           git diff --check
-          grep -q 'CPHUN-260911-100' src/CPHUNBuildId.h
-          grep -q 'METADATA_VALUE_X = 184' src/activities/reader/BookInfoActivity.cpp
-          grep -q 'firstVisualLine = false' src/activities/reader/BookInfoActivity.cpp
-          grep -q 'line.metadataFieldEnd.*y += 6' src/activities/reader/BookInfoActivity.cpp
-          grep -q 'Formátum:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'CPHUN-260912-101' src/CPHUNBuildId.h
+          grep -q 'METADATA_VALUE_X = 182' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'Sorozat #:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'filenameWithoutExtension(info_.filename)' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'removeDescriptionWarning' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'hungarianLowerCopy' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'addFieldGap ? 3 : 0' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'y += 3' src/activities/reader/BookInfoActivity.cpp
+          ! grep -q 'EpdFontFamily::BOLD' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'page_ == Page::Metadata ? 2 : 0' src/activities/reader/BookInfoActivity.cpp
           grep -q 'bookmarkStatusIconWidth = 24' src/components/themes/BaseTheme.cpp
           grep -q 'bookmarkStatusIconHeight = 24' src/components/themes/BaseTheme.cpp
           grep -q 'renderer.getScreenWidth() - bookmarkStatusIconWidth, 0' src/components/themes/BaseTheme.cpp
-          grep -q 'size: 24x24' src/components/icons/bookmark.h
-          grep -q '0x00, 0x00, 0x00, 0x40, 0x00, 0x00' src/components/icons/bookmark.h
           python3 - <<'PY'
           import re
           from pathlib import Path
+          expected = [
+          0x00,0x00,0x00,0x80,0x00,0x00,0xC0,0x00,0x00,0xE0,0x00,0x00,
+          0xB0,0x00,0x00,0xD8,0x00,0x00,0xAC,0x00,0x00,0xD6,0x00,0x00,
+          0xAB,0x00,0x00,0xD5,0x80,0x00,0xAA,0xC0,0x00,0xD5,0x60,0x00,
+          0xAA,0xB0,0x00,0xD5,0x58,0x00,0xAA,0xAC,0x00,0xD5,0x56,0x00,
+          0xAA,0xAB,0x00,0xD5,0x55,0x80,0xAA,0xAA,0xC0,0xD5,0x55,0x60,
+          0xAA,0xAA,0xB0,0xD5,0x55,0x58,0xAA,0xAA,0xAC,0xFF,0xFF,0xFE]
           s = Path('src/components/icons/bookmark.h').read_text(encoding='utf-8')
           m = re.search(r'BookmarkStatusIcon\[\]\s*=\s*\{(.*?)\};', s, re.S)
-          assert m, 'BookmarkStatusIcon not found'
-          values = [int(x, 16) for x in re.findall(r'0x([0-9A-Fa-f]{2})', m.group(1))]
-          assert len(values) == 72, len(values)
-          assert values[:3] == [0, 0, 0]
-          assert values[-3:] == [0, 0, 0]
+          assert m
+          actual = [int(x,16) for x in re.findall(r'0x([0-9A-Fa-f]{2})', m.group(1))]
+          assert actual == expected, (len(actual), actual[:12], actual[-12:])
           PY
 
       - name: Unit tests
@@ -54,6 +65,14 @@ jobs:
           cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
           cmake --build build/test -j2
           ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit CPHUN-101 source changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/CPHUNBuildId.h src/activities/reader/BookInfoActivity.cpp src/components/icons/bookmark.h
+          git commit -m 'CPHUN-101: finalize BookInfo polish and bookmark' || true
+          git push origin HEAD:agent/cphun-100-final-bookmark
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -66,16 +85,16 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-100 firmware
+      - name: Build CPHUN-101 firmware
         run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
-      - name: Upload CPHUN-100 firmware
+      - name: Upload CPHUN-101 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260911-100-Final-Bookmark-FW
+          name: CPHUN-260912-101-Final-BookInfo-Polish-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
