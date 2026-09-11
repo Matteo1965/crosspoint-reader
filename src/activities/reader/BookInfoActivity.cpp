@@ -516,7 +516,7 @@ void BookInfoActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(contentX + SIDE_PADDING, bodyY, bodyWidth);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", currentPage_ > 0 ? "<" : "",
+  const auto labels = mappedInput.mapLabels("Vissza", "", currentPage_ > 0 ? "<" : "",
                                              currentPage_ + 1 < totalPages_ ? ">" : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
