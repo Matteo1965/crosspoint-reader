@@ -6,6 +6,8 @@ bookinfo = bookinfo.replace('const int rowHeight = lineHeight + (addFieldGap ? 3
                             'const int rowHeight = lineHeight + (addFieldGap ? 6 : 0);')
 bookinfo = bookinfo.replace('line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;',
                             'line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;')
+bookinfo = bookinfo.replace('add("Fájl formátum: ", fileFormat(info_.filename));',
+                            'add("Formátum: ", fileFormat(info_.filename));')
 old_header = '''  const char* title = page_ == Page::Description ? "Fülszöveg" : "Metaadatok";
   GUI.drawHeader(renderer, Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight}, title);
 
