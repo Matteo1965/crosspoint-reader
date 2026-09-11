@@ -10,7 +10,7 @@ def replace(path, old, new):
     p.write_text(text.replace(old, new, 1))
 
 # Build ID
-replace("src/CPHUNBuildId.h", 'CPHUN-260910-93', 'CPHUN-260911-94')
+replace("src/CPHUNBuildId.h", 'CPHUN-260911-93', 'CPHUN-260911-94')
 
 # Extended OPF metadata collection.
 p = Path("lib/Epub/Epub/parsers/ContentOpfParser.cpp")
