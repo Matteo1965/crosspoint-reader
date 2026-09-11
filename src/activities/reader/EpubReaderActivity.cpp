@@ -40,6 +40,7 @@
 #include "ReaderButtonProfileStore.h"
 #include "activities/settings/SettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -379,7 +380,7 @@ void EpubReaderActivity::showIndexBuildError() {
 void EpubReaderActivity::showIndexErrorMain() {
   indexErrorDialog = IndexErrorDialog::Main;
   const char* options[] = {"OK", "Javítás"};
-  indexErrorPopup.show("Indexelési hiba - hibás könyv", options, 2, 0, [this](int idx) {
+  indexErrorPopup.show("", options, 2, 0, [this](int idx) {
     if (idx == 0) {
       indexErrorDialog = IndexErrorDialog::None;
       onGoHome();
@@ -420,8 +421,9 @@ void EpubReaderActivity::showIndexRepairConfirm() {
 void EpubReaderActivity::renderIndexErrorDialog() {
   renderer.clearScreen();
   if (indexErrorDialog == IndexErrorDialog::Main) {
-    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 105, "A könyv egyik része nem", true, EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 135, "dolgozható fel.", true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 45, "Indexelési hiba - hibás könyv", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 100, "A könyv egyik része nem", true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 130, "dolgozható fel.", true, EpdFontFamily::REGULAR);
   } else if (indexErrorDialog == IndexErrorDialog::RepairConfirm) {
     renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 70, "A CrossPoint megpróbálja", true, EpdFontFamily::REGULAR);
     renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 100, "megnyitni a könyvet, és kihagyja", true,
@@ -1168,9 +1170,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                              });
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
-      startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, epub),
-                             [this](const ActivityResult&) { openReaderMenu(); });
+    case EpubReaderMenuActivity::MenuAction::BOOK_DESCRIPTION: {
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Description),
+          [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_METADATA: {
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Metadata),
+          [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_COVER: {
+      std::string coverPath = epub->getCoverBmpPath(false);
+      if (!Storage.exists(coverPath.c_str())) epub->generateCoverBmp(false);
+      if (Storage.exists(coverPath.c_str())) {
+        startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
+                               [this](const ActivityResult&) { requestUpdate(); });
+      } else {
+        openReaderMenu();
+      }
       break;
     }
     case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {

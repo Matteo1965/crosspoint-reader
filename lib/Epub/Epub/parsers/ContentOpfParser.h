@@ -22,6 +22,7 @@ class ContentOpfParser final : public Print {
     IN_BOOK_PUBLISHER,
     IN_BOOK_DATE,
     IN_BOOK_IDENTIFIER,
+    IN_BOOK_SUBJECT,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
@@ -68,6 +69,8 @@ class ContentOpfParser final : public Print {
   std::string identifier;
   std::string series;
   std::string seriesIndex;
+  std::vector<std::string> subjects;
+  std::string currentSubject;
   std::string tocNcxPath;
   std::string tocNavPath;
   std::string coverItemHref;

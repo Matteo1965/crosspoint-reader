@@ -10,20 +10,20 @@
 
 class BookInfoActivity final : public UiTabListActivity {
  public:
-  BookInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub);
+  enum class Page : uint8_t { Description = 0, Metadata = 1 };
+
+  BookInfoActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub, Page page);
   void onEnter() override;
 
  private:
-  enum class Tab : uint8_t { Description = 0, Metadata = 1, Cover = 2, Count = 3 };
-
-  int tabCount() const override { return static_cast<int>(Tab::Count); }
-  int activeTab() const override { return static_cast<int>(tab_); }
-  const char* tabLabel(int index) const override;
-  int tabWidthPercent(int index) const override;
-  void onTabAction(int index) override;
-  void stepTab(int direction) override;
+  int tabCount() const override { return 1; }
+  int activeTab() const override { return 0; }
+  const char* tabLabel(int) const override { return ""; }
+  int tabWidthPercent(int) const override { return 100; }
+  void onTabAction(int) override {}
+  void stepTab(int) override {}
   int listCount() const override { return static_cast<int>(rows_.size()); }
-  void activateIndex(int index) override;
+  void activateIndex(int) override {}
   bool handleButtons() override;
   void buildScreen(UiScreen& screen) override;
   void drawChrome() override;
@@ -31,12 +31,10 @@ class BookInfoActivity final : public UiTabListActivity {
   void rebuildRows();
   void addDescriptionRows(const std::string& text);
   void addMetadataRow(const char* label, const std::string& value);
-  void openCover();
 
   std::shared_ptr<Epub> epub_;
   Epub::BookInfo info_;
-  Tab tab_ = Tab::Description;
+  Page page_;
   std::vector<std::string> rowText_;
   std::vector<freeink::ui::ListItem> rows_;
-  std::string coverPath_;
 };

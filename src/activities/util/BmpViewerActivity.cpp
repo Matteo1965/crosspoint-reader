@@ -21,8 +21,8 @@ constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 constexpr size_t COPY_BUFFER_SIZE = 2048;
 }  // namespace
 
-BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
+BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path, const bool backOnly)
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), simpleBackOnly(backOnly) {}
 
 void BmpViewerActivity::loadSiblingImages() {
   siblingImages.clear();
@@ -90,7 +90,7 @@ bool BmpViewerActivity::renderPng() {
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
 
-  if (siblingImages.empty() && !filePath.empty()) {
+  if (!simpleBackOnly && siblingImages.empty() && !filePath.empty()) {
     loadSiblingImages();
   }
 
@@ -103,8 +103,9 @@ void BmpViewerActivity::onEnter() {
     const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
     const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
                          currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
-                                              hasPrevious ? "<" : "", hasNext ? ">" : "");
+    const auto labels = simpleBackOnly ? mappedInput.mapLabels(tr(STR_BACK), "", "", "")
+                                         : mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
+                                                                 hasPrevious ? "<" : "", hasNext ? ">" : "");
     if (renderPng()) {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -149,8 +150,9 @@ void BmpViewerActivity::onEnter() {
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
-                                                (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
+      const auto labels = simpleBackOnly ? mappedInput.mapLabels(tr(STR_BACK), "", "", "")
+                                           : mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
+                                                                   (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -256,9 +258,12 @@ void BmpViewerActivity::loop() {
   };
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
+    if (simpleBackOnly) finish();
+    else activityManager.goToFileBrowser(filePath);
     return;
   }
+
+  if (simpleBackOnly) return;
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Left) {

@@ -28,7 +28,9 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
-    BOOK_INFO
+    BOOK_DESCRIPTION,
+    BOOK_METADATA,
+    BOOK_COVER
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -45,7 +47,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
     const char* overrideLabel = nullptr;
   };
 
-  enum class Tab : uint8_t { Reading = 0, More = 1, Count = 2 };
+  enum class Tab : uint8_t { Reading = 0, Book = 1, Count = 2 };
 
   static std::vector<MenuItem> buildReadingItems(bool hasFootnotes, bool hasBookmarks);
   static std::vector<MenuItem> buildMoreItems();

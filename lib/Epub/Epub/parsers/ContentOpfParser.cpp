@@ -143,6 +143,12 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "subject")) {
+    self->currentSubject.clear();
+    self->state = IN_BOOK_SUBJECT;
+    return;
+  }
+
   if (self->state == IN_PACKAGE && xmlLocalNameEquals(name, "manifest")) {
     self->state = IN_MANIFEST;
     if (!Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
@@ -388,6 +394,10 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     if (self->identifier.empty()) self->identifier.append(s, len);
     return;
   }
+  if (self->state == IN_BOOK_SUBJECT) {
+    self->currentSubject.append(s, len);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -440,6 +450,12 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
   if (self->state == IN_BOOK_IDENTIFIER && xmlLocalNameEquals(name, "identifier")) {
+    self->state = IN_METADATA;
+    return;
+  }
+  if (self->state == IN_BOOK_SUBJECT && xmlLocalNameEquals(name, "subject")) {
+    if (!self->currentSubject.empty()) self->subjects.push_back(self->currentSubject);
+    self->currentSubject.clear();
     self->state = IN_METADATA;
     return;
   }

@@ -34,18 +34,20 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildReadi
   if (hasFootnotes) items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   if (hasBookmarks) items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
-  items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
+  items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP, "Szótári keresés"});
   items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
   if (Frontlight.present()) items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN, "Auto. lapozás, lap/perc"});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   return items;
 }
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMoreItems() {
   return {
-      {MenuAction::BOOK_INFO, StrId::STR_TEXT_SETTINGS, "Könyv adatai"},
+      {MenuAction::BOOK_DESCRIPTION, StrId::STR_TEXT_SETTINGS, "Fülszöveg"},
+      {MenuAction::BOOK_METADATA, StrId::STR_TEXT_SETTINGS, "Metaadatok"},
+      {MenuAction::BOOK_COVER, StrId::STR_TEXT_SETTINGS, "Borító"},
       {MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS},
       {MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON},
       {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
@@ -60,7 +62,7 @@ const std::vector<EpubReaderMenuActivity::MenuItem>& EpubReaderMenuActivity::act
 }
 
 const char* EpubReaderMenuActivity::tabLabel(const int index) const {
-  return index == 0 ? "Olvasás" : "Továbbiak";
+  return index == 0 ? "Olvasás" : "Könyv";
 }
 
 int EpubReaderMenuActivity::tabWidthPercent(const int) const { return 50; }

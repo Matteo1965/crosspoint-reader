@@ -807,6 +807,7 @@ bool Epub::readBookInfo(BookInfo& info) const {
   info.identifier = parser.identifier;
   info.series = parser.series;
   info.seriesIndex = parser.seriesIndex;
+  info.subjects = parser.subjects;
   return true;
 }
 

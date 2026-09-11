@@ -8,7 +8,7 @@
 
 class BmpViewerActivity final : public Activity {
  public:
-  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath);
+  BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath, bool simpleBackOnly = false);
 
   void onEnter() override;
   void onExit() override;
@@ -23,4 +23,5 @@ class BmpViewerActivity final : public Activity {
   std::string filePath;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
+  bool simpleBackOnly = false;
 };

@@ -43,6 +43,7 @@ class Epub {
     std::string identifier;
     std::string series;
     std::string seriesIndex;
+    std::vector<std::string> subjects;
     std::string filename;
     size_t fileSize = 0;
   };
