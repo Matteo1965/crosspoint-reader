@@ -365,9 +365,24 @@ void BookInfoActivity::buildText() {
   add("Cím:", info_.title);
   add("Szerző:", info_.author);
   add("Sorozat:", info_.series);
-  add("Sorozat #:", info_.seriesIndex);
-  add("Kiadó:", info_.publisher);
-  add("Dátum:", dateOnly(info_.date));
+  add("Sorszám:", info_.seriesIndex);
+  const std::string publisher = trimCopy(info_.publisher);
+  const std::string publisherLower = hungarianLowerCopy(publisher);
+  if (!publisher.empty() && publisherLower != "ismeretlen" && publisherLower != "nincs" &&
+      publisherLower != "nincs megadva" && publisher != "+" && publisher != "-" && publisherLower != "untitled") {
+    add("Kiadó:", publisher);
+  }
+  const std::string displayDate = dateOnly(info_.date);
+  bool showDate = false;
+  if (displayDate.size() >= 4 && std::isdigit(static_cast<unsigned char>(displayDate[0])) &&
+      std::isdigit(static_cast<unsigned char>(displayDate[1])) &&
+      std::isdigit(static_cast<unsigned char>(displayDate[2])) &&
+      std::isdigit(static_cast<unsigned char>(displayDate[3]))) {
+    const int year = (displayDate[0] - '0') * 1000 + (displayDate[1] - '0') * 100 +
+                     (displayDate[2] - '0') * 10 + (displayDate[3] - '0');
+    showDate = year >= 1800;
+  }
+  if (showDate) add("Dátum:", displayDate);
   add("Nyelv:", languageName(info_.language));
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
@@ -493,7 +508,7 @@ void BookInfoActivity::wrapText() {
     int usedHeight = 0;
     for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
       const bool addFieldGap = lines_[lineIndex].metadataFieldEnd && lineIndex + 1 < static_cast<int>(lines_.size());
-      const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
+      const int rowHeight = lineHeight + (addFieldGap ? 2 : 0);
       if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
         pageStarts_.push_back(lineIndex);
         usedHeight = 0;
@@ -642,7 +657,7 @@ void BookInfoActivity::wrapText() {
   for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
     const bool addFieldGap = page_ == Page::Metadata && lines_[lineIndex].metadataFieldEnd &&
                              lineIndex + 1 < static_cast<int>(lines_.size());
-    const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
+    const int rowHeight = lineHeight + (addFieldGap ? 2 : 0);
     if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
       pageStarts_.push_back(lineIndex);
       usedHeight = 0;
@@ -715,7 +730,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         renderer.drawText(NOTOSERIF_14_FONT_ID, METADATA_VALUE_X, y, buf, true, EpdFontFamily::REGULAR);
       }
       y += lineHeight;
-      if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
+      if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
       continue;
     }
 
@@ -781,7 +796,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         }
         if (line.appendHyphen) renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
         y += lineHeight;
-        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
+        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
         continue;
       }
     }
@@ -792,7 +807,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
       renderer.drawText(NOTOSERIF_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
     }
     y += lineHeight;
-    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
+    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
   }
 }
 
