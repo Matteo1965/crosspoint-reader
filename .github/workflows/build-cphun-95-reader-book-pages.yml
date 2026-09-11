@@ -1,0 +1,99 @@
+name: Build CPHUN-95 Reader Book Pages
+
+on:
+  push:
+    branches: [agent/cphun-95-reader-book-pages]
+    paths:
+      - '.github/workflows/build-cphun-95-reader-book-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-95-reader-book-pages
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-95 reader/book changes
+        run: |
+          python3 tools/cphun95_reader_book_pages_patch.py
+          git diff --check
+
+      - name: Verify CPHUN-95 scope
+        run: |
+          grep -q 'CPHUN-260911-95' src/CPHUNBuildId.h
+          grep -q '"Olvasás" : "Könyv"' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'Szótári keresés' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'Auto. lapozás, lap/perc' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'BOOK_DESCRIPTION' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q 'BOOK_METADATA' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q 'BOOK_COVER' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q 'Címkék:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'Fájl formátum:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'languageName' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'dateOnly' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'parseDescriptionFragment' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'subjects' lib/Epub/Epub.h
+          grep -q 'IN_BOOK_SUBJECT' lib/Epub/Epub/parsers/ContentOpfParser.h
+          grep -q 'simpleBackOnly' src/activities/util/BmpViewerActivity.cpp
+          grep -q 'Indexelési hiba - hibás könyv' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'indexErrorPopup.show("", options' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'skipped_spines.bin' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-95 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h \
+                    lib/Epub/Epub.h lib/Epub/Epub.cpp \
+                    lib/Epub/Epub/parsers/ContentOpfParser.h lib/Epub/Epub/parsers/ContentOpfParser.cpp \
+                    src/activities/reader/EpubReaderMenuActivity.h src/activities/reader/EpubReaderMenuActivity.cpp \
+                    src/activities/reader/EpubReaderActivity.cpp \
+                    src/activities/reader/BookInfoActivity.h src/activities/reader/BookInfoActivity.cpp \
+                    src/activities/util/BmpViewerActivity.h src/activities/util/BmpViewerActivity.cpp
+            git commit -m "CPHUN-95: simplify book menu and improve book metadata pages"
+            git push origin HEAD:agent/cphun-95-reader-book-pages
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-95 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-95 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260911-95-Reader-Book-Pages-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
