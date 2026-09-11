@@ -17,7 +17,7 @@
 namespace {
 constexpr size_t MAX_LINE_BYTES = 191;
 constexpr int SIDE_PADDING = 20;
-constexpr int METADATA_VALUE_X = 184;
+constexpr int METADATA_VALUE_X = 182;
 
 std::string trimCopy(std::string value) {
   auto isWs = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -145,6 +145,74 @@ std::string languageName(std::string value) {
   return value;
 }
 
+std::string hungarianLowerCopy(const std::string& value) {
+  std::string out;
+  out.reserve(value.size());
+  for (size_t i = 0; i < value.size();) {
+    const unsigned char c = static_cast<unsigned char>(value[i]);
+    if (c < 0x80) {
+      out.push_back(static_cast<char>(std::tolower(c)));
+      ++i;
+      continue;
+    }
+    if (i + 1 < value.size()) {
+      const unsigned char c2 = static_cast<unsigned char>(value[i + 1]);
+      if (c == 0xC3) {
+        const unsigned char lower =
+            c2 == 0x81 ? 0xA1 : c2 == 0x89 ? 0xA9 : c2 == 0x8D ? 0xAD : c2 == 0x93 ? 0xB3 :
+            c2 == 0x96 ? 0xB6 : c2 == 0x9A ? 0xBA : c2 == 0x9C ? 0xBC : c2;
+        out.push_back(static_cast<char>(c));
+        out.push_back(static_cast<char>(lower));
+        i += 2;
+        continue;
+      }
+      if (c == 0xC5 && (c2 == 0x90 || c2 == 0xB0)) {
+        out.push_back(static_cast<char>(c));
+        out.push_back(static_cast<char>(c2 + 1));
+        i += 2;
+        continue;
+      }
+    }
+    out.push_back(value[i++]);
+  }
+  return out;
+}
+
+bool isWarningSeparator(const char c) {
+  return std::isspace(static_cast<unsigned char>(c)) != 0 || c == ',' || c == '.' || c == '!' || c == ':';
+}
+
+std::string removeDescriptionWarning(std::string value) {
+  const std::string lowered = hungarianLowerCopy(value);
+  const std::string first = "vigyázat";
+  const std::string second = "cselekményleírást";
+  const std::string third = "tartalmaz";
+  size_t search = 0;
+  while (search < value.size()) {
+    const size_t a = lowered.find(first, search);
+    if (a == std::string::npos) break;
+    size_t p = a + first.size();
+    while (p < lowered.size() && isWarningSeparator(lowered[p])) ++p;
+    if (lowered.compare(p, second.size(), second) != 0) { search = a + first.size(); continue; }
+    p += second.size();
+    while (p < lowered.size() && isWarningSeparator(lowered[p])) ++p;
+    if (lowered.compare(p, third.size(), third) != 0) { search = a + first.size(); continue; }
+    p += third.size();
+    while (p < lowered.size() && isWarningSeparator(lowered[p])) ++p;
+    value.erase(a, p - a);
+    return trimCopy(value);
+  }
+  return trimCopy(value);
+}
+
+std::string filenameWithoutExtension(const std::string& filename) {
+  const size_t slash = filename.find_last_of("/\\");
+  const size_t baseStart = slash == std::string::npos ? 0 : slash + 1;
+  const size_t dot = filename.find_last_of('.');
+  if (dot == std::string::npos || dot <= baseStart) return filename.substr(baseStart);
+  return filename.substr(baseStart, dot - baseStart);
+}
+
 std::string fileFormat(const std::string& filename) {
   const size_t dot = filename.find_last_of('.');
   if (dot == std::string::npos || dot + 1 >= filename.size()) return {};
@@ -156,10 +224,40 @@ std::string fileFormat(const std::string& filename) {
 std::string joinTags(const std::vector<std::string>& values) {
   std::string out;
   for (const auto& raw : values) {
-    const std::string value = trimCopy(raw);
-    if (value.empty()) continue;
+    std::string value = raw;
+    for (char& c : value) {
+      if (c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']') c = ' ';
+    }
+    std::string lowered = hungarianLowerCopy(value);
+    for (const std::string phrase : {std::string("magyar nyelvű"), std::string("magyar nyelv")}) {
+      size_t pos = 0;
+      while ((pos = lowered.find(phrase, pos)) != std::string::npos) {
+        value.erase(pos, phrase.size());
+        lowered.erase(pos, phrase.size());
+      }
+    }
+    value = trimCopy(value);
+    std::string clean;
+    bool pendingSpace = false;
+    for (char c : value) {
+      if (std::isspace(static_cast<unsigned char>(c))) { pendingSpace = !clean.empty(); continue; }
+      if (c == ',') {
+        while (!clean.empty() && clean.back() == ' ') clean.pop_back();
+        if (!clean.empty() && clean.back() != ',') clean.push_back(',');
+        pendingSpace = true;
+        continue;
+      }
+      if (pendingSpace && !clean.empty() && clean.back() != ',') clean.push_back(' ');
+      if (pendingSpace && !clean.empty() && clean.back() == ',') clean.push_back(' ');
+      pendingSpace = false;
+      clean.push_back(c);
+    }
+    clean = trimCopy(clean);
+    while (!clean.empty() && clean.back() == ',') clean.pop_back();
+    clean = trimCopy(clean);
+    if (clean.empty()) continue;
     if (!out.empty()) out += ", ";
-    out += value;
+    out += clean;
   }
   return out;
 }
@@ -247,14 +345,13 @@ void BookInfoActivity::buildText() {
   text_.clear();
   if (page_ == Page::Description) {
     const auto paragraphs = parseDescriptionFragment(info_.description);
-    if (paragraphs.empty()) {
-      text_ = "Ehhez a könyvhöz nincs fülszöveg.";
-      return;
+    for (const auto& paragraph : paragraphs) {
+      const std::string cleaned = removeDescriptionWarning(paragraph);
+      if (cleaned.empty()) continue;
+      if (!text_.empty()) text_ += "\n\n";
+      text_ += cleaned;
     }
-    for (size_t i = 0; i < paragraphs.size(); ++i) {
-      if (i > 0) text_ += "\n\n";
-      text_ += paragraphs[i];
-    }
+    if (text_.empty()) text_ = "Ehhez a könyvhöz nincs fülszöveg.";
     return;
   }
 
@@ -268,7 +365,7 @@ void BookInfoActivity::buildText() {
   add("Cím:", info_.title);
   add("Szerző:", info_.author);
   add("Sorozat:", info_.series);
-  add("Sorozatszám:", info_.seriesIndex);
+  add("Sorozat #:", info_.seriesIndex);
   add("Kiadó:", info_.publisher);
   add("Dátum:", dateOnly(info_.date));
   add("Nyelv:", languageName(info_.language));
@@ -282,7 +379,7 @@ void BookInfoActivity::buildText() {
   const int metadataValueWidth = std::max(1, contentX + contentWidth - SIDE_PADDING - METADATA_VALUE_X);
   add("Címkék:", limitTagsToTwoLines(joinTags(info_.subjects), renderer, metadataValueWidth));
   add("Azonosító:", info_.identifier);
-  add("Fájlnév:", info_.filename);
+  add("Fájlnév:", filenameWithoutExtension(info_.filename));
   add("Formátum:", fileFormat(info_.filename));
   if (info_.fileSize > 0) add("Fájlméret:", formatFileSizeMb(info_.fileSize));
   if (text_.empty()) text_ = "Nincs megjeleníthető metaadat.";
@@ -312,7 +409,7 @@ void BookInfoActivity::wrapText() {
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
                       metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  const int availableHeight = renderer.getScreenHeight() - topArea - bottomArea;
+  const int availableHeight = renderer.getScreenHeight() - topArea - bottomArea + (page_ == Page::Metadata ? 2 : 0);
 
   const char* text = text_.c_str();
   const uint32_t n = static_cast<uint32_t>(text_.size());
@@ -396,7 +493,7 @@ void BookInfoActivity::wrapText() {
     int usedHeight = 0;
     for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
       const bool addFieldGap = lines_[lineIndex].metadataFieldEnd && lineIndex + 1 < static_cast<int>(lines_.size());
-      const int rowHeight = lineHeight + (addFieldGap ? 6 : 0);
+      const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
       if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
         pageStarts_.push_back(lineIndex);
         usedHeight = 0;
@@ -545,7 +642,7 @@ void BookInfoActivity::wrapText() {
   for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
     const bool addFieldGap = page_ == Page::Metadata && lines_[lineIndex].metadataFieldEnd &&
                              lineIndex + 1 < static_cast<int>(lines_.size());
-    const int rowHeight = lineHeight + (addFieldGap ? 6 : 0);
+    const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
     if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
       pageStarts_.push_back(lineIndex);
       usedHeight = 0;
@@ -609,7 +706,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         const size_t labelLen = std::min(static_cast<size_t>(line.metadataLabelLen), MAX_LINE_BYTES);
         memcpy(labelBuf, text_.c_str() + line.metadataLabelStart, labelLen);
         labelBuf[labelLen] = '\0';
-        renderer.drawText(NOTOSERIF_14_FONT_ID, x, y, labelBuf, true, EpdFontFamily::BOLD);
+        renderer.drawText(NOTOSERIF_14_FONT_ID, x, y, labelBuf, true, EpdFontFamily::REGULAR);
       }
       if (line.len > 0) {
         const size_t valueLen = std::min(static_cast<size_t>(line.len), MAX_LINE_BYTES);
@@ -618,7 +715,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         renderer.drawText(NOTOSERIF_14_FONT_ID, METADATA_VALUE_X, y, buf, true, EpdFontFamily::REGULAR);
       }
       y += lineHeight;
-      if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
+      if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
       continue;
     }
 
@@ -684,7 +781,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         }
         if (line.appendHyphen) renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
         y += lineHeight;
-        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
+        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
         continue;
       }
     }
@@ -695,7 +792,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
       renderer.drawText(NOTOSERIF_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
     }
     y += lineHeight;
-    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
+    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
   }
 }
 
@@ -732,7 +829,8 @@ void BookInfoActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - SIDE_PADDING - width, counterY, counter);
   }
 
-  const int bodyY = contentY + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int bodyY = contentY + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing -
+                    (page_ == Page::Metadata ? 2 : 0);
   const int bodyWidth = contentWidth - 2 * SIDE_PADDING;
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
