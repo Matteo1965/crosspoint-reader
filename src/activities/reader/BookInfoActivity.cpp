@@ -452,7 +452,7 @@ void BookInfoActivity::wrapText() {
   for (int lineIndex = 0; lineIndex < static_cast<int>(lines_.size()); ++lineIndex) {
     const bool addFieldGap = page_ == Page::Metadata && lines_[lineIndex].metadataFieldEnd &&
                              lineIndex + 1 < static_cast<int>(lines_.size());
-    const int rowHeight = lineHeight + (addFieldGap ? 3 : 0);
+    const int rowHeight = lineHeight + (addFieldGap ? 6 : 0);
     if (usedHeight > 0 && usedHeight + rowHeight > availableHeight) {
       pageStarts_.push_back(lineIndex);
       usedHeight = 0;
@@ -571,7 +571,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         }
         if (line.appendHyphen) renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
         y += lineHeight;
-        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
+        if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
         continue;
       }
     }
@@ -582,7 +582,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
       renderer.drawText(NOTOSERIF_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
     }
     y += lineHeight;
-    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;
+    if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;
   }
 }
 
@@ -600,14 +600,23 @@ void BookInfoActivity::render(RenderLock&&) {
   const int contentY = isInverted ? metrics.buttonHintsHeight : 0;
 
   const char* title = page_ == Page::Description ? "Fülszöveg" : "Metaadatok";
-  GUI.drawHeader(renderer, Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight}, title);
+  const int headerY = contentY + metrics.topPadding;
+  GUI.drawHeader(renderer, Rect{contentX, headerY, contentWidth, metrics.headerHeight}, title);
+
+  // BookInfo pages intentionally omit the standard header battery indicator.
+  constexpr int headerStatusClearWidth = 112;
+  const int clearX = contentX + std::max(0, contentWidth - headerStatusClearWidth);
+  const int clearWidth = contentX + contentWidth - clearX;
+  if (clearWidth > 0 && metrics.headerHeight > 1) {
+    renderer.fillRect(clearX, headerY, clearWidth, metrics.headerHeight - 1, false);
+  }
 
   if (totalPages_ > 1) {
     char counter[16];
     std::snprintf(counter, sizeof(counter), "%d/%d", currentPage_ + 1, totalPages_);
     const int width = renderer.getTextWidth(UI_10_FONT_ID, counter);
-    renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - SIDE_PADDING - width,
-                      contentY + metrics.topPadding + metrics.headerHeight - renderer.getLineHeight(UI_10_FONT_ID), counter);
+    const int counterY = headerY + (metrics.headerHeight - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
+    renderer.drawText(UI_10_FONT_ID, contentX + contentWidth - SIDE_PADDING - width, counterY, counter);
   }
 
   const int bodyY = contentY + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
