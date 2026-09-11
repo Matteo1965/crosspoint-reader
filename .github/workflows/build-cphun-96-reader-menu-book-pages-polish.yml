@@ -26,7 +26,11 @@ jobs:
 
       - name: Integrate CPHUN-96 reader polish
         run: |
-          python3 tools/cphun96_reader_polish_patch.py
+          if grep -q 'CPHUN-260911-95' src/CPHUNBuildId.h; then
+            python3 tools/cphun96_reader_polish_patch.py
+          else
+            echo 'CPHUN-96 source changes already integrated; keeping verified source.'
+          fi
           git diff --check
 
       - name: Verify CPHUN-96 scope
@@ -43,6 +47,7 @@ jobs:
           grep -q 'ButtonNavigator' src/activities/reader/BookInfoActivity.h
           grep -q 'Címkék:' src/activities/reader/BookInfoActivity.cpp
           grep -q 'Fájl formátum:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'mappedInput.mapLabels("Vissza"' src/activities/reader/BookInfoActivity.cpp
           grep -q 'skipped_spines.bin' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
           grep -q 'findExactHeadwords' src/activities/reader/DictionaryWordSelectActivity.cpp
