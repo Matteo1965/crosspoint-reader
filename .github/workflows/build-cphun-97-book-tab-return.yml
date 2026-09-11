@@ -1,0 +1,85 @@
+name: Build CPHUN-97 Book Tab Return
+
+on:
+  push:
+    branches: [agent/cphun-97-book-tab-return]
+    paths:
+      - '.github/workflows/build-cphun-97-book-tab-return.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  integrate-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-97-book-tab-return
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Integrate CPHUN-97 Book tab return
+        run: |
+          if grep -q 'CPHUN-260911-96' src/CPHUNBuildId.h; then
+            python3 tools/cphun97_book_tab_return_patch.py
+          else
+            echo 'CPHUN-97 source changes already integrated; keeping verified source.'
+          fi
+          git diff --check
+
+      - name: Verify CPHUN-97 scope
+        run: |
+          grep -q 'CPHUN-260911-97' src/CPHUNBuildId.h
+          test "$(grep -F -c '[this](const ActivityResult&) { openReaderMenu(true); });' src/activities/reader/EpubReaderActivity.cpp)" -eq 2
+          grep -q 'BookInfoActivity::Page::Description' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'BookInfoActivity::Page::Metadata' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'startOnBookTab ? Tab::Book : Tab::Reading' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'Borító megjelenítése' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'mappedInput.mapLabels("Vissza"' src/activities/reader/BookInfoActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Commit verified CPHUN-97 source changes
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/CPHUNBuildId.h src/activities/reader/EpubReaderActivity.cpp
+            git commit -m "CPHUN-97: return BookInfo pages to Book tab"
+            git push origin HEAD:agent/cphun-97-book-tab-return
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-97 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-97 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260911-97-Book-Tab-Return-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
