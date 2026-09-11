@@ -2,15 +2,15 @@
 #include <Epub.h>
 #include <I18n.h>
 
+#include <array>
 #include <string>
 #include <vector>
 
-#include "activities/UiListActivity.h"
+#include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
-class EpubReaderMenuActivity final : public UiListActivity {
+class EpubReaderMenuActivity final : public UiTabListActivity {
  public:
-  // Menu actions available from the reader menu.
   enum class MenuAction {
     SELECT_CHAPTER,
     FOOTNOTES,
@@ -27,12 +27,13 @@ class EpubReaderMenuActivity final : public UiListActivity {
     GO_HOME,
     SYNC,
     DELETE_CACHE,
-    DICTIONARY
+    DICTIONARY,
+    BOOK_INFO
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
+                                  int currentPage, int totalPages, int bookProgressPercent, uint8_t currentOrientation,
+                                  bool hasFootnotes, bool hasBookmarks);
 
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
@@ -41,34 +42,37 @@ class EpubReaderMenuActivity final : public UiListActivity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
+    const char* overrideLabel = nullptr;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
+  enum class Tab : uint8_t { Reading = 0, More = 1, Count = 2 };
 
-  // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
-  // fixed-capacity array avoids any heap allocation for the row list. Labels
-  // are set once in the constructor (buildMenuRowItems()); buildScreen()
-  // only refreshes rows whose values reflect live state.
-  static constexpr size_t MAX_MENU_ITEMS = 16;
-  freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
-  void buildMenuRowItems();
+  static std::vector<MenuItem> buildReadingItems(bool hasFootnotes, bool hasBookmarks);
+  static std::vector<MenuItem> buildMoreItems();
+  const std::vector<MenuItem>& activeItems() const;
+  void rebuildMenuRowItems();
 
-  int listCount() const override { return static_cast<int>(menuItems.size()); }
+  static constexpr size_t MAX_MENU_ITEMS = 12;
+  std::array<freeink::ui::ListItem, MAX_MENU_ITEMS> menuRowItems{};
+
+  int listCount() const override { return static_cast<int>(activeItems().size()); }
+  int tabCount() const override { return static_cast<int>(Tab::Count); }
+  int activeTab() const override { return static_cast<int>(tab_); }
+  const char* tabLabel(int index) const override;
+  int tabWidthPercent(int index) const override;
+  void onTabAction(int index) override;
+  void stepTab(int direction) override;
+
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  // Popup input runs before any button or touch handling.
   bool handleCustomInput() override;
-  // Back closes on RELEASE and Confirm activates on RELEASE; everything else
-  // (row navigation, page jumps) falls through to the base handler.
   bool handleButtons() override;
-  // Header via GUI.drawHeader inside the safe area for the battery indicator.
   void drawChrome() override;
-
   void closeCancelled();
 
-  // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
-
+  std::vector<MenuItem> readingItems;
+  std::vector<MenuItem> moreItems;
+  Tab tab_ = Tab::Reading;
   OptionPopup optionPopup;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
