@@ -1,0 +1,81 @@
+name: Build CPHUN-100 Final Bookmark
+
+on:
+  push:
+    branches: [agent/cphun-100-final-bookmark]
+    paths:
+      - '.github/workflows/build-cphun-100-final-bookmark.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-100-final-bookmark
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-100 scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260911-100' src/CPHUNBuildId.h
+          grep -q 'METADATA_VALUE_X = 184' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'firstVisualLine = false' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'line.metadataFieldEnd.*y += 6' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'Formátum:' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'bookmarkStatusIconWidth = 24' src/components/themes/BaseTheme.cpp
+          grep -q 'bookmarkStatusIconHeight = 24' src/components/themes/BaseTheme.cpp
+          grep -q 'renderer.getScreenWidth() - bookmarkStatusIconWidth, 0' src/components/themes/BaseTheme.cpp
+          grep -q 'size: 24x24' src/components/icons/bookmark.h
+          grep -q '0x00, 0x00, 0x00, 0x40, 0x00, 0x00' src/components/icons/bookmark.h
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          s = Path('src/components/icons/bookmark.h').read_text(encoding='utf-8')
+          m = re.search(r'BookmarkStatusIcon\[\]\s*=\s*\{(.*?)\};', s, re.S)
+          assert m, 'BookmarkStatusIcon not found'
+          values = [int(x, 16) for x in re.findall(r'0x([0-9A-Fa-f]{2})', m.group(1))]
+          assert len(values) == 72, len(values)
+          assert values[:3] == [0, 0, 0]
+          assert values[-3:] == [0, 0, 0]
+          PY
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-100 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-100 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260911-100-Final-Bookmark-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
