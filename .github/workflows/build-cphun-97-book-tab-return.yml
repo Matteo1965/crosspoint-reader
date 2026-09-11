@@ -1,4 +1,4 @@
-name: Build CPHUN-97 Book Tab Return
+name: Build CPHUN-97 Metadata and Navigation
 
 on:
   push:
@@ -24,10 +24,11 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Integrate CPHUN-97 Book tab return
+      - name: Integrate revised CPHUN-97
         run: |
           if grep -q 'CPHUN-260911-96' src/CPHUNBuildId.h; then
             python3 tools/cphun97_book_tab_return_patch.py
+            python3 tools/cphun97_metadata_hotfix.py
           else
             echo 'CPHUN-97 source changes already integrated; keeping verified source.'
           fi
@@ -41,6 +42,15 @@ jobs:
           grep -q 'BookInfoActivity::Page::Metadata' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'startOnBookTab ? Tab::Book : Tab::Reading' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -q 'Borító megjelenítése' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'void EpubReaderMenuActivity::drawFooter() { UiTabListActivity::drawFooter(); }' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -q 'mappedInput.wasReleased(MappedInputManager::Button::Left) && ringPos() == 0' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -q 'mappedInput.wasReleased(MappedInputManager::Button::Right) && ringPos() == 0' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'formatFileSizeMb' src/activities/reader/BookInfoActivity.cpp
+          grep -q '%.2f MB' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'limitTagsToTwoLines' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'metadataFieldEnd' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'pageStarts_' src/activities/reader/BookInfoActivity.cpp
+          grep -q 'remainingWidth > maxWidth' src/activities/reader/BookInfoActivity.cpp
           grep -q 'mappedInput.mapLabels("Vissza"' src/activities/reader/BookInfoActivity.cpp
 
       - name: Unit tests
@@ -54,8 +64,12 @@ jobs:
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/CPHUNBuildId.h src/activities/reader/EpubReaderActivity.cpp
-            git commit -m "CPHUN-97: return BookInfo pages to Book tab"
+            git add src/CPHUNBuildId.h \
+                    src/activities/reader/EpubReaderActivity.cpp \
+                    src/activities/reader/EpubReaderMenuActivity.cpp \
+                    src/activities/reader/BookInfoActivity.h \
+                    src/activities/reader/BookInfoActivity.cpp
+            git commit -m "CPHUN-97: polish Book metadata and Reader Menu navigation"
             git push origin HEAD:agent/cphun-97-book-tab-return
           fi
 
@@ -79,7 +93,7 @@ jobs:
       - name: Upload CPHUN-97 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260911-97-Book-Tab-Return-FW
+          name: CPHUN-260911-97-Metadata-Navigation-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
