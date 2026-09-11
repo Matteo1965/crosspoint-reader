@@ -13,21 +13,13 @@
 class ZipFile;
 
 class Epub {
-  // the ncx file (EPUB 2)
   std::string tocNcxItem;
-  // the nav file (EPUB 3)
   std::string tocNavItem;
-  // where is the EPUBfile?
   std::string filepath;
-  // the base path for items in the EPUB file
   std::string contentBasePath;
-  // Uniq cache key based on filepath
   std::string cachePath;
-  // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
-  // CSS parser for styling
   std::unique_ptr<CssParser> cssParser;
-  // CSS files
   std::vector<std::string> cssFiles;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
@@ -41,16 +33,27 @@ class Epub {
   bool writeSourceFingerprint() const;
 
  public:
+  struct BookInfo {
+    std::string title;
+    std::string author;
+    std::string language;
+    std::string description;
+    std::string publisher;
+    std::string date;
+    std::string identifier;
+    std::string series;
+    std::string seriesIndex;
+    std::string filename;
+    size_t fileSize = 0;
+  };
+
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
-    // create a cache key based on the filepath
     cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
   }
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;
-  // Close all live cache handles, remove the entire per-book cache, and restore
-  // progress.bin so a manual clear does not lose the current reading position.
   bool clearCachePreservingProgress();
   bool cacheReadyForCleanRebuild() const;
   void setupCacheDir() const;
@@ -59,6 +62,7 @@ class Epub {
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
+  bool readBookInfo(BookInfo& info) const;
   std::string getCoverBmpPath(bool cropped = false) const;
   bool generateCoverBmp(bool cropped = false) const;
   std::string getThumbBmpPath() const;
@@ -68,7 +72,6 @@ class Epub {
                                    bool trailingNullByte = false) const;
   bool readItemContentsToStream(const std::string& itemHref, Print& out, size_t chunkSize,
                                 bool allowEarlyStop = false) const;
-  // Extract an item to a file on SD. On failure the partial file is removed.
   bool extractItemToFile(const std::string& itemHref, const std::string& destPath) const;
   bool getItemSize(const std::string& itemHref, size_t* size) const;
   BookMetadataCache::SpineEntry getSpineItem(int spineIndex) const;
@@ -79,7 +82,6 @@ class Epub {
   int getTocIndexForSpineIndex(int spineIndex) const;
   size_t getCumulativeSpineItemSize(int spineIndex) const;
   int getSpineIndexForTextReference() const;
-
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
