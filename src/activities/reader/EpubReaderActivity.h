@@ -13,6 +13,7 @@
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
+#include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
@@ -52,18 +53,19 @@ class EpubReaderActivity final : public ReaderActivity {
 
   enum class IndexErrorDialog : uint8_t { None, Main, RepairConfirm };
   IndexErrorDialog indexErrorDialog = IndexErrorDialog::None;
-  int indexErrorSelected = 0;
   int failedSpineIndex = -1;
   std::vector<uint16_t> skippedSpines;
+  OptionPopup indexErrorPopup;
   void loadSkippedSpines();
   bool isSpineSkipped(int spineIndex) const;
   bool persistSkippedSpine(int spineIndex);
   void showIndexBuildError();
+  void showIndexErrorMain();
+  void showIndexRepairConfirm();
   void renderIndexErrorDialog();
   bool handleIndexErrorDialogInput();
   void advancePastSkippedSpines(bool forward);
 
-  // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {
     int spineIndex;
@@ -131,14 +133,11 @@ class EpubReaderActivity final : public ReaderActivity {
   ~EpubReaderActivity() override;
 
   void loop() override;
-
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
-
   bool skipLoopDelay() override;
-
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
 };
