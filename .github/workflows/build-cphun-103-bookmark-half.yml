@@ -1,0 +1,69 @@
+name: Build CPHUN-103 Bookmark Half
+
+on:
+  push:
+    branches: [agent/cphun-103-bookmark-half]
+    paths: ['.github/workflows/build-cphun-103-bookmark-half.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-103-bookmark-half
+          submodules: recursive
+          fetch-depth: 0
+      - name: Apply CPHUN-103 patch
+        run: python3 tools/cphun103_bookmark_half_patch.py
+      - name: Verify CPHUN-103
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260912-103' src/CPHUNBuildId.h
+          grep -q 'renderer.getScreenWidth() - bookmarkStatusIconWidth - 2, 4' src/components/themes/BaseTheme.cpp
+          python3 - <<'PY'
+          import re
+          s=open('src/components/icons/bookmark.h').read()
+          body=s.split('static const uint8_t BookmarkStatusIcon[] = {',1)[1].split('};',1)[0]
+          vals=[int(x,16) for x in re.findall(r'0x[0-9A-Fa-f]{2}',body)]
+          expected=[0x80,0x00,0x00,0x40,0x00,0x00,0xA0,0x00,0x00,0x50,0x00,0x00,0xA8,0x00,0x00,0x54,0x00,0x00,0xAA,0x00,0x00,0x55,0x00,0x00,0xAA,0x80,0x00,0x55,0x40,0x00,0xAA,0xA0,0x00,0x55,0x50,0x00,0xAA,0xA8,0x00,0x55,0x54,0x00,0xAA,0xAA,0x00,0x55,0x55,0x00,0xAA,0xAA,0x80,0x55,0x55,0x40,0xAA,0xAA,0xA0,0x55,0x55,0x50,0xAA,0xAA,0xA8,0x55,0x55,0x54,0xAA,0xAA,0xAA,0x55,0x55,0x55]
+          assert vals == expected, (len(vals), vals)
+          PY
+      - name: Commit CPHUN-103 sources
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CPHUNBuildId.h src/components/icons/bookmark.h src/components/themes/BaseTheme.cpp
+          git commit -m 'CPHUN-103: update bookmark icon and position'
+          git push origin HEAD:agent/cphun-103-bookmark-half
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U 'littlefs-python>=0.16.0' 'fatfs-ng>=0.1.14'
+      - name: Build CPHUN-103 firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Upload CPHUN-103 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260912-103-Bookmark-Half-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
