@@ -27,13 +27,14 @@ replace_once('  add("Kiadó:", info_.publisher);\n  add("Dátum:", dateOnly(info
     showDate = year >= 1800;
   }
   if (showDate) add("Dátum:", displayDate);''')
-# Both metadata pagination and drawing must use the same 2 px field gap.
-count6 = s.count('(addFieldGap ? 6 : 0)')
-assert count6 == 1, count6
-s = s.replace('(addFieldGap ? 6 : 0)', '(addFieldGap ? 2 : 0)')
-count_y6 = s.count('line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;')
-assert count_y6 == 3, count_y6
-s = s.replace('line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 6;',
+
+# CPHUN-101 already uses +3 px; CPHUN-102 changes this to +2 px.
+count_gap = s.count('(addFieldGap ? 3 : 0)')
+assert count_gap == 2, count_gap
+s = s.replace('(addFieldGap ? 3 : 0)', '(addFieldGap ? 2 : 0)')
+count_y = s.count('line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;')
+assert count_y == 3, count_y
+s = s.replace('line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 3;',
               'line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;')
 book.write_text(s, encoding='utf-8')
 
