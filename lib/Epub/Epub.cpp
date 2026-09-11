@@ -776,6 +776,40 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
+
+bool Epub::readBookInfo(BookInfo& info) const {
+  info = {};
+  info.title = getTitle();
+  info.author = getAuthor();
+  info.language = getLanguage();
+  const size_t slash = filepath.find_last_of('/');
+  info.filename = slash == std::string::npos ? filepath : filepath.substr(slash + 1);
+
+  HalFile source;
+  if (Storage.openFileForRead("EBP", filepath, source)) {
+    info.fileSize = source.size();
+    source.close();
+  }
+
+  std::string opfPath;
+  if (!findContentOpfFile(&opfPath)) return false;
+  const std::string base = opfPath.substr(0, opfPath.find_last_of('/') + 1);
+  size_t opfSize = 0;
+  if (!getItemSize(opfPath, &opfSize)) return false;
+  ContentOpfParser parser(cachePath, base, opfSize, nullptr);
+  if (!parser.setup() || !readItemContentsToStream(opfPath, parser, 1024)) return false;
+  if (!parser.title.empty()) info.title = utf8ComposeNfc(parser.title);
+  if (!parser.author.empty()) info.author = parser.author;
+  if (!parser.language.empty()) info.language = parser.language;
+  info.description = parser.description;
+  info.publisher = parser.publisher;
+  info.date = parser.date;
+  info.identifier = parser.identifier;
+  info.series = parser.series;
+  info.seriesIndex = parser.seriesIndex;
+  return true;
+}
+
 std::string Epub::getCoverBmpPath(bool cropped) const {
   const auto coverFileName = std::string("cover") + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";

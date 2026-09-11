@@ -18,6 +18,7 @@
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
+#include "BookInfoActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
@@ -371,91 +372,71 @@ void EpubReaderActivity::advancePastSkippedSpines(const bool forward) {
 
 void EpubReaderActivity::showIndexBuildError() {
   failedSpineIndex = currentSpineIndex;
-  indexErrorDialog = IndexErrorDialog::Main;
-  indexErrorSelected = 0;
   automaticPageTurnActive = false;
-  renderIndexErrorDialog();
+  showIndexErrorMain();
+}
+
+void EpubReaderActivity::showIndexErrorMain() {
+  indexErrorDialog = IndexErrorDialog::Main;
+  const char* options[] = {"OK", "Javítás"};
+  indexErrorPopup.show("Indexelési hiba - hibás könyv", options, 2, 0, [this](int idx) {
+    if (idx == 0) {
+      indexErrorDialog = IndexErrorDialog::None;
+      onGoHome();
+    } else {
+      showIndexRepairConfirm();
+    }
+  });
+  requestUpdate(true);
+}
+
+void EpubReaderActivity::showIndexRepairConfirm() {
+  indexErrorDialog = IndexErrorDialog::RepairConfirm;
+  const char* options[] = {"Mégse", "Javítás"};
+  indexErrorPopup.show("Hibás részek kihagyása", options, 2, 0, [this](int idx) {
+    if (idx == 0) {
+      showIndexErrorMain();
+      return;
+    }
+    const int badSpine = failedSpineIndex;
+    if (!persistSkippedSpine(badSpine)) {
+      LOG_ERR("ERS", "Failed to persist skipped malformed spine %d", badSpine);
+      showIndexErrorMain();
+      return;
+    }
+    LOG_DBG("ERS", "User approved skipping malformed spine %d", badSpine);
+    indexErrorDialog = IndexErrorDialog::None;
+    failedSpineIndex = -1;
+    section.reset();
+    currentSpineIndex = badSpine + 1;
+    nextPageNumber = 0;
+    clearDeferredReposition();
+    advancePastSkippedSpines(true);
+    requestUpdate();
+  });
+  requestUpdate(true);
 }
 
 void EpubReaderActivity::renderIndexErrorDialog() {
   renderer.clearScreen();
   if (indexErrorDialog == IndexErrorDialog::Main) {
-    renderer.drawCenteredText(UI_12_FONT_ID, 150, "Indexelési hiba - hibás könyv", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, 245, "A könyv egyik része nem dolgozható fel.", true,
-                              EpdFontFamily::REGULAR);
-    const std::string actions = indexErrorSelected == 0 ? "> OK <        Javítás" : "OK        > Javítás <";
-    renderer.drawCenteredText(UI_12_FONT_ID, 390, actions.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 105, "A könyv egyik része nem", true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 135, "dolgozható fel.", true, EpdFontFamily::REGULAR);
   } else if (indexErrorDialog == IndexErrorDialog::RepairConfirm) {
-    renderer.drawCenteredText(UI_12_FONT_ID, 120, "Hibás részek kihagyása", true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, 205, "A CrossPoint megpróbálja megnyitni a könyvet,", true,
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 70, "A CrossPoint megpróbálja", true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 100, "megnyitni a könyvet, és kihagyja", true,
                               EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_12_FONT_ID, 245, "és kihagyja a nem feldolgozható részeket.", true,
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 130, "a nem feldolgozható részeket.", true,
                               EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_12_FONT_ID, 285, "Az eredeti EPUB nem módosul.", true, EpdFontFamily::REGULAR);
-    const std::string actions = indexErrorSelected == 0 ? "> Mégse <        Javítás" : "Mégse        > Javítás <";
-    renderer.drawCenteredText(UI_12_FONT_ID, 410, actions.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(NOTOSANS_14_FONT_ID, 160, "Az eredeti EPUB nem módosul.", true,
+                              EpdFontFamily::REGULAR);
   }
-  renderer.displayBuffer();
+  indexErrorPopup.processRender(renderer, mappedInput);
 }
 
 bool EpubReaderActivity::handleIndexErrorDialogInput() {
   if (indexErrorDialog == IndexErrorDialog::None) return false;
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    indexErrorSelected = 1 - indexErrorSelected;
-    renderIndexErrorDialog();
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (indexErrorDialog == IndexErrorDialog::RepairConfirm) {
-      indexErrorDialog = IndexErrorDialog::Main;
-      indexErrorSelected = 0;
-      renderIndexErrorDialog();
-    } else {
-      indexErrorDialog = IndexErrorDialog::None;
-      onGoHome();
-    }
-    return true;
-  }
-  if (!mappedInput.wasReleased(MappedInputManager::Button::Confirm)) return true;
-
-  if (indexErrorDialog == IndexErrorDialog::Main) {
-    if (indexErrorSelected == 0) {
-      indexErrorDialog = IndexErrorDialog::None;
-      onGoHome();
-    } else {
-      indexErrorDialog = IndexErrorDialog::RepairConfirm;
-      indexErrorSelected = 0;
-      renderIndexErrorDialog();
-    }
-    return true;
-  }
-
-  if (indexErrorSelected == 0) {
-    indexErrorDialog = IndexErrorDialog::Main;
-    indexErrorSelected = 0;
-    renderIndexErrorDialog();
-    return true;
-  }
-
-  const int badSpine = failedSpineIndex;
-  if (!persistSkippedSpine(badSpine)) {
-    LOG_ERR("ERS", "Failed to persist skipped malformed spine %d", badSpine);
-    indexErrorDialog = IndexErrorDialog::Main;
-    indexErrorSelected = 0;
-    renderIndexErrorDialog();
-    return true;
-  }
-  LOG_DBG("ERS", "User approved skipping malformed spine %d", badSpine);
-  indexErrorDialog = IndexErrorDialog::None;
-  indexErrorSelected = 0;
-  failedSpineIndex = -1;
-  section.reset();
-  currentSpineIndex = badSpine + 1;
-  nextPageNumber = 0;
-  clearDeferredReposition();
-  advancePastSkippedSpines(true);
-  requestUpdate();
+  indexErrorPopup.handleInput(mappedInput, [this] { requestUpdate(); });
   return true;
 }
 
@@ -1187,6 +1168,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                              });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
+      startActivityForResult(std::make_unique<BookInfoActivity>(renderer, mappedInput, epub),
+                             [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                     TextSettingsActivity::Tab::Family),
@@ -1472,6 +1458,10 @@ bool EpubReaderActivity::skipLoopDelay() {
 
 void EpubReaderActivity::renderBook() {
   if (!epub) return;
+  if (indexErrorDialog != IndexErrorDialog::None) {
+    renderIndexErrorDialog();
+    return;
+  }
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;

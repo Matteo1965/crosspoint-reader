@@ -123,6 +123,26 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "description")) {
+    self->state = IN_BOOK_DESCRIPTION;
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "publisher")) {
+    self->state = IN_BOOK_PUBLISHER;
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "date")) {
+    self->state = IN_BOOK_DATE;
+    return;
+  }
+
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "identifier")) {
+    self->state = IN_BOOK_IDENTIFIER;
+    return;
+  }
+
   if (self->state == IN_PACKAGE && xmlLocalNameEquals(name, "manifest")) {
     self->state = IN_MANIFEST;
     if (!Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
@@ -161,20 +181,15 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
-    bool isCover = false;
-    std::string coverItemId;
-
+    std::string metaName;
+    std::string content;
     for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
-        isCover = true;
-      } else if (strcmp(atts[i], "content") == 0) {
-        coverItemId = atts[i + 1];
-      }
+      if (strcmp(atts[i], "name") == 0) metaName = atts[i + 1];
+      else if (strcmp(atts[i], "content") == 0) content = atts[i + 1];
     }
-
-    if (isCover) {
-      self->coverItemId = coverItemId;
-    }
+    if (metaName == "cover") self->coverItemId = content;
+    else if (metaName == "calibre:series") self->series = content;
+    else if (metaName == "calibre:series_index") self->seriesIndex = content;
     return;
   }
 
@@ -356,6 +371,23 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     self->language.append(s, len);
     return;
   }
+
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    self->description.append(s, len);
+    return;
+  }
+  if (self->state == IN_BOOK_PUBLISHER) {
+    self->publisher.append(s, len);
+    return;
+  }
+  if (self->state == IN_BOOK_DATE) {
+    self->date.append(s, len);
+    return;
+  }
+  if (self->state == IN_BOOK_IDENTIFIER) {
+    if (self->identifier.empty()) self->identifier.append(s, len);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -391,6 +423,23 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_LANGUAGE && xmlLocalNameEquals(name, "language")) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DESCRIPTION && xmlLocalNameEquals(name, "description")) {
+    self->state = IN_METADATA;
+    return;
+  }
+  if (self->state == IN_BOOK_PUBLISHER && xmlLocalNameEquals(name, "publisher")) {
+    self->state = IN_METADATA;
+    return;
+  }
+  if (self->state == IN_BOOK_DATE && xmlLocalNameEquals(name, "date")) {
+    self->state = IN_METADATA;
+    return;
+  }
+  if (self->state == IN_BOOK_IDENTIFIER && xmlLocalNameEquals(name, "identifier")) {
     self->state = IN_METADATA;
     return;
   }
