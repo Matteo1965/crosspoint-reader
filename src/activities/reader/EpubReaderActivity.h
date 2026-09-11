@@ -50,6 +50,19 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long bookmarkMessageTime = 0UL;
   bool pendingReadFolderMove = false;
 
+  enum class IndexErrorDialog : uint8_t { None, Main, RepairConfirm };
+  IndexErrorDialog indexErrorDialog = IndexErrorDialog::None;
+  int indexErrorSelected = 0;
+  int failedSpineIndex = -1;
+  std::vector<uint16_t> skippedSpines;
+  void loadSkippedSpines();
+  bool isSpineSkipped(int spineIndex) const;
+  bool persistSkippedSpine(int spineIndex);
+  void showIndexBuildError();
+  void renderIndexErrorDialog();
+  bool handleIndexErrorDialogInput();
+  void advancePastSkippedSpines(bool forward);
+
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
   struct SavedPosition {

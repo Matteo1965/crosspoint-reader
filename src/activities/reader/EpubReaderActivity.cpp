@@ -185,6 +185,7 @@ bool EpubReaderActivity::loadBook() {
     return false;
   }
   epub = std::move(loadedEpub);
+  loadSkippedSpines();
 
   ImageBlock::clearSessionRenderFailures();
   ImageBlock::setExtractor(epub.get(), [](void* ctx, const char* src, const char* dest) {
@@ -294,7 +295,172 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
+namespace {
+constexpr char SKIPPED_SPINES_FILE[] = "/skipped_spines.bin";
+}
+
+void EpubReaderActivity::loadSkippedSpines() {
+  skippedSpines.clear();
+  if (!epub) return;
+  HalFile file;
+  if (!Storage.openFileForRead("ERS", epub->getCachePath() + SKIPPED_SPINES_FILE, file)) return;
+  const size_t size = file.size();
+  if (size == 0 || size > 1024 || (size % 2) != 0) {
+    file.close();
+    return;
+  }
+  for (size_t i = 0; i < size / 2; ++i) {
+    uint8_t bytes[2] = {};
+    if (file.read(bytes, sizeof(bytes)) != static_cast<int>(sizeof(bytes))) break;
+    const uint16_t spine = static_cast<uint16_t>(bytes[0]) | (static_cast<uint16_t>(bytes[1]) << 8);
+    if (std::find(skippedSpines.begin(), skippedSpines.end(), spine) == skippedSpines.end()) {
+      skippedSpines.push_back(spine);
+    }
+  }
+  file.close();
+}
+
+bool EpubReaderActivity::isSpineSkipped(const int spineIndex) const {
+  return spineIndex >= 0 &&
+         std::find(skippedSpines.begin(), skippedSpines.end(), static_cast<uint16_t>(spineIndex)) !=
+             skippedSpines.end();
+}
+
+bool EpubReaderActivity::persistSkippedSpine(const int spineIndex) {
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return false;
+  const uint16_t spine = static_cast<uint16_t>(spineIndex);
+  if (std::find(skippedSpines.begin(), skippedSpines.end(), spine) == skippedSpines.end()) {
+    skippedSpines.push_back(spine);
+    std::sort(skippedSpines.begin(), skippedSpines.end());
+  }
+  HalFile out;
+  if (!Storage.openFileForWrite("ERS", epub->getCachePath() + SKIPPED_SPINES_FILE, out)) return false;
+  bool ok = true;
+  for (const uint16_t item : skippedSpines) {
+    const uint8_t bytes[2] = {static_cast<uint8_t>(item & 0xFF), static_cast<uint8_t>(item >> 8)};
+    if (out.write(bytes, sizeof(bytes)) != sizeof(bytes)) {
+      ok = false;
+      break;
+    }
+  }
+  out.close();
+  return ok;
+}
+
+void EpubReaderActivity::advancePastSkippedSpines(const bool forward) {
+  if (!epub) return;
+  if (forward) {
+    while (currentSpineIndex < epub->getSpineItemsCount() && isSpineSkipped(currentSpineIndex)) {
+      LOG_DBG("ERS", "Skipping user-approved malformed spine %d", currentSpineIndex);
+      ++currentSpineIndex;
+      nextPageNumber = 0;
+      pendingPageJump.reset();
+      pendingAnchor.clear();
+    }
+  } else {
+    while (currentSpineIndex >= 0 && isSpineSkipped(currentSpineIndex)) {
+      LOG_DBG("ERS", "Skipping user-approved malformed spine %d (backward)", currentSpineIndex);
+      --currentSpineIndex;
+      nextPageNumber = 0;
+      pendingPageJump = std::numeric_limits<uint16_t>::max();
+      pendingAnchor.clear();
+    }
+    if (currentSpineIndex < 0) currentSpineIndex = 0;
+  }
+}
+
+void EpubReaderActivity::showIndexBuildError() {
+  failedSpineIndex = currentSpineIndex;
+  indexErrorDialog = IndexErrorDialog::Main;
+  indexErrorSelected = 0;
+  automaticPageTurnActive = false;
+  renderIndexErrorDialog();
+}
+
+void EpubReaderActivity::renderIndexErrorDialog() {
+  renderer.clearScreen();
+  if (indexErrorDialog == IndexErrorDialog::Main) {
+    renderer.drawCenteredText(UI_12_FONT_ID, 150, "Indexelési hiba - hibás könyv", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 245, "A könyv egyik része nem dolgozható fel.", true,
+                              EpdFontFamily::REGULAR);
+    const std::string actions = indexErrorSelected == 0 ? "> OK <        Javítás" : "OK        > Javítás <";
+    renderer.drawCenteredText(UI_12_FONT_ID, 390, actions.c_str(), true, EpdFontFamily::BOLD);
+  } else if (indexErrorDialog == IndexErrorDialog::RepairConfirm) {
+    renderer.drawCenteredText(UI_12_FONT_ID, 120, "Hibás részek kihagyása", true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 205, "A CrossPoint megpróbálja megnyitni a könyvet,", true,
+                              EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_12_FONT_ID, 245, "és kihagyja a nem feldolgozható részeket.", true,
+                              EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_12_FONT_ID, 285, "Az eredeti EPUB nem módosul.", true, EpdFontFamily::REGULAR);
+    const std::string actions = indexErrorSelected == 0 ? "> Mégse <        Javítás" : "Mégse        > Javítás <";
+    renderer.drawCenteredText(UI_12_FONT_ID, 410, actions.c_str(), true, EpdFontFamily::BOLD);
+  }
+  renderer.displayBuffer();
+}
+
+bool EpubReaderActivity::handleIndexErrorDialogInput() {
+  if (indexErrorDialog == IndexErrorDialog::None) return false;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    indexErrorSelected = 1 - indexErrorSelected;
+    renderIndexErrorDialog();
+    return true;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (indexErrorDialog == IndexErrorDialog::RepairConfirm) {
+      indexErrorDialog = IndexErrorDialog::Main;
+      indexErrorSelected = 0;
+      renderIndexErrorDialog();
+    } else {
+      indexErrorDialog = IndexErrorDialog::None;
+      onGoHome();
+    }
+    return true;
+  }
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Confirm)) return true;
+
+  if (indexErrorDialog == IndexErrorDialog::Main) {
+    if (indexErrorSelected == 0) {
+      indexErrorDialog = IndexErrorDialog::None;
+      onGoHome();
+    } else {
+      indexErrorDialog = IndexErrorDialog::RepairConfirm;
+      indexErrorSelected = 0;
+      renderIndexErrorDialog();
+    }
+    return true;
+  }
+
+  if (indexErrorSelected == 0) {
+    indexErrorDialog = IndexErrorDialog::Main;
+    indexErrorSelected = 0;
+    renderIndexErrorDialog();
+    return true;
+  }
+
+  const int badSpine = failedSpineIndex;
+  if (!persistSkippedSpine(badSpine)) {
+    LOG_ERR("ERS", "Failed to persist skipped malformed spine %d", badSpine);
+    indexErrorDialog = IndexErrorDialog::Main;
+    indexErrorSelected = 0;
+    renderIndexErrorDialog();
+    return true;
+  }
+  LOG_DBG("ERS", "User approved skipping malformed spine %d", badSpine);
+  indexErrorDialog = IndexErrorDialog::None;
+  indexErrorSelected = 0;
+  failedSpineIndex = -1;
+  section.reset();
+  currentSpineIndex = badSpine + 1;
+  nextPageNumber = 0;
+  clearDeferredReposition();
+  advancePastSkippedSpines(true);
+  requestUpdate();
+  return true;
+}
+
 void EpubReaderActivity::loop() {
+  if (handleIndexErrorDialogInput()) return;
   if (!epub) {
     finish();
     return;
@@ -1099,6 +1265,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           section.reset();
           if (!epub->clearCachePreservingProgress()) {
             LOG_ERR("ERS", "Failed to clear current book cache");
+          } else if (!epub->cacheReadyForCleanRebuild()) {
+            LOG_ERR("ERS", "Current-book cache clear left stale rebuild artifacts");
+          } else {
+            LOG_DBG("ERS", "Current-book cache verified clean for rebuild");
           }
         }
       }
@@ -1232,6 +1402,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       RenderLock lock;
       nextPageNumber = 0;
       currentSpineIndex++;
+      advancePastSkippedSpines(true);
       section.reset();
       lastPageTurnTime = millis();
       return true;
@@ -1250,6 +1421,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       nextPageNumber = 0;
       pendingPageJump = std::numeric_limits<uint16_t>::max();
       currentSpineIndex--;
+      advancePastSkippedSpines(false);
       section.reset();
       lastPageTurnTime = millis();
       return true;
@@ -1264,6 +1436,7 @@ bool EpubReaderActivity::skipPages(int amount) {
     RenderLock lock;
     nextPageNumber = 0;
     currentSpineIndex++;
+    advancePastSkippedSpines(true);
     section.reset();
     return true;
   } else {
@@ -1274,6 +1447,7 @@ bool EpubReaderActivity::skipPages(int amount) {
       RenderLock lock;
       nextPageNumber = 0;
       currentSpineIndex--;
+      advancePastSkippedSpines(false);
       section.reset();
       return true;
     }
@@ -1305,14 +1479,11 @@ void EpubReaderActivity::renderBook() {
     GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
   };
 
-  const auto showBuildError = [this]() {
-    renderer.clearScreen();
-    GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
-    automaticPageTurnActive = false;
-  };
+  const auto showBuildError = [this]() { showIndexBuildError(); };
 
   if (currentSpineIndex < 0) currentSpineIndex = 0;
   if (currentSpineIndex > epub->getSpineItemsCount()) currentSpineIndex = epub->getSpineItemsCount();
+  advancePastSkippedSpines(true);
 
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     return;

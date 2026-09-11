@@ -52,6 +52,7 @@ class Epub {
   // Close all live cache handles, remove the entire per-book cache, and restore
   // progress.bin so a manual clear does not lose the current reading position.
   bool clearCachePreservingProgress();
+  bool cacheReadyForCleanRebuild() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;

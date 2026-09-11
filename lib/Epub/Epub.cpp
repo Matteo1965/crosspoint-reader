@@ -719,6 +719,24 @@ bool Epub::clearCachePreservingProgress() {
   return true;
 }
 
+
+bool Epub::cacheReadyForCleanRebuild() const {
+  if (!Storage.exists(cachePath.c_str())) {
+    LOG_ERR("EBP", "Cache directory missing after clear: %s", cachePath.c_str());
+    return false;
+  }
+
+  const char* stalePaths[] = {"/book.bin", "/source.fp", "/html", "/sections"};
+  for (const char* suffix : stalePaths) {
+    const std::string path = cachePath + suffix;
+    if (Storage.exists(path.c_str())) {
+      LOG_ERR("EBP", "Stale cache artifact remains after clear: %s", path.c_str());
+      return false;
+    }
+  }
+  return true;
+}
+
 void Epub::setupCacheDir() const {
   if (Storage.exists(cachePath.c_str())) {
     return;

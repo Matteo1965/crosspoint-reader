@@ -33,6 +33,13 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.title = obj["title"] | "";
     book.author = obj["author"] | "";
     book.coverBmpPath = obj["coverBmpPath"] | "";
+    if (book.path.empty()) continue;
+    const bool duplicate = std::any_of(recentBooks.begin(), recentBooks.end(),
+                                       [&](const RecentBook& existing) { return existing.path == book.path; });
+    if (duplicate) {
+      LOG_DBG("RBS", "Dropping duplicate recent-book entry: %s", book.path.c_str());
+      continue;
+    }
     recentBooks.push_back(book);
   }
 
@@ -45,12 +52,11 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
-  // Remove existing entry if present
-  auto it =
-      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
-  if (it != recentBooks.end()) {
-    recentBooks.erase(it);
-  }
+  // Remove every existing entry for this exact path. Older firmware could
+  // leave duplicate rows behind; removing only the first match made them persistent.
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(),
+                                   [&](const RecentBook& book) { return book.path == path; }),
+                    recentBooks.end());
 
   // Add to front
   recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
@@ -77,12 +83,13 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
 }
 
 bool RecentBooksStore::removeByPath(const std::string& path) {
-  auto it =
-      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
-  if (it == recentBooks.end()) {
+  const size_t before = recentBooks.size();
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(),
+                                   [&](const RecentBook& book) { return book.path == path; }),
+                    recentBooks.end());
+  if (recentBooks.size() == before) {
     return false;
   }
-  recentBooks.erase(it);
   if (!saveToFile()) {
     LOG_ERR("RBS", "Failed to persist removal of recent book: %s", path.c_str());
   }
@@ -100,6 +107,19 @@ void RecentBooksStore::updatePath(const std::string& oldPath, const std::string&
   if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
     it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
   }
+  // If a stale duplicate already points at the destination, keep only the first
+  // destination row. updatePath preserves the moved entry's position, so it is the first
+  // matching row unless an even older stale duplicate precedes it; either way one row remains.
+  bool seenDestination = false;
+  recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) {
+                      if (book.path != newPath) return false;
+                      if (!seenDestination) {
+                        seenDestination = true;
+                        return false;
+                      }
+                      return true;
+                    }),
+                    recentBooks.end());
   saveToFile();
 }
 
