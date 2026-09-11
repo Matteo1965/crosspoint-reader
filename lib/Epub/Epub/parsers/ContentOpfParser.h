@@ -18,6 +18,10 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
+    IN_BOOK_DESCRIPTION,
+    IN_BOOK_PUBLISHER,
+    IN_BOOK_DATE,
+    IN_BOOK_IDENTIFIER,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
@@ -33,16 +37,14 @@ class ContentOpfParser final : public Print {
   std::string coverItemId;
   bool hasExplicitStartReference = false;
 
-  // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
-    uint32_t idHash;      // FNV-1a hash of itemId
-    uint16_t idLen;       // length for collision reduction
-    uint32_t fileOffset;  // offset in .items.bin
+    uint32_t idHash;
+    uint16_t idLen;
+    uint32_t fileOffset;
   };
   std::deque<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
 
-  // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {
     uint32_t hash = 2166136261u;
     for (char c : s) {
@@ -60,12 +62,18 @@ class ContentOpfParser final : public Print {
   std::string title;
   std::string author;
   std::string language;
+  std::string description;
+  std::string publisher;
+  std::string date;
+  std::string identifier;
+  std::string series;
+  std::string seriesIndex;
   std::string tocNcxPath;
-  std::string tocNavPath;  // EPUB 3 nav document path
+  std::string tocNavPath;
   std::string coverItemHref;
-  std::string guideCoverPageHref;  // Guide reference with type="cover" or "cover-page" (points to XHTML wrapper)
+  std::string guideCoverPageHref;
   std::string textReferenceHref;
-  std::vector<std::string> cssFiles;  // CSS stylesheet paths
+  std::vector<std::string> cssFiles;
 
   explicit ContentOpfParser(const std::string& cachePath, const std::string& baseContentPath, const size_t xmlSize,
                             BookMetadataCache* cache)
@@ -73,7 +81,6 @@ class ContentOpfParser final : public Print {
   ~ContentOpfParser() override;
 
   bool setup();
-
   size_t write(uint8_t) override;
   size_t write(const uint8_t* buffer, size_t size) override;
 };
