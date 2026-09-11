@@ -46,7 +46,6 @@ jobs:
           grep -q 'OptionPopup indexErrorPopup' src/activities/reader/EpubReaderActivity.h
           grep -q 'NOTOSANS_14_FONT_ID' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'Hibás részek kihagyása' src/activities/reader/EpubReaderActivity.cpp
-          # Accepted #93 recovery and #90 list fix remain present.
           grep -q 'skipped_spines.bin' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'SECTION_FILE_VERSION = 56' lib/Epub/Epub/Section.cpp
           grep -q 'isCompleteAsciiListMarker' lib/Epub/Epub/ParsedText.cpp
@@ -97,3 +96,5 @@ jobs:
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
+
+# retry-2
