@@ -26,8 +26,8 @@ namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
 constexpr int subtitleY = 738;
-constexpr int bookmarkStatusIconWidth = 24;
-constexpr int bookmarkStatusIconHeight = 24;
+constexpr int bookmarkStatusIconWidth = 32;
+constexpr int bookmarkStatusIconHeight = 32;
 
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
@@ -811,7 +811,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   // Draw Bookmark as a full 16x16 corner marker. It no longer consumes
   // status-bar layout width and sits flush with the upper-right screen edge.
   if (isPageBookmarked) {
-    drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth - 2, 4);
+    drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 0);
   }
 
   // Draw Title
