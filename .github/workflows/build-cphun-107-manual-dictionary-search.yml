@@ -1,0 +1,86 @@
+name: Build CPHUN-107 Manual Dictionary Search
+
+on:
+  push:
+    branches: [agent/cphun-107-manual-dictionary-search]
+    paths:
+      - '.github/workflows/build-cphun-107-manual-dictionary-search.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-107-manual-dictionary-search
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-107 patch
+        run: python3 tools/cphun107_manual_dictionary_search_patch.py
+
+      - name: Verify CPHUN-107 scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260912-107' src/CPHUNBuildId.h
+          grep -q 'MANUAL_DICTIONARY_SEARCH' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q '"Kézi keresés"' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'ManualDictionarySearchActivity' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'KeyboardEntryActivity' src/activities/reader/ManualDictionarySearchActivity.cpp
+          grep -q 'manualSearchMode ? "Billentyűzet"' src/activities/reader/DictionaryDefinitionActivity.cpp
+          grep -q 'drawBookmarkStatusIcon(renderer, 446, 4)' src/components/themes/BaseTheme.cpp
+          test -z "$(git diff -- src/activities/reader/BookInfoActivity.cpp)"
+
+      - name: Commit CPHUN-107 source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CPHUNBuildId.h \
+                  src/activities/reader/EpubReaderMenuActivity.h \
+                  src/activities/reader/EpubReaderMenuActivity.cpp \
+                  src/activities/reader/EpubReaderActivity.cpp \
+                  src/activities/reader/DictionaryDefinitionActivity.h \
+                  src/activities/reader/DictionaryDefinitionActivity.cpp \
+                  src/activities/reader/ManualDictionarySearchActivity.h \
+                  src/activities/reader/ManualDictionarySearchActivity.cpp
+          git commit -m 'CPHUN-107: add manual dictionary search'
+          git push origin HEAD:agent/cphun-107-manual-dictionary-search
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-107 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-107 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260912-107-Manual-Dictionary-Search-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
