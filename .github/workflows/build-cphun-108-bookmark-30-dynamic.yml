@@ -1,4 +1,4 @@
-name: Build CPHUN-108 Bookmark 30x30 Dynamic
+name: Build CPHUN-108 Bookmark 32x32 Dynamic
 
 on:
   push:
@@ -31,9 +31,9 @@ jobs:
         run: |
           git diff --check
           grep -q 'CPHUN-260912-108' src/CPHUNBuildId.h
-          grep -q 'bookmarkStatusIconWidth = 30' src/components/themes/BaseTheme.cpp
-          grep -q 'bookmarkStatusIconHeight = 30' src/components/themes/BaseTheme.cpp
-          grep -q '(bookmarkStatusIconWidth + 7) / 8' src/components/themes/BaseTheme.cpp
+          grep -q 'bookmarkStatusIconWidth = 32' src/components/themes/BaseTheme.cpp
+          grep -q 'bookmarkStatusIconHeight = 32' src/components/themes/BaseTheme.cpp
+          grep -q 'bytesPerRow = bookmarkStatusIconWidth / 8' src/components/themes/BaseTheme.cpp
           grep -q 'drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 0)' src/components/themes/BaseTheme.cpp
           python3 - <<'PY'
           import re
@@ -41,7 +41,7 @@ jobs:
           m=re.search(r'BookmarkStatusIcon\[\].*?\{(.*?)\};', s, re.S)
           assert m
           vals=re.findall(r'0x[0-9A-Fa-f]{2}', m.group(1))
-          assert len(vals)==120, len(vals)
+          assert len(vals)==128, len(vals)
           PY
 
       - name: Commit CPHUN-108 source
@@ -49,7 +49,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add src/CPHUNBuildId.h src/components/icons/bookmark.h src/components/themes/BaseTheme.cpp
-          git commit -m 'CPHUN-108: 30x30 dynamic corner bookmark icon'
+          git commit -m 'CPHUN-108: 32x32 dynamic corner bookmark icon'
           git push origin HEAD:agent/cphun-108-bookmark-30-dynamic
 
       - name: Unit tests
@@ -78,7 +78,7 @@ jobs:
       - name: Upload CPHUN-108 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260912-108-Bookmark-30-Dynamic-FW
+          name: CPHUN-260912-108-Bookmark-32-Dynamic-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
