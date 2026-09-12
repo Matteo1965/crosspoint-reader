@@ -15,11 +15,13 @@
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
-                                        std::string definition, bool htmlDefinition = false)
+                                        std::string definition, bool htmlDefinition = false,
+                                        bool manualSearchMode = false)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
-        htmlDefinition(htmlDefinition) {}
+        htmlDefinition(htmlDefinition),
+        manualSearchMode(manualSearchMode) {}
 
   void onEnter() override;
   void onExit() override;
@@ -54,6 +56,7 @@ class DictionaryDefinitionActivity final : public Activity {
   // separators) to newlines so C-string APIs see the whole text.
   std::string definition;
   const bool htmlDefinition;
+  const bool manualSearchMode;
   std::vector<std::unique_ptr<Page>> pages;
   std::vector<Line> lines;
   int currentPage = 0;

@@ -22,6 +22,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "ManualDictionarySearchActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -1238,6 +1239,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
       openDictionaryWordSelect();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::MANUAL_DICTIONARY_SEARCH: {
+      if (SETTINGS.dictionaryName[0] == '\0') {
+        showDictionaryMessage = true;
+        dictionaryMessageTime = millis();
+        requestUpdate();
+        break;
+      }
+      startActivityForResult(std::make_unique<ManualDictionarySearchActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {

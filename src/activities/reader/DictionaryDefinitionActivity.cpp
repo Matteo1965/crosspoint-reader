@@ -282,6 +282,15 @@ void DictionaryDefinitionActivity::wrapText() {
 
 void DictionaryDefinitionActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (manualSearchMode) {
+      ActivityResult result;
+      result.isCancelled = true;
+      setResult(std::move(result));
+    }
+    finish();
+    return;
+  }
+  if (manualSearchMode && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     finish();
     return;
   }
@@ -450,8 +459,9 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY, bodyWidth);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  const auto labels = mappedInput.mapLabels(
+      tr(STR_BACK), manualSearchMode ? "Billentyűzet" : "", (currentPage > 0 ? "<" : ""),
+      (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
