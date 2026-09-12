@@ -1,0 +1,37 @@
+from pathlib import Path
+import re
+
+base = Path('src/components/themes/BaseTheme.cpp')
+text = base.read_text(encoding='utf-8')
+assert text.count('constexpr int bookmarkStatusIconWidth = 32;') == 1
+assert text.count('constexpr int bookmarkStatusIconHeight = 32;') == 1
+assert text.count('constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;') == 1
+assert text.count('drawBookmarkStatusIcon(renderer, 446, 4);') == 1
+text = text.replace('constexpr int bookmarkStatusIconWidth = 32;', 'constexpr int bookmarkStatusIconWidth = 30;')
+text = text.replace('constexpr int bookmarkStatusIconHeight = 32;', 'constexpr int bookmarkStatusIconHeight = 30;')
+text = text.replace('constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;', 'constexpr int bytesPerRow = (bookmarkStatusIconWidth + 7) / 8;')
+text = text.replace('drawBookmarkStatusIcon(renderer, 446, 4);', 'drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 0);')
+base.write_text(text, encoding='utf-8')
+
+icon = Path('src/components/icons/bookmark.h')
+old = icon.read_text(encoding='utf-8')
+data = '''0xFF, 0xFF, 0xFF, 0xFC, 0xFF, 0xFF, 0xFF, 0xFC, 0xFF, 0xFF, 0xFF, 0xFC,
+    0xFF, 0xFF, 0xFF, 0xFC, 0x9F, 0xFF, 0xFF, 0xFC, 0xCF, 0xFF, 0xFF, 0xFC,
+    0x47, 0xFF, 0xFF, 0xFC, 0x41, 0xFF, 0xFF, 0xFC, 0x60, 0xFF, 0xFF, 0xFC,
+    0x20, 0x3F, 0xFF, 0xFC, 0x20, 0x1F, 0xFF, 0xFC, 0x30, 0x07, 0xFF, 0xFC,
+    0x10, 0x03, 0xFF, 0xFC, 0x10, 0x00, 0xFF, 0xFC, 0x18, 0x00, 0x7F, 0xFC,
+    0x08, 0x00, 0x1F, 0xFC, 0x08, 0x00, 0x0F, 0xFC, 0x0C, 0x00, 0x03, 0xFC,
+    0x04, 0x00, 0x01, 0xFC, 0x04, 0x00, 0x00, 0x7C, 0x06, 0x00, 0x00, 0x3C,
+    0x02, 0x00, 0x00, 0x0C, 0x02, 0x00, 0x00, 0x1C, 0x03, 0x00, 0x01, 0xFC,
+    0x01, 0x00, 0x1F, 0xFC, 0x01, 0x01, 0xFF, 0xF0, 0x01, 0x9F, 0xFE, 0x00,
+    0x00, 0xFF, 0xC0, 0x00, 0x00, 0x38, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00'''
+new_block = '// size: 30x30 — Hungarian Edition dogear_30x30_BM bookmark marker\nconst uint8_t BookmarkStatusIcon[] PROGMEM = {\n    ' + data + '\n};'
+pattern = re.compile(r'// size: 32x32[^\n]*\nconst uint8_t BookmarkStatusIcon\[\] PROGMEM = \{.*?\n\};', re.S)
+new, count = pattern.subn(new_block, old)
+assert count == 1, count
+icon.write_text(new, encoding='utf-8')
+
+bid = Path('src/CPHUNBuildId.h')
+b = bid.read_text(encoding='utf-8')
+assert 'CPHUN-260912-107' in b
+bid.write_text(b.replace('CPHUN-260912-107', 'CPHUN-260912-108'), encoding='utf-8')
