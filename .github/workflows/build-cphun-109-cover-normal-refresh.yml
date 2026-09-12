@@ -1,0 +1,63 @@
+name: Build CPHUN-109 Cover Normal Refresh
+
+on:
+  push:
+    branches: [agent/cphun-109-cover-normal-refresh]
+    paths:
+      - '.github/workflows/build-cphun-109-cover-normal-refresh.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-109-cover-normal-refresh
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify CPHUN-109 scope
+        run: |
+          git diff --check HEAD~3..HEAD
+          grep -q 'CPHUN-260913-109' src/CPHUNBuildId.h
+          grep -q 'if (simpleBackOnly)' src/activities/util/BmpViewerActivity.cpp
+          grep -q 'renderer.displayBuffer();' src/activities/util/BmpViewerActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-109 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-109 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260913-109-Cover-Normal-Refresh-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
