@@ -1,0 +1,84 @@
+name: Build CPHUN-108 Bookmark 30x30 Dynamic
+
+on:
+  push:
+    branches: [agent/cphun-108-bookmark-30-dynamic]
+    paths:
+      - '.github/workflows/build-cphun-108-bookmark-30-dynamic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-108-bookmark-30-dynamic
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-108 patch
+        run: python3 tools/cphun108_bookmark30_dynamic_patch.py
+
+      - name: Verify CPHUN-108 scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260912-108' src/CPHUNBuildId.h
+          grep -q 'bookmarkStatusIconWidth = 30' src/components/themes/BaseTheme.cpp
+          grep -q 'bookmarkStatusIconHeight = 30' src/components/themes/BaseTheme.cpp
+          grep -q '(bookmarkStatusIconWidth + 7) / 8' src/components/themes/BaseTheme.cpp
+          grep -q 'drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 0)' src/components/themes/BaseTheme.cpp
+          python3 - <<'PY'
+          import re
+          s=open('src/components/icons/bookmark.h', encoding='utf-8').read()
+          m=re.search(r'BookmarkStatusIcon\[\].*?\{(.*?)\};', s, re.S)
+          assert m
+          vals=re.findall(r'0x[0-9A-Fa-f]{2}', m.group(1))
+          assert len(vals)==120, len(vals)
+          PY
+
+      - name: Commit CPHUN-108 source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CPHUNBuildId.h src/components/icons/bookmark.h src/components/themes/BaseTheme.cpp
+          git commit -m 'CPHUN-108: 30x30 dynamic corner bookmark icon'
+          git push origin HEAD:agent/cphun-108-bookmark-30-dynamic
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-108 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-108 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260912-108-Bookmark-30-Dynamic-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
