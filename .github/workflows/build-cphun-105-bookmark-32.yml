@@ -1,0 +1,76 @@
+name: Build CPHUN-105 Bookmark 32x32
+
+on:
+  push:
+    branches: [agent/cphun-105-bookmark-32]
+    paths:
+      - '.github/workflows/build-cphun-105-bookmark-32.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-105-bookmark-32
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-105 patch
+        run: python3 tools/cphun105_bookmark32_patch.py
+
+      - name: Verify CPHUN-105 scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260912-105' src/CPHUNBuildId.h
+          grep -q 'size: 32x32 — Hungarian Edition dogear_32x32_BM bookmark marker' src/components/icons/bookmark.h
+          grep -q 'constexpr int bookmarkStatusIconWidth = 32;' src/components/themes/BaseTheme.cpp
+          grep -q 'constexpr int bookmarkStatusIconHeight = 32;' src/components/themes/BaseTheme.cpp
+          grep -q 'drawBookmarkStatusIcon(renderer, renderer.getScreenWidth() - bookmarkStatusIconWidth, 0)' src/components/themes/BaseTheme.cpp
+
+      - name: Commit CPHUN-105 source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/CPHUNBuildId.h src/components/icons/bookmark.h src/components/themes/BaseTheme.cpp
+          git commit -m 'CPHUN-105: 32x32 bookmark icon at upper-right'
+          git push origin HEAD:agent/cphun-105-bookmark-32
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-105 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-105 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260912-105-Bookmark-32x32-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
