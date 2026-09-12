@@ -1,3 +1,3 @@
 #pragma once
 
-#define CPHUN_BUILD_ID "CPHUN-260912-105"
+#define CPHUN_BUILD_ID "CPHUN-260912-106"
