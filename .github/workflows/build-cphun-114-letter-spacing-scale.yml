@@ -1,0 +1,81 @@
+name: Build CPHUN-114 Letter Spacing Scale
+
+on:
+  push:
+    branches: [agent/cphun-114-letter-spacing-scale]
+    paths:
+      - '.github/workflows/build-cphun-114-letter-spacing-scale.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-114-letter-spacing-scale
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 clean cover patch
+        run: python3 tools/cphun110_cover_dither_clean_patch.py
+
+      - name: Apply CPHUN-111 4-gray Floyd patch
+        run: python3 tools/cphun111_cover_4gray_floyd_patch.py
+
+      - name: Apply CPHUN-112 grayscale display patch
+        run: python3 tools/cphun112_cover_grayscale_pass_patch.py
+
+      - name: Apply CPHUN-113 letter-spacing base patch
+        run: python3 tools/cphun113_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-114 letter-spacing scale patch
+        run: python3 tools/cphun114_letter_spacing_scale_patch.py
+
+      - name: Verify CPHUN-114 scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260913-114' src/CPHUNBuildId.h
+          grep -q '525 - idx \* 25' src/activities/settings/TextSettingsActivity.cpp
+          grep -q '350, 500' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'displayGrayscaleBase(HalDisplay::HALF_REFRESH)' src/activities/util/BmpViewerActivity.cpp
+          grep -q 'displayGrayBuffer()' src/activities/util/BmpViewerActivity.cpp
+          git diff -- src/activities/settings/TextSettingsActivity.cpp src/CrossPointSettings.h src/activities/util/BmpViewerActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-114 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-114 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260913-114-Letter-Spacing-Scale-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
