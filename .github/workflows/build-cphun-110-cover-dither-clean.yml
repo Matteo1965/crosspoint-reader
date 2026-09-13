@@ -1,5 +1,6 @@
 name: Build CPHUN-110 Cover Dither Clean
 
+# Triggered build for the dedicated dithered, button-free book-cover view.
 on:
   push:
     branches: [agent/cphun-110-cover-dither-clean]
