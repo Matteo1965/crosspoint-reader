@@ -21,3 +21,11 @@ if "compactLyraLayout ? 36 : 40" not in text:
     raise SystemExit("CPHUN-125: text-settings row heights changed unexpectedly")
 
 path.write_text(text, encoding="utf-8")
+
+build_id_path = Path("src/CPHUNBuildId.h")
+build_id = build_id_path.read_text(encoding="utf-8")
+old_id = '#define CPHUN_BUILD_ID "CPHUN-260914-124-EXP"'
+new_id = '#define CPHUN_BUILD_ID "CPHUN-260914-125"'
+if build_id.count(old_id) != 1:
+    raise SystemExit(f"CPHUN-125: build-id anchor matches={build_id.count(old_id)}")
+build_id_path.write_text(build_id.replace(old_id, new_id, 1), encoding="utf-8")
