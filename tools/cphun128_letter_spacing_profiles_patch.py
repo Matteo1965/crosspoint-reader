@@ -104,6 +104,8 @@ replace_once(
 # Replace the fixed 0.5 px / 8 px engine with the agreed four profiles.
 header_path = Path("lib/Epub/Epub/LetterSpacingOptimization.h")
 header = header_path.read_text(encoding="utf-8")
+if "#include <algorithm>\\n" not in header:
+    header = header.replace("#include <cstddef>\\n", "#include <algorithm>\\n#include <cstddef>\\n", 1)
 start = header.index("constexpr uint8_t STEP_FP4 = 8;")
 end_marker = "}  // namespace LetterSpacingOptimization"
 end = header.index(end_marker, start)
