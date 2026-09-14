@@ -32,10 +32,8 @@ replace_once(
 )
 replace_once(
     "src/activities/reader/EpubReaderMenuActivity.h",
-    '''  std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
-  int currentPage = 0;''',
-    '''  std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
-  std::vector<std::string> dictionaryOptionLabels;
+    "  int currentPage = 0;",
+    '''  std::vector<std::string> dictionaryOptionLabels;
   std::vector<const char*> dictionaryOptionPointers;
   std::function<void(uint8_t)> dictionarySetter;
   uint8_t selectedDictionaryOption = 0;
