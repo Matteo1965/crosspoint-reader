@@ -1,0 +1,115 @@
+name: Build CPHUN-122 Experimental Justify Right Edge Closure
+
+on:
+  push:
+    branches: [agent/cphun-122-justify-right-edge-closure]
+    paths:
+      - '.github/workflows/build-cphun-122-justify-right-edge-closure.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-122-justify-right-edge-closure
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 clean cover patch
+        run: python3 tools/cphun110_cover_dither_clean_patch.py
+
+      - name: Apply CPHUN-111 4-gray Floyd patch
+        run: python3 tools/cphun111_cover_4gray_floyd_patch.py
+
+      - name: Apply CPHUN-112 grayscale display patch
+        run: python3 tools/cphun112_cover_grayscale_pass_patch.py
+
+      - name: Apply CPHUN-113 letter-spacing base patch
+        run: python3 tools/cphun113_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-114 known-good letter-spacing patch
+        run: python3 tools/cphun114_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-116 safe retuned scale
+        run: python3 tools/cphun116_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-117 non-linear scale
+        run: python3 tools/cphun117_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-118 fixed-point optimizer
+        run: python3 tools/cphun118_fixedpoint_optimization_patch.py
+
+      - name: Apply CPHUN-119 pair tuning and rounding fix
+        run: python3 tools/cphun119_fixedpoint_pair_tuning_patch.py
+
+      - name: Apply CPHUN-120 stronger accumulator intensity
+        run: python3 tools/cphun120_fixedpoint_intensity_patch.py
+
+      - name: Apply CPHUN-121 native pair advance fix
+        run: python3 tools/cphun121_native_pair_advance_patch.py
+
+      - name: Apply CPHUN-122 exact justified right-edge closure
+        run: python3 tools/cphun122_justify_right_edge_closure_patch.py
+
+      - name: Verify CPHUN-122 experimental scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260914-122-EXP' src/CPHUNBuildId.h
+          grep -q 'LETTER_SPACING_THRESHOLDS\[\] = {0, 550, 530, 500, 460, 410, 350, 280}' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Betűköz optimalizálás' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'letterSpacingOptimization' src/CrossPointSettings.h
+          grep -q 'MAX_EXTRA_PX_PER_LINE = 8' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -q 'STEP_FP4 = 8' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -q 'Optimizable pair table must contain 655 entries' lib/Epub/Epub/LetterSpacingOptimization.h
+          test "$(grep -o '0x[0-9A-F]\{8\}u' lib/Epub/Epub/LetterSpacingOptimization.h | wc -l)" -eq 655
+          grep -q 'previousAdvanceFP + kernFP' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'nativePairAdvancePx' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -q 'nativePrefix' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -q 'prefixAdvance - glyphAdvance + optimizationOffset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -q 'rightEdgeResidual = targetEndX - xpos' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'cumulativeResidualShift' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'displayGrayscaleBase(HalDisplay::HALF_REFRESH)' src/activities/util/BmpViewerActivity.cpp
+          grep -q 'displayGrayBuffer()' src/activities/util/BmpViewerActivity.cpp
+          ! grep -R -q 'CPHUN-115' tools/cphun122_justify_right_edge_closure_patch.py .github/workflows/build-cphun-122-justify-right-edge-closure.yml
+          echo 'CPHUN-122 experimental source diff:'
+          git diff -- src/CrossPointSettings.h src/CrossPointSettings.cpp src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/LetterSpacingOptimization.h src/activities/util/BmpViewerActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-122 Experimental firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-122 Experimental firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260914-122-EXP-Justify-Right-Edge-Closure-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
