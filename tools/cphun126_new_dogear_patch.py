@@ -24,9 +24,9 @@ if planes != 1 or bits_per_pixel != 1 or compression != 0:
         "CPHUN-126: icon must be an uncompressed 1-bit BMP"
     )
 
-# The renderer treats a set bit as white and a clear bit as black. Require the
-# BMP palette to use the same polarity so the source pixels can be copied
-# losslessly, without inversion, dithering, or resampling.
+# The renderer treats a set bit as black and a clear bit as white. Require the
+# BMP palette to use the same polarity (palette index 1=black) so the source
+# pixels can be copied losslessly, without inversion, dithering, or resampling.
 palette_offset = 14 + dib_size
 palette = data[palette_offset:palette_offset + 8]
 if palette != bytes((255, 255, 255, 0, 0, 0, 0, 0)):
