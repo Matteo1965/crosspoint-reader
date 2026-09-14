@@ -1,0 +1,96 @@
+name: Build CPHUN-118 Experimental Fixed-Point Letter Spacing
+
+on:
+  push:
+    branches: [agent/cphun-118-fixedpoint-experimental-final]
+    paths:
+      - '.github/workflows/build-cphun-118-fixedpoint-experimental.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-118-fixedpoint-experimental-final
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 clean cover patch
+        run: python3 tools/cphun110_cover_dither_clean_patch.py
+
+      - name: Apply CPHUN-111 4-gray Floyd patch
+        run: python3 tools/cphun111_cover_4gray_floyd_patch.py
+
+      - name: Apply CPHUN-112 grayscale display patch
+        run: python3 tools/cphun112_cover_grayscale_pass_patch.py
+
+      - name: Apply CPHUN-113 letter-spacing base patch
+        run: python3 tools/cphun113_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-114 known-good letter-spacing patch
+        run: python3 tools/cphun114_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-116 safe retuned scale
+        run: python3 tools/cphun116_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-117 non-linear scale
+        run: python3 tools/cphun117_letter_spacing_scale_patch.py
+
+      - name: Apply CPHUN-118 fixed-point optimizer
+        run: python3 tools/cphun118_fixedpoint_optimization_patch.py
+
+      - name: Verify CPHUN-118 experimental scope
+        run: |
+          git diff --check
+          grep -q 'CPHUN-260914-118-EXP' src/CPHUNBuildId.h
+          grep -q 'LETTER_SPACING_THRESHOLDS\[\] = {0, 550, 530, 500, 460, 410, 350, 280}' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'Betűköz optimalizálás' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'letterSpacingOptimization' src/CrossPointSettings.h
+          grep -q 'MAX_EXTRA_PX_PER_LINE = 4' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -q 'STEP_FP4 = 4' lib/Epub/Epub/LetterSpacingOptimization.h
+          test "$(grep -o '0x[0-9A-F]\{8\}u' lib/Epub/Epub/LetterSpacingOptimization.h | wc -l)" -eq 204
+          grep -q 'displayGrayscaleBase(HalDisplay::HALF_REFRESH)' src/activities/util/BmpViewerActivity.cpp
+          grep -q 'displayGrayBuffer()' src/activities/util/BmpViewerActivity.cpp
+          ! grep -R -q 'CPHUN-115' tools/cphun118_fixedpoint_optimization_patch.py .github/workflows/build-cphun-118-fixedpoint-experimental.yml
+          echo 'CPHUN-118 experimental source diff:'
+          git diff -- src/CrossPointSettings.h src/CrossPointSettings.cpp src/activities/settings/TextSettingsActivity.h src/activities/settings/TextSettingsActivity.cpp lib/Epub/Epub/ParsedText.h lib/Epub/Epub/ParsedText.cpp lib/Epub/Epub/blocks/TextBlock.cpp lib/Epub/Epub/LetterSpacingOptimization.h src/activities/util/BmpViewerActivity.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-118 Experimental firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-118 Experimental firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260914-118-EXP-FixedPoint-LetterSpacing-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
