@@ -172,19 +172,21 @@ replace_once("src/activities/reader/DictionaryWordSelectActivity.cpp", old_logic
 
 # Build a selector first, feed boundary pages one-by-one (so each is released
 # immediately after its boundary token is copied), then start the activity.
-# Match semantically instead of depending on clang-format line wrapping. Earlier
-# CPHUN-132 revisions may reflow this constructor call before r8 is applied.
+# Match semantically instead of depending on clang-format line wrapping. CPHUN-132r2
+# adds highlightedOffsets as the final constructor argument; preserve that feature.
 selector_pattern = (
     r'  highlightStore\.reset\(\);\n'
     r'  startActivityForResult\(\s*\n'
     r'\s*std::make_unique<DictionaryWordSelectActivity>\(renderer, mappedInput, std::move\(page\),\s*'
-    r'orientedMarginLeft,\s*orientedMarginTop,\s*currentSpineIndex,\s*mode\),\s*\n'
+    r'orientedMarginLeft,\s*orientedMarginTop,\s*currentSpineIndex,\s*mode,\s*'
+    r'std::move\(highlightedOffsets\)\),\s*\n'
     r'\s*\[this, highlightBookPath\]\(const ActivityResult& result\) \{'
 )
 selector_replacement = '''  highlightStore.reset();
   auto selector = std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                  orientedMarginLeft, orientedMarginTop,
-                                                                 currentSpineIndex, mode);
+                                                                 currentSpineIndex, mode,
+                                                                 std::move(highlightedOffsets));
   if (section->currentPage > 0) selector->setPreviousBoundaryPage(section->loadPage(section->currentPage - 1));
   if (section->currentPage + 1 < static_cast<int>(section->pageCount))
     selector->setNextBoundaryPage(section->loadPage(section->currentPage + 1));
