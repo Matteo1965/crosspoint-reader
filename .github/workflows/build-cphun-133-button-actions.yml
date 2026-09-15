@@ -1,6 +1,10 @@
 name: Build CPHUN-133 Button Action Categories + 132r5 Fixes
 
 on:
+  push:
+    branches: [agent/cphun-133-button-action-categories]
+    paths:
+      - '.github/workflows/build-cphun-133-button-actions.yml'
   workflow_dispatch:
 
 permissions:
@@ -131,3 +135,5 @@ jobs:
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
+
+# Trigger CPHUN-133 + 132r5: 2026-09-15
