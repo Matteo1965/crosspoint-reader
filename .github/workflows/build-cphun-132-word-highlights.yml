@@ -1,8 +1,8 @@
-name: Build CPHUN-132r3 Toggle + NotFound
+name: Build CPHUN-132r4 Bookmarks + Export + Lookup
 
 on:
   push:
-    branches: [agent/cphun-132r3-toggle-notfound]
+    branches: [agent/cphun-132r4-bookmarks-export-ui]
     paths:
       - '.github/workflows/build-cphun-132-word-highlights.yml'
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/cphun-132r3-toggle-notfound
+          ref: agent/cphun-132r4-bookmarks-export-ui
           submodules: recursive
           fetch-depth: 0
 
@@ -73,19 +73,34 @@ jobs:
         run: python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
       - name: Apply CPHUN-132r3 toggle + bounded not-found lookup
         run: python3 tools/cphun132r3_toggle_notfound_fix.py
+      - name: Apply CPHUN-132r4 bookmarks/export/UI/lookup fixes
+        run: python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
       - name: Finalize CPHUN-132 cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
-      - name: Verify CPHUN-132r3 scope
+      - name: Verify CPHUN-132r4 scope
         run: |
           git diff --check
           grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
-          grep -q 'bool toggle(const HighlightAnchor& anchor)' src/highlights/HighlightStore.h
-          grep -q 'HighlightStore::toggle' src/highlights/HighlightStore.cpp
           grep -q 'highlightStore->toggle' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'MAX_FALLBACK_PROBES = 48' src/util/Dictionary.cpp
-          grep -q 'MAX_FALLBACK_MS = 4000' src/util/Dictionary.cpp
-          grep -q 'drawStoredHighlights' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q '"Megjelölés"' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'A választott szó megjelölhető.' src/activities/reader/DictionaryHighlightPromptActivity.cpp
+          grep -q 'Megjelölt szavak mentése' src/activities/reader/EpubReaderBookmarksActivity.cpp
+          grep -q 'megjelolt_szavak_%03d.txt' src/activities/reader/EpubReaderBookmarksActivity.cpp
+          grep -q 'RowKind::Highlight' src/activities/reader/EpubReaderBookmarksActivity.cpp
+          grep -q 'metrics.listRowHeight - 2' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'return UINT32_MAX' src/util/Dictionary.cpp
+          grep -q 'locateProbes > SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
+          grep -q 'synonymProbes > SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          menu = Path('src/activities/reader/EpubReaderMenuActivity.cpp').read_text()
+          assert menu.index('MenuAction::HIGHLIGHT') < menu.index('MenuAction::DICTIONARY')
+          book = menu.index('"Borító megjelenítése"')
+          rotate = menu.index('MenuAction::ROTATE_SCREEN', book)
+          textsettings = menu.index('MenuAction::TEXT_SETTINGS', book)
+          assert book < rotate < textsettings
+          PY
 
       - name: Unit tests
         run: |
@@ -104,18 +119,18 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-132r3 firmware
+      - name: Build CPHUN-132r4 firmware
         run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
-      - name: Upload CPHUN-132r3 firmware
+      - name: Upload CPHUN-132r4 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260915-132r3-EXP-Toggle-NotFound-FW
+          name: CPHUN-260915-132r4-EXP-Bookmarks-Export-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
 
-# CPHUN-132r3 build trigger: 2026-09-15
+# CPHUN-132r4 build trigger: 2026-09-15
