@@ -5,6 +5,7 @@ on:
     branches: [agent/cphun-132r7-dictionary-index32]
     paths:
       - '.github/workflows/build-cphun-132r7.yml'
+      - 'tools/cphun132r7_dictionary_index32_lookup_fix.py'
   workflow_dispatch:
 
 permissions:
