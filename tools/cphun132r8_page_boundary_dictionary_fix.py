@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 def replace_once(path, old, new):
@@ -8,6 +9,15 @@ def replace_once(path, old, new):
     if count != 1:
         raise SystemExit(f"CPHUN-132r8: {path}: expected one match, found {count}: {old[:180]!r}")
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+def regex_replace_once(path, pattern, replacement):
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    text2, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"CPHUN-132r8: {path}: regex expected one match, found {count}: {pattern[:180]!r}")
+    p.write_text(text2, encoding="utf-8")
 
 
 # -----------------------------------------------------------------------------
@@ -162,14 +172,16 @@ replace_once("src/activities/reader/DictionaryWordSelectActivity.cpp", old_logic
 
 # Build a selector first, feed boundary pages one-by-one (so each is released
 # immediately after its boundary token is copied), then start the activity.
-replace_once(
-    "src/activities/reader/EpubReaderActivity.cpp",
-    '''  highlightStore.reset();
-  startActivityForResult(
-      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
-                                                     orientedMarginTop, currentSpineIndex, mode),
-      [this, highlightBookPath](const ActivityResult& result) {''',
-    '''  highlightStore.reset();
+# Match semantically instead of depending on clang-format line wrapping. Earlier
+# CPHUN-132 revisions may reflow this constructor call before r8 is applied.
+selector_pattern = (
+    r'  highlightStore\.reset\(\);\n'
+    r'  startActivityForResult\(\s*\n'
+    r'\s*std::make_unique<DictionaryWordSelectActivity>\(renderer, mappedInput, std::move\(page\),\s*'
+    r'orientedMarginLeft,\s*orientedMarginTop,\s*currentSpineIndex,\s*mode\),\s*\n'
+    r'\s*\[this, highlightBookPath\]\(const ActivityResult& result\) \{'
+)
+selector_replacement = '''  highlightStore.reset();
   auto selector = std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                  orientedMarginLeft, orientedMarginTop,
                                                                  currentSpineIndex, mode);
@@ -178,8 +190,8 @@ replace_once(
     selector->setNextBoundaryPage(section->loadPage(section->currentPage + 1));
   startActivityForResult(
       std::move(selector),
-      [this, highlightBookPath](const ActivityResult& result) {''',
-)
+      [this, highlightBookPath](const ActivityResult& result) {'''
+regex_replace_once("src/activities/reader/EpubReaderActivity.cpp", selector_pattern, selector_replacement)
 
 # -----------------------------------------------------------------------------
 # 2) DictZip hard deadline. A bad/corrupt definition entry must not keep the
