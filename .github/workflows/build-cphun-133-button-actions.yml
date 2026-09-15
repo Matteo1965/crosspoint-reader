@@ -1,0 +1,124 @@
+name: Build CPHUN-133 Button Action Categories
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-133-button-action-categories
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 clean cover patch
+        run: python3 tools/cphun110_cover_dither_clean_patch.py
+      - name: Apply CPHUN-111 4-gray Floyd patch
+        run: python3 tools/cphun111_cover_4gray_floyd_patch.py
+      - name: Apply CPHUN-112 grayscale display patch
+        run: python3 tools/cphun112_cover_grayscale_pass_patch.py
+      - name: Apply CPHUN-113 letter-spacing base patch
+        run: python3 tools/cphun113_letter_spacing_scale_patch.py
+      - name: Apply CPHUN-114 known-good letter-spacing patch
+        run: python3 tools/cphun114_letter_spacing_scale_patch.py
+      - name: Apply CPHUN-116 safe retuned scale
+        run: python3 tools/cphun116_letter_spacing_scale_patch.py
+      - name: Apply CPHUN-117 non-linear scale
+        run: python3 tools/cphun117_letter_spacing_scale_patch.py
+      - name: Apply CPHUN-118 fixed-point optimizer
+        run: python3 tools/cphun118_fixedpoint_optimization_patch.py
+      - name: Apply CPHUN-119 pair tuning and rounding fix
+        run: python3 tools/cphun119_fixedpoint_pair_tuning_patch.py
+      - name: Apply CPHUN-120 stronger accumulator intensity
+        run: python3 tools/cphun120_fixedpoint_intensity_patch.py
+      - name: Apply CPHUN-121 native pair advance fix
+        run: python3 tools/cphun121_native_pair_advance_patch.py
+      - name: Apply CPHUN-123 ink-edge right-margin fix
+        run: python3 tools/cphun123_ink_edge_right_margin_patch.py
+      - name: Apply CPHUN-124 dark-ink threshold
+        run: python3 tools/cphun124_dark_ink_edge_patch.py
+      - name: Apply CPHUN-125 RoundedRaff layout compression
+        run: python3 tools/cphun125_roundedraff_text_settings_layout_patch.py
+      - name: Apply CPHUN-126 NEW_DOGEAR bookmark
+        run: python3 tools/cphun126_new_dogear_patch.py
+      - name: Apply CPHUN-127 RoundedRaff list fit
+        run: python3 tools/cphun127_roundedraff_list_fit_patch.py
+      - name: Apply CPHUN-128 letter-spacing profiles
+        run: python3 tools/cphun128_letter_spacing_profiles_patch.py
+      - name: Apply CPHUN-129 dictionary and BookInfo UI
+        run: python3 tools/cphun129_dictionary_bookinfo_ui_patch.py
+      - name: Apply CPHUN-130 Noto Serif 16 optimization
+        run: python3 tools/cphun130_notoserif16_spacing_optimization_patch.py
+      - name: Apply CPHUN-131 hyphenation threshold
+        run: python3 tools/cphun131_hyphenation_threshold_patch.py
+
+      - name: Prepare CPHUN-132 cache-version transition
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 56/' lib/Epub/Epub/Section.cpp
+      - name: Apply CPHUN-132 word highlights
+        run: python3 tools/cphun132_word_highlights_patch.py
+      - name: Apply CPHUN-132r2 highlight visibility + lookup reliability
+        run: python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
+      - name: Apply CPHUN-132r3 toggle + bounded not-found lookup
+        run: python3 tools/cphun132r3_toggle_notfound_fix.py
+      - name: Apply CPHUN-132r4 bookmarks/export/UI/lookup fixes
+        run: python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
+      - name: Apply CPHUN-133 categorized button actions
+        run: python3 tools/cphun133_button_action_categories_patch.py
+      - name: Finalize CPHUN-132 cache version
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
+
+      - name: Verify CPHUN-133 scope
+        run: |
+          git diff --check
+          grep -q 'LetterSpacingCorrectionUp = 34' src/ReaderAction.h
+          grep -q 'OpenHighlight = 42' src/ReaderAction.h
+          grep -q 'TestLetterSpacingOptimizationOff100 = 45' src/ReaderAction.h
+          grep -q 'ACTION_CATEGORIES' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Teszt funkciók' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Betűköz optimalizálás növelése' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'Betűköz opt. KI/100%' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'ReaderAction::OpenHighlight' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'ReaderAction::OpenManualDictionarySearch' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'letterSpacingOptimization == 0 ? 4 : 0' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'CrossPointSettings::EXTRA_WIDE' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-133 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-133 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260915-133-EXP-Button-Actions-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
