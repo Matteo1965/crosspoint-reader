@@ -77,8 +77,53 @@ jobs:
         run: python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
       - name: Apply CPHUN-133 categorized button actions
         run: python3 tools/cphun133_button_action_categories_patch.py
+      - name: Normalize r2 lookup block for r5 patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
+          s = p.read_text()
+          old = '''  bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+          if (!found && ok && result == Dictionary::LookupResult::ReadError) {
+            vTaskDelay(1);
+            definition.clear();
+            headword.clear();
+            result = Dictionary::LookupResult::NotFound;
+            found = dict.lookup(words[selected].text, definition, headword, &result);
+          }
+          '''
+          new = '''  // CPHUN-89: selected word first. Exact context headwords are alternatives.
+          const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+          '''
+          if old not in s:
+              raise SystemExit('r2 lookup block not found for r5 normalization')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - name: Apply CPHUN-132r5 review fixes
         run: python3 tools/cphun132r5_review_fixes.py
+      - name: Restore one retry for logical-word read errors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
+          s = p.read_text()
+          old = '''  const std::string lookupWord = logicalWordText(selected);
+          const bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);
+          '''
+          new = '''  const std::string lookupWord = logicalWordText(selected);
+          bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);
+          if (!found && ok && result == Dictionary::LookupResult::ReadError) {
+            vTaskDelay(1);
+            definition.clear();
+            headword.clear();
+            result = Dictionary::LookupResult::NotFound;
+            found = dict.lookup(lookupWord.c_str(), definition, headword, &result);
+          }
+          '''
+          if old not in s:
+              raise SystemExit('r5 logical lookup block not found for retry restore')
+          p.write_text(s.replace(old, new, 1))
+          PY
       - name: Finalize CPHUN-132 cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
@@ -136,4 +181,4 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-# Trigger CPHUN-133 + 132r5: 2026-09-15
+# Trigger CPHUN-133 + 132r5 retry: 2026-09-15
