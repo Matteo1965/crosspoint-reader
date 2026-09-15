@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 def replace_once(path, old, new):
@@ -10,21 +11,23 @@ def replace_once(path, old, new):
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
-# -----------------------------------------------------------------------------
-# 1) Make the sampled dictionary sidecar dense enough for interactive misses.
-#    The old 256-entry interval made a normal miss perform up to 256 byte-wise
-#    headword reads. 32 keeps the sidecar tiny but cuts the worst scan by 8x.
-#    The interval is stored in the sidecar header, so old .qidx/.sidx files are
-#    automatically rejected as stale and rebuilt on first lookup.
-# -----------------------------------------------------------------------------
+def regex_replace_once(path, pattern, replacement):
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    text2, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    if count != 1:
+        raise SystemExit(f"CPHUN-132r7: {path}: regex expected one match, found {count}: {pattern[:180]!r}")
+    p.write_text(text2, encoding="utf-8")
+
+
+# 1) Dense sampled dictionary sidecar: 256 -> 32 entries.
 replace_once(
     "src/util/Dictionary.h",
     "  static constexpr uint32_t SAMPLE_INTERVAL = 256;",
     "  static constexpr uint32_t SAMPLE_INTERVAL = 32;",
 )
 
-# A time/probe safety stop is not an SD read failure. Treat it as a bounded miss;
-# real seek/open/sample failures still set readError on their own paths.
+# Guard expiry is a bounded miss, not an SD read error.
 replace_once(
     "src/util/Dictionary.cpp",
     '''    if (++locateProbes > SAMPLE_INTERVAL + 8 || millis() - locateStart > 1500) {
@@ -48,11 +51,7 @@ replace_once(
     }''',
 )
 
-# -----------------------------------------------------------------------------
-# 2) Remove the only unbounded byte loop in headword parsing. A valid StarDict
-#    headword fitting wordBuf exits before this path; an overlong/corrupt entry
-#    can now consume at most a fixed tail before the probe aborts.
-# -----------------------------------------------------------------------------
+# 2) Bound overlong/corrupt headword tail draining.
 replace_once(
     "src/util/Dictionary.cpp",
     '''  // Word too long for buffer — consume remaining bytes to stay in sync
@@ -76,28 +75,25 @@ replace_once(
   return -1;''',
 )
 
-# -----------------------------------------------------------------------------
-# 3) Do not immediately repeat a full lookup after ReadError. That retry doubled
-#    the exact/synonym/morphology work and could make a slow miss look frozen.
-# -----------------------------------------------------------------------------
-replace_once(
+# 3) Remove the immediate full-lookup retry after ReadError. Match whitespace
+# robustly because the workflow's compatibility heredoc may indent this block.
+retry_pattern = (
+    r'^\s*bool found = ok && dict\.lookup\(lookupWord\.c_str\(\), definition, headword, &result\);\n'
+    r'\s*if \(!found && ok && result == Dictionary::LookupResult::ReadError\) \{\n'
+    r'\s*vTaskDelay\(1\);\n'
+    r'\s*definition\.clear\(\);\n'
+    r'\s*headword\.clear\(\);\n'
+    r'\s*result = Dictionary::LookupResult::NotFound;\n'
+    r'\s*found = dict\.lookup\(lookupWord\.c_str\(\), definition, headword, &result\);\n'
+    r'\s*\}'
+)
+regex_replace_once(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
-    '''  bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);
-  if (!found && ok && result == Dictionary::LookupResult::ReadError) {
-    vTaskDelay(1);
-    definition.clear();
-    headword.clear();
-    result = Dictionary::LookupResult::NotFound;
-    found = dict.lookup(lookupWord.c_str(), definition, headword, &result);
-  }''',
-    '''  const bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);''',
+    retry_pattern,
+    '  const bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);',
 )
 
-# -----------------------------------------------------------------------------
-# 4) Hungarian productive -zzák form: alkalmazzák -> alkalmaz,
-#    finanszírozzák -> finanszíroz. Removing the final "zák" retains the lemma's
-#    first z and is safer than a one-word exception.
-# -----------------------------------------------------------------------------
+# 4) Hungarian productive -zzák form: finanszírozzák -> finanszíroz.
 needle = '''    for (const char* s : {"zzanak", "zzenek"}) {
       std::string st;
       if (strip(w, s, st)) {
@@ -114,11 +110,7 @@ replacement = needle + '''
 '''
 replace_once("src/util/Dictionary.cpp", needle, replacement)
 
-# -----------------------------------------------------------------------------
-# 5) OptionPopup titles containing an explicit newline may use two lines.
-#    FreeInkUI already wraps title text and optionDialogHeight measures maxLines;
-#    OptionPopup forced the default maxLines=1, which caused the r6 truncation.
-# -----------------------------------------------------------------------------
+# 5) Allow explicit two-line OptionPopup titles.
 replace_once(
     "src/components/OptionPopup.h",
     '''    props.titleText.font = fui::GfxRendererTarget::FONT_BODY;
