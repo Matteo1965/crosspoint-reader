@@ -60,11 +60,10 @@ replace_once(
     "  static void setHungarianExtended(bool enabled);",
     "  static void setHungarianExtended(bool enabled);\n  static void setHungarianMinima(size_t minPrefix, size_t minSuffix);",
 )
-# Append beside the existing setter implementation, wherever its exact one-line body occurs.
 replace_once(
     "lib/Epub/Epub/hyphenation/Hyphenator.cpp",
-    "void Hyphenator::setHungarianExtended(bool enabled) { hungarianExtended_ = enabled; }",
-    "void Hyphenator::setHungarianExtended(bool enabled) { hungarianExtended_ = enabled; }\n\nvoid Hyphenator::setHungarianMinima(const size_t minPrefix, const size_t minSuffix) {\n  setHungarianHyphenationMinima(minPrefix, minSuffix);\n}",
+    "void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }",
+    "void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }\n\nvoid Hyphenator::setHungarianMinima(const size_t minPrefix, const size_t minSuffix) {\n  setHungarianHyphenationMinima(minPrefix, minSuffix);\n}",
 )
 
 # Cache format + application at section-build start.
