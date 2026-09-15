@@ -81,23 +81,25 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
           s = p.read_text()
-          old = '''  bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
-          if (!found && ok && result == Dictionary::LookupResult::ReadError) {
-            vTaskDelay(1);
-            definition.clear();
-            headword.clear();
-            result = Dictionary::LookupResult::NotFound;
-            found = dict.lookup(words[selected].text, definition, headword, &result);
-          }
-          '''
-          new = '''  // CPHUN-89: selected word first. Exact context headwords are alternatives.
-          const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
-          '''
-          if old not in s:
-              raise SystemExit('r2 lookup block not found for r5 normalization')
-          p.write_text(s.replace(old, new, 1))
+          pattern = re.compile(
+              r'  bool found = ok && dict\.lookup\(words\[selected\]\.text, definition, headword, &result\);\n'
+              r'  if \(!found && ok && result == Dictionary::LookupResult::ReadError\) \{\n'
+              r'    vTaskDelay\(1\);\n'
+              r'    definition\.clear\(\);\n'
+              r'    headword\.clear\(\);\n'
+              r'    result = Dictionary::LookupResult::NotFound;\n'
+              r'    found = dict\.lookup\(words\[selected\]\.text, definition, headword, &result\);\n'
+              r'  \}\n'
+          )
+          new = ('  // CPHUN-89: selected word first. Exact context headwords are alternatives.\n'
+                 '  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);\n')
+          s2, n = pattern.subn(new, s, count=1)
+          if n != 1:
+              raise SystemExit(f'r2 lookup block not found for r5 normalization: {n}')
+          p.write_text(s2)
           PY
       - name: Apply CPHUN-132r5 review fixes
         run: python3 tools/cphun132r5_review_fixes.py
@@ -181,4 +183,4 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-# Trigger CPHUN-133 + 132r5 retry: 2026-09-15
+# Trigger CPHUN-133 + 132r5 retry-2: 2026-09-15
