@@ -35,7 +35,7 @@ replace_once(
       break;
     }''',
     '''    if (++locateProbes > SAMPLE_INTERVAL + 8 || millis() - locateStart > 1500) {
-      LOG_WRN("DICT", "Index lookup guard reached for %s", target);
+      LOG_ERR("DICT", "Index lookup guard reached for %s", target);
       break;
     }''',
 )
@@ -46,7 +46,7 @@ replace_once(
       break;
     }''',
     '''    if (++synonymProbes > SAMPLE_INTERVAL + 8 || millis() - synonymStart > 1500) {
-      LOG_WRN("DICT", "Synonym lookup guard reached for %s", target);
+      LOG_ERR("DICT", "Synonym lookup guard reached for %s", target);
       break;
     }''',
 )
