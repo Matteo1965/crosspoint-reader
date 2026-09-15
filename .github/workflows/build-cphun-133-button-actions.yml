@@ -1,4 +1,4 @@
-name: Build CPHUN-133 Button Action Categories
+name: Build CPHUN-133 Button Action Categories + 132r5 Fixes
 
 on:
   workflow_dispatch:
@@ -73,10 +73,12 @@ jobs:
         run: python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
       - name: Apply CPHUN-133 categorized button actions
         run: python3 tools/cphun133_button_action_categories_patch.py
+      - name: Apply CPHUN-132r5 review fixes
+        run: python3 tools/cphun132r5_review_fixes.py
       - name: Finalize CPHUN-132 cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
-      - name: Verify CPHUN-133 scope
+      - name: Verify CPHUN-133 + 132r5 scope
         run: |
           git diff --check
           grep -q 'LetterSpacingCorrectionUp = 34' src/ReaderAction.h
@@ -90,6 +92,13 @@ jobs:
           grep -q 'ReaderAction::OpenManualDictionarySearch' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'letterSpacingOptimization == 0 ? 4 : 0' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'CrossPointSettings::EXTRA_WIDE' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'Megjelölt szavak listájának mentése?' src/activities/reader/EpubReaderBookmarksActivity.cpp
+          grep -q 'Törléshez tartsd nyomva: Kijelölés' src/activities/reader/EpubReaderBookmarksActivity.cpp
+          grep -q 'syntheticHyphenPair' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'logicalWordText' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'session.sampleCount == 0' src/util/Dictionary.cpp
+          grep -q 'MAX_FALLBACK_PROBES = 16' src/util/Dictionary.cpp
+          grep -q 'MAX_FALLBACK_MS = 1500' src/util/Dictionary.cpp
           grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
 
       - name: Unit tests
@@ -118,7 +127,7 @@ jobs:
       - name: Upload CPHUN-133 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260915-133-EXP-Button-Actions-FW
+          name: CPHUN-260915-133-EXP-Buttons-132r5-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
