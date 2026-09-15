@@ -44,7 +44,6 @@ insert_before(
     "  uint32_t wordVisibleTextOffset(const uint16_t i) const { return visibleOffsetArr[i]; }\n",
 )
 
-# TextBlock arena: prepend one naturally aligned uint32_t offset per word.
 replace_once(
     "lib/Epub/Epub/blocks/TextBlock.cpp",
     '''  size_t size =
@@ -95,7 +94,6 @@ insert_before(
     "    visibleOffsets[i] = wordVisibleOffsets[i];\n",
 )
 
-# ParsedText already owns exact per-token visible offsets; carry them into each rendered line.
 insert_after(
     "lib/Epub/Epub/ParsedText.cpp",
     '''  std::vector<EpdFontFamily::Style> lineWordStyles;
@@ -145,7 +143,6 @@ replace_once(
                                            outBoundaries, outSuffixX, blockStyle, std::move(lineRubyTexts));''',
 )
 
-# The TextBlock serialized arena changed; reject and rebuild old section caches.
 replace_once(
     "lib/Epub/Epub/Section.cpp",
     "constexpr uint8_t SECTION_FILE_VERSION = 56;",
@@ -288,9 +285,6 @@ bool HighlightStore::add(const HighlightAnchor& anchor) {
 }
 ''', encoding="utf-8")
 
-# -----------------------------------------------------------------------------
-# Two-action prompt for missing dictionary / no result
-# -----------------------------------------------------------------------------
 Path("src/activities/reader/DictionaryHighlightPromptActivity.h").write_text(r'''#pragma once
 
 #include <string>
@@ -350,9 +344,6 @@ void DictionaryHighlightPromptActivity::render(RenderLock&&) {
 }
 ''', encoding="utf-8")
 
-# -----------------------------------------------------------------------------
-# Dictionary definition: Vissza + Kiemelés
-# -----------------------------------------------------------------------------
 replace_once(
     "src/activities/reader/DictionaryDefinitionActivity.h",
     "#include <memory>\n",
@@ -407,9 +398,6 @@ replace_once(
       (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));''',
 )
 
-# -----------------------------------------------------------------------------
-# Reuse DictionaryWordSelectActivity for direct Highlight mode
-# -----------------------------------------------------------------------------
 insert_after(
     "src/activities/reader/DictionaryWordSelectActivity.h",
     '#include "activities/Activity.h"\n',
@@ -465,7 +453,6 @@ uint16_t visibleCodepointLength(const char* text) {
 }
 ''',
 )
-# Utf8 helper for codepoint length.
 insert_after(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
     "#include <Memory.h>\n",
@@ -520,7 +507,6 @@ insert_after(
   }
 ''',
 )
-# Dictionary result gets the original selected word anchor and propagates Kiemelés back to reader.
 replace_once(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
     '''          std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
@@ -559,7 +545,6 @@ replace_once(
                 requestUpdate();
               });''',
 )
-# Genuine dictionary miss now offers Vissza / Kiemelés instead of a timed popup.
 replace_once(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
     '''      case Dictionary::LookupResult::NotFound:
@@ -617,9 +602,6 @@ replace_once(
       tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));''',
 )
 
-# -----------------------------------------------------------------------------
-# Persistent underline renderer
-# -----------------------------------------------------------------------------
 Path("src/highlights/HighlightRenderer.h").write_text(r'''#pragma once
 
 class GfxRenderer;
@@ -664,9 +646,6 @@ void HighlightRenderer::render(GfxRenderer& renderer, const Page& page, const in
 }
 ''', encoding="utf-8")
 
-# -----------------------------------------------------------------------------
-# Reader menu + reader integration
-# -----------------------------------------------------------------------------
 replace_once(
     "src/activities/reader/EpubReaderMenuActivity.h",
     '''    DELETE_CACHE,
@@ -729,10 +708,17 @@ replace_once(
     '''  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                         orientedMarginLeft, orientedMarginTop),
                          [this](const ActivityResult&) { requestUpdate(); });''',
-    '''  startActivityForResult(
+    '''  const std::string highlightBookPath = epub->getPath();
+  // CPHUN-132r1: the dictionary index/lookup path is memory-sensitive. The
+  // highlight list is persisted already, so release its heap while the word
+  // selector/dictionary owns the foreground, then reload it on return.
+  highlightStore.reset();
+  startActivityForResult(
       std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
                                                      orientedMarginTop, currentSpineIndex, mode),
-      [this](const ActivityResult& result) {
+      [this, highlightBookPath](const ActivityResult& result) {
+        highlightStore = std::make_unique<HighlightStore>(highlightBookPath);
+        highlightStore->load();
         if (!result.isCancelled) {
           if (const auto* selected = std::get_if<HighlightResult>(&result.data)) {
             if (highlightStore) {
@@ -756,7 +742,6 @@ insert_after(
     }
 ''',
 )
-# Draw stored word highlights after the normal B/W text render and before display.
 insert_after(
     "src/activities/reader/EpubReaderActivity.cpp",
     '''  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
@@ -770,7 +755,6 @@ insert_after(
 ''',
 )
 
-# CPHUN-132 build identity (CPHUN-131 patch has already run before this script).
 replace_once(
     "src/CPHUNBuildId.h",
     '#define CPHUN_BUILD_ID "CPHUN-260915-131-EXP"',
