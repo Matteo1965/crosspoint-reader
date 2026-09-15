@@ -64,14 +64,19 @@ jobs:
         run: python3 tools/cphun130_notoserif16_spacing_optimization_patch.py
       - name: Apply CPHUN-131 hyphenation threshold
         run: python3 tools/cphun131_hyphenation_threshold_patch.py
+
+      - name: Prepare CPHUN-132 cache-version transition
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 56/' lib/Epub/Epub/Section.cpp
       - name: Apply CPHUN-132 word highlights
         run: python3 tools/cphun132_word_highlights_patch.py
+      - name: Finalize CPHUN-132 cache version
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
       - name: Verify CPHUN-132 scope
         run: |
           git diff --check
           grep -q 'CPHUN-260915-132-EXP' src/CPHUNBuildId.h
-          grep -q 'SECTION_FILE_VERSION = 57' lib/Epub/Epub/Section.cpp
+          grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
           grep -q 'wordVisibleTextOffset' lib/Epub/Epub/blocks/TextBlock.h
           grep -q 'MenuAction::HIGHLIGHT' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -q '"Kiemelés"' src/activities/reader/EpubReaderMenuActivity.cpp
@@ -112,4 +117,4 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-# CPHUN-132 build trigger: 2026-09-15
+# CPHUN-132 build trigger: 2026-09-15 r2
