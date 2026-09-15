@@ -84,6 +84,7 @@ jobs:
           grep -q 'Nincs szótár beállítva.' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -q 'A kijelölt szó kiemelhető.' src/activities/reader/DictionaryHighlightPromptActivity.cpp
           grep -q 'HighlightRenderer::render' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'highlightStore.reset' src/activities/reader/EpubReaderActivity.cpp
           grep -q 'visibleTextOffset' src/highlights/HighlightStore.cpp
 
       - name: Unit tests
@@ -112,9 +113,9 @@ jobs:
       - name: Upload CPHUN-132 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260915-132-EXP-Word-Highlights-FW
+          name: CPHUN-260915-132r1-EXP-Word-Highlights-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
 
-# CPHUN-132 build trigger: 2026-09-15 r2
+# CPHUN-132 build trigger: 2026-09-15 r3 dictionary lookup fix
