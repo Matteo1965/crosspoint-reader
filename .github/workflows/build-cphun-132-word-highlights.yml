@@ -1,8 +1,8 @@
-name: Build CPHUN-132r2 Highlight Visibility
+name: Build CPHUN-132r3 Toggle + NotFound
 
 on:
   push:
-    branches: [agent/cphun-132r2-highlight-visibility]
+    branches: [agent/cphun-132r3-toggle-notfound]
     paths:
       - '.github/workflows/build-cphun-132-word-highlights.yml'
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/cphun-132r2-highlight-visibility
+          ref: agent/cphun-132r3-toggle-notfound
           submodules: recursive
           fetch-depth: 0
 
@@ -71,20 +71,21 @@ jobs:
         run: python3 tools/cphun132_word_highlights_patch.py
       - name: Apply CPHUN-132r2 highlight visibility + lookup reliability
         run: python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
+      - name: Apply CPHUN-132r3 toggle + bounded not-found lookup
+        run: python3 tools/cphun132r3_toggle_notfound_fix.py
       - name: Finalize CPHUN-132 cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
-      - name: Verify CPHUN-132r2 scope
+      - name: Verify CPHUN-132r3 scope
         run: |
           git diff --check
-          grep -q 'CPHUN-260915-132-EXP' src/CPHUNBuildId.h
           grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
+          grep -q 'bool toggle(const HighlightAnchor& anchor)' src/highlights/HighlightStore.h
+          grep -q 'HighlightStore::toggle' src/highlights/HighlightStore.cpp
+          grep -q 'highlightStore->toggle' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'MAX_FALLBACK_PROBES = 48' src/util/Dictionary.cpp
+          grep -q 'MAX_FALLBACK_MS = 4000' src/util/Dictionary.cpp
           grep -q 'drawStoredHighlights' src/activities/reader/DictionaryWordSelectActivity.cpp
-          grep -q 'highlightedOffsets' src/activities/reader/DictionaryWordSelectActivity.h
-          grep -q 'result == Dictionary::LookupResult::ReadError' src/activities/reader/DictionaryWordSelectActivity.cpp
-          grep -q 'result.readError = true' src/util/Dictionary.cpp
-          grep -q 'highlightStore.reset' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'std::move(highlightedOffsets)' src/activities/reader/EpubReaderActivity.cpp
 
       - name: Unit tests
         run: |
@@ -103,18 +104,18 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-132r2 firmware
+      - name: Build CPHUN-132r3 firmware
         run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
-      - name: Upload CPHUN-132r2 firmware
+      - name: Upload CPHUN-132r3 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260915-132r2-EXP-Highlight-Visibility-FW
+          name: CPHUN-260915-132r3-EXP-Toggle-NotFound-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
 
-# CPHUN-132r2 build trigger: 2026-09-15
+# CPHUN-132r3 build trigger: 2026-09-15
