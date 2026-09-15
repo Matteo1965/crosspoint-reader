@@ -1,8 +1,8 @@
-name: Build CPHUN-132 Word Highlights
+name: Build CPHUN-132r2 Highlight Visibility
 
 on:
   push:
-    branches: [agent/cphun-132-highlights]
+    branches: [agent/cphun-132r2-highlight-visibility]
     paths:
       - '.github/workflows/build-cphun-132-word-highlights.yml'
   workflow_dispatch:
@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: agent/cphun-132-highlights
+          ref: agent/cphun-132r2-highlight-visibility
           submodules: recursive
           fetch-depth: 0
 
@@ -69,23 +69,22 @@ jobs:
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 56/' lib/Epub/Epub/Section.cpp
       - name: Apply CPHUN-132 word highlights
         run: python3 tools/cphun132_word_highlights_patch.py
+      - name: Apply CPHUN-132r2 highlight visibility + lookup reliability
+        run: python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
       - name: Finalize CPHUN-132 cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
 
-      - name: Verify CPHUN-132 scope
+      - name: Verify CPHUN-132r2 scope
         run: |
           git diff --check
           grep -q 'CPHUN-260915-132-EXP' src/CPHUNBuildId.h
           grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
-          grep -q 'wordVisibleTextOffset' lib/Epub/Epub/blocks/TextBlock.h
-          grep -q 'MenuAction::HIGHLIGHT' src/activities/reader/EpubReaderMenuActivity.cpp
-          grep -q '"Kiemelés"' src/activities/reader/EpubReaderMenuActivity.cpp
-          grep -q 'Nincs találat a szótárban.' src/activities/reader/DictionaryWordSelectActivity.cpp
-          grep -q 'Nincs szótár beállítva.' src/activities/reader/DictionaryWordSelectActivity.cpp
-          grep -q 'A kijelölt szó kiemelhető.' src/activities/reader/DictionaryHighlightPromptActivity.cpp
-          grep -q 'HighlightRenderer::render' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'drawStoredHighlights' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'highlightedOffsets' src/activities/reader/DictionaryWordSelectActivity.h
+          grep -q 'result == Dictionary::LookupResult::ReadError' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -q 'result.readError = true' src/util/Dictionary.cpp
           grep -q 'highlightStore.reset' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'visibleTextOffset' src/highlights/HighlightStore.cpp
+          grep -q 'std::move(highlightedOffsets)' src/activities/reader/EpubReaderActivity.cpp
 
       - name: Unit tests
         run: |
@@ -104,18 +103,18 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-132 firmware
+      - name: Build CPHUN-132r2 firmware
         run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
-      - name: Upload CPHUN-132 firmware
+      - name: Upload CPHUN-132r2 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260915-132r1-EXP-Word-Highlights-FW
+          name: CPHUN-260915-132r2-EXP-Highlight-Visibility-FW
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
 
-# CPHUN-132 build trigger: 2026-09-15 r3 dictionary lookup fix
+# CPHUN-132r2 build trigger: 2026-09-15
