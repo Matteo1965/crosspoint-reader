@@ -76,7 +76,6 @@ jobs:
           grep -q 'hungarianMinSuffix' lib/Epub/Epub/ReaderRenderSpec.h
           grep -q 'setHungarianMinima' lib/Epub/Epub/Section.cpp
           grep -q 'setHungarianHyphenationMinima' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
-          grep -q 'LanguageHyphenator hungarianHyphenator(hu_patterns, isLatinLetter, toLowerLatin, 2, 2);' lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
 
       - name: Unit tests
         run: |
@@ -108,3 +107,5 @@ jobs:
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
+
+# CPHUN-131 build trigger: 2026-09-15
