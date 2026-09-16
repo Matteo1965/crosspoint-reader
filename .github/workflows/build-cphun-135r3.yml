@@ -133,7 +133,8 @@ jobs:
           grep -F 'showMultilineTitle("Megjelölt szavak listájának mentése?"' src/activities/reader/EpubReaderBookmarksActivity.cpp
           grep -F 'props.headlineText.maxLines = 3;' src/components/OptionPopup.h
           grep -F 'renderedPrefixLength - sourcePrefixLength <= 2' src/activities/reader/DictionaryWordSelectActivity.cpp
-          grep -F 'syntheticCodepoints = std::min<uint32_t>(syntheticCodepoints, 2);' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -F 'const auto trimSyntheticReplacement' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -F 'trimSyntheticReplacement(prefix, previousBoundaryOffset, currentOffset)' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -F 'FORWARD_DELETE_KEY = -100' src/activities/util/HungarianKeyboardLayout.h
           grep -F 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
 
