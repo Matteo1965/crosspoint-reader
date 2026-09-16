@@ -22,7 +22,8 @@ replace_once(
 
 # -----------------------------------------------------------------------------
 # 2) Bookmarks export confirmation: render the long question as a wrapped
-#    headline. OptionDialog's normal title slot is intentionally single-line.
+#    headline. OptionDialog's normal title slot reserves only one line even
+#    when titleText.maxLines is larger, while headline is measured/wrapped.
 # -----------------------------------------------------------------------------
 replace_once(
     "src/components/OptionPopup.h",
@@ -68,7 +69,6 @@ replace_once(
     ownedStrings = options;''',
 )
 
-# The StrId + StrId-array overload also resets the mode.
 replace_once(
     "src/components/OptionPopup.h",
     '''    title = I18N.get(titleId);
@@ -94,10 +94,12 @@ replace_once(
     '''    props.titleText.font = fui::GfxRendererTarget::FONT_BODY;
     props.titleText.bold = true;
     props.titleText.align = fui::TextAlign::Center;
+    props.titleText.maxLines = title.find('\\n') != std::string::npos ? 2 : 1;
     props.buttonText.font = fui::GfxRendererTarget::FONT_BODY;''',
     '''    props.titleText.font = fui::GfxRendererTarget::FONT_BODY;
     props.titleText.bold = true;
     props.titleText.align = fui::TextAlign::Center;
+    props.titleText.maxLines = title.find('\\n') != std::string::npos ? 2 : 1;
     props.headlineText.font = fui::GfxRendererTarget::FONT_BODY;
     props.headlineText.bold = true;
     props.headlineText.align = fui::TextAlign::Center;
@@ -116,8 +118,8 @@ replace_once(
 
 replace_once(
     "src/activities/reader/EpubReaderBookmarksActivity.cpp",
-    '''  confirmPopup.show("Megjelölt szavak listájának mentése?", options, 3, 2, [this](int idx) {''',
-    '''  confirmPopup.showMultilineTitle("Megjelölt szavak listájának mentése?", options, 3, 2, [this](int idx) {''',
+    '''  confirmPopup.show("Megjelölt szavak\\nlistájának mentése?", options, 3, 1, [this](int idx) {''',
+    '''  confirmPopup.showMultilineTitle("Megjelölt szavak listájának mentése?", options, 3, 1, [this](int idx) {''',
 )
 
 
@@ -189,7 +191,6 @@ replace_once(
   return text;''',
 )
 
-# Build ID for this combined test revision.
 replace_once(
     "src/CPHUNBuildId.h",
     '#define CPHUN_BUILD_ID "CPHUN-260916-135-EXP-r2"',
