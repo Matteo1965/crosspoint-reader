@@ -78,12 +78,32 @@ replace_once(
     "  }\n",
 )
 
+# CPHUN-134r2: the prompt activity is a child activity created after the lookup
+# finishes. It must explicitly request its first repaint on entry; otherwise it
+# is active but invisible, so Confirm toggles the highlight and Back cancels it
+# without the user ever seeing the NotFound/Highlight prompt.
+replace_once(
+    "src/activities/reader/DictionaryHighlightPromptActivity.h",
+    "  void loop() override;\n  void render(RenderLock&&) override;\n",
+    "  void onEnter() override;\n  void loop() override;\n  void render(RenderLock&&) override;\n",
+)
+
+replace_once(
+    "src/activities/reader/DictionaryHighlightPromptActivity.cpp",
+    "void DictionaryHighlightPromptActivity::loop() {\n",
+    "void DictionaryHighlightPromptActivity::onEnter() {\n"
+    "  Activity::onEnter();\n"
+    "  requestUpdate();\n"
+    "}\n\n"
+    "void DictionaryHighlightPromptActivity::loop() {\n",
+)
+
 # Give the diagnostic firmware its own visible build identity.
 p = Path("src/CPHUNBuildId.h")
 s = p.read_text(encoding="utf-8")
-s2, n = re.subn(r'#define CPHUN_BUILD_ID "[^"]+"', '#define CPHUN_BUILD_ID "CPHUN-260916-134-EXP"', s, count=1)
+s2, n = re.subn(r'#define CPHUN_BUILD_ID "[^"]+"', '#define CPHUN_BUILD_ID "CPHUN-260916-134-EXP-r2"', s, count=1)
 if n != 1:
     raise SystemExit(f"CPHUN-134: build id replacement failed: {n}")
 p.write_text(s2, encoding="utf-8")
 
-print("CPHUN-134 deferred NotFound/highlight prompt fix applied")
+print("CPHUN-134 deferred NotFound/highlight prompt + initial render fix applied")
