@@ -1,0 +1,174 @@
+name: Build CPHUN-135 Word Edit Markers
+
+on:
+  push:
+    branches:
+      - agent/cphun-135-word-edit-markers
+    paths:
+      - '.github/workflows/build-cphun-135.yml'
+      - 'tools/cphun135_word_edit_markers_patch.py'
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135-word-edit-markers
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 through 131 patches
+        run: |
+          python3 tools/cphun110_cover_dither_clean_patch.py
+          python3 tools/cphun111_cover_4gray_floyd_patch.py
+          python3 tools/cphun112_cover_grayscale_pass_patch.py
+          python3 tools/cphun113_letter_spacing_scale_patch.py
+          python3 tools/cphun114_letter_spacing_scale_patch.py
+          python3 tools/cphun116_letter_spacing_scale_patch.py
+          python3 tools/cphun117_non_linear_scale_patch.py 2>/dev/null || python3 tools/cphun117_letter_spacing_scale_patch.py
+          python3 tools/cphun118_fixedpoint_optimization_patch.py
+          python3 tools/cphun119_fixedpoint_pair_tuning_patch.py
+          python3 tools/cphun120_fixedpoint_intensity_patch.py
+          python3 tools/cphun121_native_pair_advance_patch.py
+          python3 tools/cphun123_ink_edge_right_margin_patch.py
+          python3 tools/cphun124_dark_ink_edge_patch.py
+          python3 tools/cphun125_roundedraff_text_settings_layout_patch.py
+          python3 tools/cphun126_new_dogear_patch.py
+          python3 tools/cphun127_roundedraff_list_fit_patch.py
+          python3 tools/cphun128_letter_spacing_profiles_patch.py
+          python3 tools/cphun129_dictionary_bookinfo_ui_patch.py
+          python3 tools/cphun130_notoserif16_spacing_optimization_patch.py
+          python3 tools/cphun131_hyphenation_threshold_patch.py
+
+      - name: Apply CPHUN-132 through r4 and CPHUN-133
+        run: |
+          sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 56/' lib/Epub/Epub/Section.cpp
+          python3 tools/cphun132_word_highlights_patch.py
+          python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
+          python3 tools/cphun132r3_toggle_notfound_fix.py
+          python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
+          python3 tools/cphun133_button_action_categories_patch.py
+
+      - name: Normalize r2 lookup block for r5 patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
+          s = p.read_text()
+          pattern = re.compile(
+              r'  bool found = ok && dict\.lookup\(words\[selected\]\.text, definition, headword, &result\);\n'
+              r'  if \(!found && ok && result == Dictionary::LookupResult::ReadError\) \{\n'
+              r'    vTaskDelay\(1\);\n'
+              r'    definition\.clear\(\);\n'
+              r'    headword\.clear\(\);\n'
+              r'    result = Dictionary::LookupResult::NotFound;\n'
+              r'    found = dict\.lookup\(words\[selected\]\.text, definition, headword, &result\);\n'
+              r'  \}\n'
+          )
+          replacement = ('  // CPHUN-89: selected word first. Exact context headwords are alternatives.\n'
+                         '  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);\n')
+          s2, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit(f'r2 lookup block not found for r5 normalization: {n}')
+          p.write_text(s2)
+          PY
+
+      - name: Apply CPHUN-132r5 review fixes
+        run: python3 tools/cphun132r5_review_fixes.py
+
+      - name: Restore one retry for r5 compatibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          p = Path('src/activities/reader/DictionaryWordSelectActivity.cpp')
+          s = p.read_text()
+          pattern = re.compile(r'(?m)^\s*const bool found = ok && dict\.lookup\(lookupWord\.c_str\(\), definition, headword, &result\);$')
+          replacement = '''  bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);
+          if (!found && ok && result == Dictionary::LookupResult::ReadError) {
+            vTaskDelay(1);
+            definition.clear();
+            headword.clear();
+            result = Dictionary::LookupResult::NotFound;
+            found = dict.lookup(lookupWord.c_str(), definition, headword, &result);
+          }'''
+          s2, n = pattern.subn(replacement, s, count=1)
+          if n != 1:
+              raise SystemExit(f'r5 logical lookup line not found for retry restore: {n}')
+          p.write_text(s2)
+          PY
+
+      - name: Apply CPHUN-132r6 dictionary guard + prompt UI
+        run: python3 tools/cphun132r6_dictionary_guard_ui_fix.py
+
+      - name: Apply CPHUN-132r7 dense index + bounded lookup + popup fix
+        run: python3 tools/cphun132r7_dictionary_index32_lookup_fix.py
+
+      - name: Apply CPHUN-132r8 page-boundary dictionary fix
+        run: python3 tools/cphun132r8_page_boundary_dictionary_fix.py
+
+      - name: Apply CPHUN-132r9 whole-chain lookup deadline
+        run: python3 tools/cphun132r9_lookup_hard_deadline_fix.py
+
+      - name: Apply CPHUN-134 deferred NotFound prompt fix
+        run: python3 tools/cphun134_deferred_notfound_prompt_fix.py
+
+      - name: Repair and apply CPHUN-135 word edit marker patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/cphun135_word_edit_markers_patch.py')
+          s = p.read_text(encoding='utf-8')
+          bad = 's = p.read_text(encoding="utf-8")n = 0'
+          good = 's = p.read_text(encoding="utf-8")\nn = 0'
+          if bad not in s:
+              raise SystemExit('CPHUN-135 patch repair marker not found')
+          p.write_text(s.replace(bad, good, 1), encoding='utf-8')
+          PY
+          python3 -m py_compile tools/cphun135_word_edit_markers_patch.py
+          python3 tools/cphun135_word_edit_markers_patch.py
+
+      - name: Finalize CPHUN-132 cache version
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
+
+      - name: Verify CPHUN-135 source changes
+        run: |
+          git diff --check
+          grep -F 'CPHUN-260916-135-EXP' src/CPHUNBuildId.h
+          grep -F 'Edit = 2' src/highlights/HighlightMode.h
+          grep -F 'fillRectDither(x, y, width, lineHeight, Color::LightGray)' src/highlights/TextEditRenderer.cpp
+          grep -F 'std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Szerkesztés", initialText' src/activities/reader/EpubReaderActivity.cpp
+          grep -F 'pendingEditSelection = *selected' src/activities/reader/EpubReaderActivity.cpp
+          grep -F 'MenuAction::EDIT' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -F 'textEditStore->upsert' src/activities/reader/EpubReaderActivity.cpp
+          grep -F 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-135 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-135 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260916-135-EXP-firmware
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
