@@ -126,12 +126,12 @@ replace_once(
 # -----------------------------------------------------------------------------
 # 3) Extended Hungarian hyphenation selection.
 #
-# A source long digraph/trigraph is rendered with replacement letters at the
-# line end, e.g. source "összerakom" -> "ösz-" / "szerakom". The remainder's
-# visible-source offset therefore advances by only 2 codepoints ("ös"), while
-# the rendered prefix without the hyphen is 3 codepoints ("ösz"). Use that
-# source-offset delta to recognise and remove only the synthetic replacement
-# codepoints when reconstructing the logical lookup/highlight word.
+# Source long digraphs/trigraphs may render with one or two replacement letters
+# at line end, e.g. source "összerakom" -> rendered "ösz-" / "szerakom".
+# visibleTextOffset remains source-based, so the offset delta tells us how many
+# rendered replacement codepoints must be removed. The visible hyphen glyph
+# itself (U+002D or U+2011) is stripped before this comparison and therefore
+# cannot affect the result.
 # -----------------------------------------------------------------------------
 replace_once(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
@@ -148,47 +148,108 @@ replace_once(
   if (bOffset < aOffset) return false;
   const uint32_t renderedPrefixLength = visibleCodepointLength(prefix.c_str());
   const uint32_t sourcePrefixLength = bOffset - aOffset;
-  // Ordinary synthetic hyphenation has equal rendered/source prefix lengths.
-  // Hungarian extended hyphenation may append one replacement codepoint
-  // (ccs/ggy/lly/nny/ssz/tty/zzs/ddz) or two (ddzs) to the rendered prefix.
-  // A real source hyphen instead makes sourcePrefixLength larger and is rejected.
+  // Ordinary synthetic hyphenation: rendered == source.
+  // Extended Hungarian split: rendered has 1 replacement codepoint, or 2 for ddzs.
+  // A real source hyphen makes the source length larger and is therefore rejected.
   return sourcePrefixLength <= renderedPrefixLength && renderedPrefixLength - sourcePrefixLength <= 2;''',
 )
 
 replace_once(
     "src/activities/reader/DictionaryWordSelectActivity.cpp",
-    '''  std::string text = words[first].text ? words[first].text : "";
-  if (!text.empty() && text.back() == '-') text.pop_back();
-  else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "\\xE2\\x80\\x91") == 0) text.resize(text.size() - 3);
-  if (words[second].text) text += words[second].text;
-  return text;''',
-    '''  std::string text = words[first].text ? words[first].text : "";
-  if (!text.empty() && text.back() == '-') text.pop_back();
-  else if (text.size() >= 3 && text.compare(text.size() - 3, 3, "\\xE2\\x80\\x91") == 0) text.resize(text.size() - 3);
+    r'''std::string DictionaryWordSelectActivity::logicalWordText(const int index) const {
+  if (words.empty() || index < 0 || index >= static_cast<int>(words.size())) return {};
+  const int first = logicalWordFirst(index);
+  const int second = logicalWordSecond(first);
+  if (first != second) {
+    std::string text = words[first].text ? words[first].text : "";
+    stripSyntheticLineEndHyphen(text);
+    if (words[second].text) text += words[second].text;
+    return text;
+  }
 
-  // Remove only replacement codepoints that exist in the rendered line-end
-  // prefix but not in the EPUB's visible source offsets. This restores the
-  // original spelling: "ösz-" + "szerakom" -> "összerakom".
-  const WordBox& a = words[first];
-  const WordBox& b = words[second];
-  if (a.block && b.block) {
-    const uint32_t aOffset = a.block->wordVisibleTextOffset(a.tokenIndex);
-    const uint32_t bOffset = b.block->wordVisibleTextOffset(b.tokenIndex);
-    if (bOffset >= aOffset) {
-      const uint32_t renderedPrefixLength = visibleCodepointLength(text.c_str());
-      const uint32_t sourcePrefixLength = bOffset - aOffset;
-      uint32_t syntheticCodepoints =
-          renderedPrefixLength > sourcePrefixLength ? renderedPrefixLength - sourcePrefixLength : 0;
-      syntheticCodepoints = std::min<uint32_t>(syntheticCodepoints, 2);
-      while (syntheticCodepoints-- > 0 && !text.empty()) {
-        size_t cut = text.size() - 1;
-        while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;
-        text.resize(cut);
-      }
+  const WordBox& current = words[index];
+  const uint32_t currentOffset = current.block ? current.block->wordVisibleTextOffset(current.tokenIndex) : 0;
+
+  // Current page begins with the second half of a synthetic page-boundary split.
+  if (index == 0 && !previousBoundaryText.empty()) {
+    std::string prefix = previousBoundaryText;
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        currentOffset == previousBoundaryOffset + visibleCodepointLength(prefix.c_str())) {
+      if (current.text) prefix += current.text;
+      return prefix;
     }
   }
-  if (words[second].text) text += words[second].text;
-  return text;''',
+
+  // Current page ends with the first half of a synthetic page-boundary split.
+  if (index == static_cast<int>(words.size()) - 1 && !nextBoundaryText.empty()) {
+    std::string prefix = current.text ? current.text : "";
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        nextBoundaryOffset == currentOffset + visibleCodepointLength(prefix.c_str())) {
+      prefix += nextBoundaryText;
+      return prefix;
+    }
+  }
+
+  return current.text ? current.text : "";
+}''',
+    r'''std::string DictionaryWordSelectActivity::logicalWordText(const int index) const {
+  if (words.empty() || index < 0 || index >= static_cast<int>(words.size())) return {};
+
+  const auto trimSyntheticReplacement = [](std::string& prefix, const uint32_t prefixOffset,
+                                           const uint32_t secondOffset) {
+    if (secondOffset < prefixOffset) return false;
+    const uint32_t renderedLength = visibleCodepointLength(prefix.c_str());
+    const uint32_t sourceLength = secondOffset - prefixOffset;
+    if (sourceLength > renderedLength || renderedLength - sourceLength > 2) return false;
+    uint32_t syntheticCodepoints = renderedLength - sourceLength;
+    while (syntheticCodepoints-- > 0 && !prefix.empty()) {
+      size_t cut = prefix.size() - 1;
+      while (cut > 0 && (static_cast<unsigned char>(prefix[cut]) & 0xC0) == 0x80) --cut;
+      prefix.resize(cut);
+    }
+    return true;
+  };
+
+  const int first = logicalWordFirst(index);
+  const int second = logicalWordSecond(first);
+  if (first != second) {
+    std::string text = words[first].text ? words[first].text : "";
+    if (!stripSyntheticLineEndHyphen(text)) return words[index].text ? words[index].text : "";
+    const WordBox& a = words[first];
+    const WordBox& b = words[second];
+    const uint32_t aOffset = a.block ? a.block->wordVisibleTextOffset(a.tokenIndex) : 0;
+    const uint32_t bOffset = b.block ? b.block->wordVisibleTextOffset(b.tokenIndex) : 0;
+    if (!a.block || !b.block || !trimSyntheticReplacement(text, aOffset, bOffset))
+      return words[index].text ? words[index].text : "";
+    if (words[second].text) text += words[second].text;
+    return text;
+  }
+
+  const WordBox& current = words[index];
+  const uint32_t currentOffset = current.block ? current.block->wordVisibleTextOffset(current.tokenIndex) : 0;
+
+  // Current page begins with the second half of a synthetic page-boundary split.
+  if (index == 0 && !previousBoundaryText.empty()) {
+    std::string prefix = previousBoundaryText;
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        trimSyntheticReplacement(prefix, previousBoundaryOffset, currentOffset)) {
+      if (current.text) prefix += current.text;
+      return prefix;
+    }
+  }
+
+  // Current page ends with the first half of a synthetic page-boundary split.
+  if (index == static_cast<int>(words.size()) - 1 && !nextBoundaryText.empty()) {
+    std::string prefix = current.text ? current.text : "";
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        trimSyntheticReplacement(prefix, currentOffset, nextBoundaryOffset)) {
+      prefix += nextBoundaryText;
+      return prefix;
+    }
+  }
+
+  return current.text ? current.text : "";
+}''',
 )
 
 replace_once(
