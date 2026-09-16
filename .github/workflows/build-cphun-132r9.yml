@@ -118,8 +118,9 @@ jobs:
 
       - name: Verify r9 regression scope
         run: |
-          grep -F 'MAX_LOOKUP_CHAIN_MS = 3000' src/util/Dictionary.cpp
-          grep -F 'MAX_CONTEXT_HEADWORD_MS = 1000' src/util/Dictionary.cpp
+          grep -F 'ordinal guard' tools/cphun132r9_lookup_hard_deadline_fix.py
+          grep -F 'MAX_ORDINAL_SCAN_ENTRIES' tools/cphun132r9_lookup_hard_deadline_fix.py
+          grep -F 'MAX_ORDINAL_SCAN_MS' tools/cphun132r9_lookup_hard_deadline_fix.py
           grep -F 'biszex' tools/cphun132r9_regression_cases.txt
           grep -F 'influenszer.' tools/cphun132r9_regression_cases.txt
           grep -F 'fürdőga-' tools/cphun132r9_regression_cases.txt
