@@ -118,12 +118,14 @@ jobs:
 
       - name: Verify r9 regression scope
         run: |
-          grep -F 'ordinal guard' tools/cphun132r9_lookup_hard_deadline_fix.py
-          grep -F 'MAX_ORDINAL_SCAN_ENTRIES' tools/cphun132r9_lookup_hard_deadline_fix.py
-          grep -F 'MAX_ORDINAL_SCAN_MS' tools/cphun132r9_lookup_hard_deadline_fix.py
+          grep -F 'MAX_ORDINAL_SCAN_ENTRIES = SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
+          grep -F 'MAX_ORDINAL_SCAN_MS = 1200' src/util/Dictionary.cpp
+          grep -F 'Ordinal lookup guard reached' src/util/Dictionary.cpp
+          grep -F 'Synonym ordinal out of range' src/util/Dictionary.cpp
           grep -F 'biszex' tools/cphun132r9_regression_cases.txt
           grep -F 'influenszer.' tools/cphun132r9_regression_cases.txt
           grep -F 'fürdőga-' tools/cphun132r9_regression_cases.txt
+          grep -F 'tyában' tools/cphun132r9_regression_cases.txt
 
       - name: Unit tests
         run: ./bin/test.sh
