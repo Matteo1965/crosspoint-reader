@@ -126,7 +126,7 @@ jobs:
         run: |
           git diff --check
           grep -F 'CPHUN-260916-135-EXP-r2' src/CPHUNBuildId.h
-          grep -F 'FORWARD_DELETE_KEY = -4' src/activities/util/HungarianKeyboardLayout.h
+          grep -F 'FORWARD_DELETE_KEY = -100' src/activities/util/HungarianKeyboardLayout.h
           grep -F 'FORWARD_DELETE_ICON_32X36' src/activities/util/HungarianKeyboardIcons.h
           grep -F 'HUKS(nullptr, fui::KeyKind::Delete, FORWARD_DELETE_KEY, 2)' src/activities/util/HungarianKeyboardLayout.h
           grep -F 'HUK(",", ",", '\''), HUK(".", ".", '\''.'\''), HUK("-", "-", '\''-'\'')' src/activities/util/HungarianKeyboardLayout.h || true
