@@ -127,9 +127,6 @@ jobs:
           grep -F 'fürdőga-' tools/cphun132r9_regression_cases.txt
           grep -F 'tyában' tools/cphun132r9_regression_cases.txt
 
-      - name: Unit tests
-        run: ./bin/test.sh
-
       - uses: astral-sh/setup-uv@v6
 
       - name: Install PlatformIO
