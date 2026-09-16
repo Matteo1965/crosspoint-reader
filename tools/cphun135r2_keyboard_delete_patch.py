@@ -20,7 +20,7 @@ replace_once(
     "namespace fui = freeink::ui;\n\n",
     "namespace fui = freeink::ui;\n\n"
     "// CPHUN-135r2: separate forward-delete key used only by the Hungarian layout.\n"
-    "inline constexpr int16_t FORWARD_DELETE_KEY = -4;\n\n",
+    "inline constexpr int16_t FORWARD_DELETE_KEY = -100;\n\n",
 )
 
 replace_once(
