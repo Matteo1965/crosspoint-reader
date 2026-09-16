@@ -128,18 +128,26 @@ jobs:
           grep -F 'tyában' tools/cphun132r9_regression_cases.txt
 
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
 
       - name: Install PlatformIO
-        run: uv tool install platformio
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
       - name: Build CPHUN-133 + 132r9 firmware
-        run: pio run -e x4
+        run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
-        run: ls -lh .pio/build/x4/firmware.bin
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
       - name: Upload CPHUN-132r9 firmware
         uses: actions/upload-artifact@v4
         with:
           name: CPHUN-132r9-firmware
-          path: .pio/build/x4/firmware.bin
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
