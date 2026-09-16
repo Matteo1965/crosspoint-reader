@@ -1,0 +1,105 @@
+name: Build CPHUN-133 + 132r4 Dictionary Isolation
+
+on:
+  push:
+    branches: [agent/cphun-133-button-action-categories]
+    paths:
+      - '.github/workflows/build-cphun-133-r4-diagnostic.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-133-button-action-categories
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-110 through 131 patches
+        run: |
+          python3 tools/cphun110_cover_dither_clean_patch.py
+          python3 tools/cphun111_cover_4gray_floyd_patch.py
+          python3 tools/cphun112_cover_grayscale_pass_patch.py
+          python3 tools/cphun113_letter_spacing_scale_patch.py
+          python3 tools/cphun114_letter_spacing_scale_patch.py
+          python3 tools/cphun116_letter_spacing_scale_patch.py
+          python3 tools/cphun117_letter_spacing_scale_patch.py
+          python3 tools/cphun118_fixedpoint_optimization_patch.py
+          python3 tools/cphun119_fixedpoint_pair_tuning_patch.py
+          python3 tools/cphun120_fixedpoint_intensity_patch.py
+          python3 tools/cphun121_native_pair_advance_patch.py
+          python3 tools/cphun123_ink_edge_right_margin_patch.py
+          python3 tools/cphun124_dark_ink_edge_patch.py
+          python3 tools/cphun125_roundedraff_text_settings_layout_patch.py
+          python3 tools/cphun126_new_dogear_patch.py
+          python3 tools/cphun127_roundedraff_list_fit_patch.py
+          python3 tools/cphun128_letter_spacing_profiles_patch.py
+          python3 tools/cphun129_dictionary_bookinfo_ui_patch.py
+          python3 tools/cphun130_notoserif16_spacing_optimization_patch.py
+          python3 tools/cphun131_hyphenation_threshold_patch.py
+
+      - name: Apply CPHUN-132 through r4
+        run: |
+          sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 56/' lib/Epub/Epub/Section.cpp
+          python3 tools/cphun132_word_highlights_patch.py
+          python3 tools/cphun132r2_highlight_visibility_lookup_fix.py
+          python3 tools/cphun132r3_toggle_notfound_fix.py
+          python3 tools/cphun132r4_bookmarks_export_ui_lookup_fix.py
+
+      - name: Apply CPHUN-133 categorized button actions
+        run: python3 tools/cphun133_button_action_categories_patch.py
+
+      - name: Finalize CPHUN-132 cache version
+        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 58/' lib/Epub/Epub/Section.cpp
+
+      - name: Verify isolation scope
+        run: |
+          git diff --check
+          grep -q 'LetterSpacingCorrectionUp = 34' src/ReaderAction.h
+          grep -q 'ACTION_CATEGORIES' src/activities/settings/ButtonFunctionsActivity.cpp
+          grep -q 'return UINT32_MAX' src/util/Dictionary.cpp
+          grep -q 'locateProbes > SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
+          grep -q 'synonymProbes > SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
+          ! grep -q 'MAX_FALLBACK_PROBES = 16' src/util/Dictionary.cpp
+          ! grep -q 'session.sampleCount == 0' src/util/Dictionary.cpp
+          grep -q 'SECTION_FILE_VERSION = 58' lib/Epub/Epub/Section.cpp
+
+      - name: Unit tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build diagnostic firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload diagnostic firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-133-plus-132r4-DIAGNOSTIC-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 30
