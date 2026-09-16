@@ -133,7 +133,7 @@ jobs:
         run: uv tool install platformio
 
       - name: Build CPHUN-133 + 132r9 firmware
-        run: uvx pio run -e x4
+        run: pio run -e x4
 
       - name: Report firmware size
         run: ls -lh .pio/build/x4/firmware.bin
