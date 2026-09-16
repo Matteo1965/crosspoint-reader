@@ -124,10 +124,12 @@ jobs:
       - name: Verify CPHUN-134 regression fix
         run: |
           git diff --check
-          grep -F 'CPHUN-260916-134-EXP' src/CPHUNBuildId.h
+          grep -F 'CPHUN-260916-134-EXP-r2' src/CPHUNBuildId.h
           grep -F 'pendingHighlightPrompt = true' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -F 'queueHighlightPrompt(false)' src/activities/reader/DictionaryWordSelectActivity.cpp
           grep -F 'if (pendingHighlightPrompt)' src/activities/reader/DictionaryWordSelectActivity.cpp
+          grep -F 'void DictionaryHighlightPromptActivity::onEnter()' src/activities/reader/DictionaryHighlightPromptActivity.cpp
+          grep -F 'requestUpdate();' src/activities/reader/DictionaryHighlightPromptActivity.cpp
           grep -F 'MAX_ORDINAL_SCAN_ENTRIES = SAMPLE_INTERVAL + 8' src/util/Dictionary.cpp
           grep -F 'MAX_ORDINAL_SCAN_MS = 1200' src/util/Dictionary.cpp
           grep -F 'biszex' tools/cphun132r9_regression_cases.txt
@@ -153,7 +155,7 @@ jobs:
       - name: Upload CPHUN-134 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260916-134-EXP-firmware
+          name: CPHUN-260916-134-EXP-r2-firmware
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
