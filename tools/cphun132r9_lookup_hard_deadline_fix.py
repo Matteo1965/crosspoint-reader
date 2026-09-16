@@ -10,72 +10,62 @@ def replace_once(path, old, new):
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
-# 1) Hard deadline for the complete dictionary lookup chain. Individual locate()
-# calls are already bounded, but a miss can still fan out through synonym,
-# morphology and many variants. Stop launching new probes once the whole lookup
-# reaches its budget.
+# CPHUN-132r6 already puts a hard deadline around the complete lookup chain.
+# The remaining unbounded path is locateByOrdinal(): a synonym hit can resolve
+# to an ordinal and then scan .idx entry-by-entry. With a stale/corrupt sidecar
+# or synonym ordinal this can take effectively forever on-device before the
+# outer lookup regains control. Bound that inner scan directly.
 replace_once(
     "src/util/Dictionary.cpp",
-    '''  DictLocation location;\n  bool searchFailed = false;\n  {\n    LookupSession session;''',
-    '''  DictLocation location;\n  bool searchFailed = false;\n  constexpr unsigned long MAX_LOOKUP_CHAIN_MS = 3000;\n  const unsigned long lookupChainStart = millis();\n  const auto lookupChainExpired = [&]() { return millis() - lookupChainStart >= MAX_LOOKUP_CHAIN_MS; };\n  {\n    LookupSession session;''',
+    '''  uint8_t suffix[8];
+  for (uint32_t e = startOrdinal; e < ordinal; e++) {
+    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
+    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
+  }''',
+    '''  uint8_t suffix[8];
+  constexpr uint32_t MAX_ORDINAL_SCAN_ENTRIES = SAMPLE_INTERVAL + 8;
+  constexpr unsigned long MAX_ORDINAL_SCAN_MS = 1200;
+  const unsigned long ordinalScanStart = millis();
+  uint32_t ordinalScans = 0;
+  for (uint32_t e = startOrdinal; e < ordinal; e++) {
+    if (++ordinalScans > MAX_ORDINAL_SCAN_ENTRIES || millis() - ordinalScanStart >= MAX_ORDINAL_SCAN_MS) {
+      LOG_ERR("DICT", "Ordinal lookup guard reached: %lu -> %lu",
+              static_cast<unsigned long>(startOrdinal), static_cast<unsigned long>(ordinal));
+      return result;
+    }
+    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0 || session.idx.read(suffix, 8) != 8) return result;
+    if (static_cast<uint32_t>(session.idx.position()) >= session.idxSize) return result;  // ordinal past last entry
+  }''',
 )
 
+# A corrupt synonym sidecar can also hand locateByOrdinal() an out-of-range
+# ordinal when entryCount is unavailable. Reject obviously impossible values
+# before doing any scan.
 replace_once(
     "src/util/Dictionary.cpp",
-    '''    const auto tryHungarianV9 = [&](const std::string& candidate) {\n      if (candidate.empty()) return false;''',
-    '''    const auto tryHungarianV9 = [&](const std::string& candidate) {\n      if (candidate.empty() || lookupChainExpired()) return false;''',
+    '''DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
+  DictLocation result;
+''',
+    '''DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordinal, std::string* matchedHeadwordOut) {
+  DictLocation result;
+  if (session.entryCount != 0 && ordinal >= session.entryCount) {
+    LOG_ERR("DICT", "Synonym ordinal out of range: %lu >= %lu", static_cast<unsigned long>(ordinal),
+            static_cast<unsigned long>(session.entryCount));
+    return result;
+  }
+''',
 )
 
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''    if (!huV9Found) {\n      location = locate(session, lookupWord.c_str(), &matchedHeadwordOut);''',
-    '''    if (!huV9Found && !lookupChainExpired()) {\n      location = locate(session, lookupWord.c_str(), &matchedHeadwordOut);''',
-)
-
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''      const auto tryDirectHungarianV8 = [&](const std::string& candidate) {\n        if (candidate.empty()) return false;''',
-    '''      const auto tryDirectHungarianV8 = [&](const std::string& candidate) {\n        if (candidate.empty() || lookupChainExpired()) return false;''',
-)
-
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''    if (!location.found && hasSyn) {\n      location = locateSynonym(session, lookupWord.c_str(), &matchedHeadwordOut);''',
-    '''    if (!location.found && hasSyn && !lookupChainExpired()) {\n      location = locateSynonym(session, lookupWord.c_str(), &matchedHeadwordOut);''',
-)
-
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''    if (!location.found) {\n      std::vector<std::string> variants;\n      stemVariants(lookupWord, variants);\n      for (const auto& variant : variants) {\n        location = locate(session, variant.c_str(), &matchedHeadwordOut);''',
-    '''    if (!location.found && !lookupChainExpired()) {\n      std::vector<std::string> variants;\n      stemVariants(lookupWord, variants);\n      for (const auto& variant : variants) {\n        if (lookupChainExpired()) break;\n        location = locate(session, variant.c_str(), &matchedHeadwordOut);''',
-)
-
-# If the full chain expires, treat it as a bounded miss. This prevents a word
-# like "biszex" (no punctuation) from appearing to hang forever while still
-# preserving genuine SD/read failures reported by locate().
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''  if (!location.found) {\n    // A search that never reached a verdict (couldn't open or seek .idx) is a\n    // read failure, not a miss — reporting "Not found" is the bug this PR exists\n    // for. Otherwise the word is genuinely not in the dictionary.\n    if (searchFailed) setResult(LookupResult::ReadError);\n    return false;\n  }''',
-    '''  if (!location.found) {\n    // A hard-deadline expiry is a bounded miss. Preserve genuine storage errors.\n    if (searchFailed) setResult(LookupResult::ReadError);\n    else if (lookupChainExpired()) LOG_ERR("DICT", "Lookup chain deadline reached for %s", lookupWord.c_str());\n    return false;\n  }''',
-)
-
-# 2) Context-headword probing is optional UX after a successful primary hit.
-# Bound it as well so punctuation/context expansion can never hold the UI.
-replace_once(
-    "src/util/Dictionary.cpp",
-    '''  for (const auto& candidate : candidates) {\n    const std::string cleaned = cleanWord(candidate.c_str());''',
-    '''  const unsigned long contextStart = millis();\n  constexpr unsigned long MAX_CONTEXT_HEADWORD_MS = 1000;\n  for (const auto& candidate : candidates) {\n    if (millis() - contextStart >= MAX_CONTEXT_HEADWORD_MS) break;\n    const std::string cleaned = cleanWord(candidate.c_str());''',
-)
-
-# 3) Host-side regression markers: verify the three reported r8 cases stay in
-# the source as explicit non-regression documentation. These are static checks;
-# the device test still verifies real timing/behavior.
+# Keep the user-reported r8 regressions explicit in the branch so future patch
+# chains cannot silently drop them from device testing.
 Path("tools/cphun132r9_regression_cases.txt").write_text(
     "CPHUN-132r9 reported regression cases:\n"
     "influenszer. -> lookup must return or show NotFound/Error, never hang\n"
     "biszex -> lookup must return or show NotFound/Error, never hang\n"
-    "fürdőga- / tyában -> fragment lookup must return, never hang; boundary reconstruction tested separately\n",
+    "fürdőga- -> fragment lookup must return, never hang\n"
+    "tyában -> fragment lookup must return, never hang\n"
+    "fürdőga-tyában -> page-boundary reconstruction tested separately\n",
     encoding="utf-8",
 )
 
-print("CPHUN-132r9 whole-chain dictionary deadline and regression guards applied")
+print("CPHUN-132r9 bounded synonym ordinal lookup guard applied")
