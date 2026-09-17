@@ -64,16 +64,17 @@ if n1 != 1 or n2 != 1:
     raise SystemExit(f"CPHUN-135r4b: fn NUM_ROW substitution failed: symbol={n1}, symbol2={n2}")
 
 # On the fourth row use exactly the same Shift and Backspace key kinds/widths as
-# the normal Hungarian keyboard. The custom renderer supplies the actual icons.
+# the normal Hungarian keyboard. Match the initializer independently of whether
+# the closing brace shares the final key's line or is on a separate line.
 def fix_symbol_action_row(text: str, name: str) -> str:
-    pat = re.compile(rf'(inline const fui::KeyboardKey {name}\[\] = \{{\n)(.*?)(\n\}};)', re.S)
+    pat = re.compile(rf'(inline const fui::KeyboardKey {name}\[\]\s*=\s*\{{)(.*?)(\}};)', re.S)
     m = pat.search(text)
     if not m:
         raise SystemExit(f"CPHUN-135r4b: {name} not found")
     body = m.group(2)
     body, ns = re.subn(
-        r'^\s*HUKS\([^\n]*fui::KeyKind::Shift[^\n]*\),',
-        '    HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),',
+        r'(^\s*)HUKS\([^\n]*fui::KeyKind::Shift[^\n]*\),',
+        r'\1HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),',
         body,
         count=1,
         flags=re.M,
