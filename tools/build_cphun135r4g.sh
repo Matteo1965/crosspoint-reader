@@ -15,8 +15,12 @@ if n != 1:
 bid.write_text(b, encoding='utf-8')
 PY
 
+python3 tools/cphun135r4g_version_date_patch.py
+
 git diff --check
 grep -F 'CPHUN-260917-135R4G-EXP' src/CPHUNBuildId.h
+grep -F '#define CPHUN_BUILD_DATE "Sep-17 2026"' src/CPHUNBuildId.h
+grep -F 'drawLabelValue(hu ? "Dátum" : "Date", CPHUN_BUILD_DATE);' src/activities/settings/CrossPointVersionActivity.cpp
 grep -F 'Filtered book footnote index' src/activities/reader/EpubReaderActivity.cpp
 grep -F 'openFootnotesList(true, true);' src/activities/reader/EpubReaderActivity.cpp
 grep -F 'readItemContentsToStream(targetHref' src/activities/reader/EpubReaderActivity.cpp
@@ -48,5 +52,11 @@ if 'QWERTY_KEY_BACKSPACE, 3)' not in body:
     raise SystemExit('R4G right-edge Backspace missing')
 if 'HUKW("…", "…", 1404, 3)' not in body:
     raise SystemExit('R4G wide ellipsis missing')
+
+page = Path('src/activities/settings/CrossPointVersionActivity.cpp').read_text(encoding='utf-8')
+if 'Sep-8 2026' in page:
+    raise SystemExit('R4G stale CrossPoint Version date remained')
+if 'CPHUN_BUILD_DATE' not in page:
+    raise SystemExit('R4G synchronized version date missing')
 print('R4G combined semantic verification passed')
 PY
