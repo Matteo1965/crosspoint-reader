@@ -1,4 +1,4 @@
-name: Build CPHUN-135r4b Edit Footnotes Keyboard
+name: Build CPHUN-135r4c Edit Footnotes Keyboard
 
 on:
   push:
@@ -132,16 +132,16 @@ jobs:
       - name: Apply CPHUN-135r4a points 1 2 6 7 8
         run: python3 tools/cphun135r4a_selection_keyboard_patch.py
 
-      - name: Apply CPHUN-135r4b additions
+      - name: Apply CPHUN-135r4c additions
         run: python3 tools/cphun135r4b_patch_driver_v2.py
 
       - name: Finalize cache version
-        run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 61/' lib/Epub/Epub/Section.cpp
+        run: sed -i -E 's/SECTION_FILE_VERSION = [0-9]+/SECTION_FILE_VERSION = 61/' lib/Epub/Epub/Section.cpp
 
-      - name: Verify CPHUN-135r4b
+      - name: Verify CPHUN-135r4c
         run: |
           git diff --check
-          grep -F 'CPHUN-260917-135R4B-EXP' src/CPHUNBuildId.h
+          grep -F 'CPHUN-260917-135R4C-EXP' src/CPHUNBuildId.h
           grep -F "self->nextWordContinues = false;" lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
           grep -F 'trimAdjacentSpace' src/highlights/TextEditStore.h
           grep -F 'KIJELÖLÉS: aktuális gomb használata' src/activities/util/KeyboardEntryActivity.cpp
@@ -159,19 +159,19 @@ jobs:
               raise SystemExit('EpubReaderActivity.cpp still contains NUL bytes')
           reader_text = reader.decode('utf-8')
           if 'initialText = old->replacementText;' not in reader_text:
-              raise SystemExit('CPHUN-135r4b edit reopen semantics missing')
+              raise SystemExit('CPHUN-135r4c edit reopen semantics missing')
           if 'keyboard->text, keyboard->text.empty()' not in reader_text:
-              raise SystemExit('CPHUN-135r4b empty replacement/delete semantics missing')
+              raise SystemExit('CPHUN-135r4c empty replacement/delete semantics missing')
           if 'ensureBookFootnotes();' not in reader_text:
-              raise SystemExit('CPHUN-135r4b lazy footnote index entry point missing')
+              raise SystemExit('CPHUN-135r4c lazy footnote index entry point missing')
 
           keyboard = Path('src/activities/util/HungarianKeyboardLayout.h').read_text(encoding='utf-8')
           if not re.search(r'SYMBOL_LAYOUT\s*\{\s*SYMBOL_ROWS\s*,\s*5\s*\}', keyboard):
-              raise SystemExit('CPHUN-135r4b 5-row fn SYMBOL_LAYOUT missing')
+              raise SystemExit('CPHUN-135r4c 5-row fn SYMBOL_LAYOUT missing')
           if not re.search(r'SYMBOL2_LAYOUT\s*\{\s*SYMBOL2_ROWS\s*,\s*5\s*\}', keyboard):
-              raise SystemExit('CPHUN-135r4b 5-row fn SYMBOL2_LAYOUT missing')
+              raise SystemExit('CPHUN-135r4c 5-row fn SYMBOL2_LAYOUT missing')
           if 'HUKS("fn", fui::KeyKind::Mode' not in keyboard:
-              raise SystemExit('CPHUN-135r4b fn mode key missing')
+              raise SystemExit('CPHUN-135r4c fn mode key missing')
           print('Semantic verification passed')
           PY
 
@@ -186,16 +186,16 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Build CPHUN-135r4b firmware
+      - name: Build CPHUN-135r4c firmware
         run: .venv/bin/pio run -e gh_release
 
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
 
-      - name: Upload CPHUN-135r4b firmware
+      - name: Upload CPHUN-135r4c firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260917-135R4B-EXP-firmware
+          name: CPHUN-260917-135R4C-EXP-firmware
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
