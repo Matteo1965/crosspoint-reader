@@ -49,3 +49,5 @@ jobs:
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
+
+# Trigger: R4I current-spine footnote validation
