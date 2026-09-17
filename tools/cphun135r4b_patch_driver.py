@@ -17,10 +17,15 @@ if frag_old not in text:
     raise SystemExit("CPHUN-135r4b driver: footnote parser patch block not found")
 text = text.replace(frag_old, frag_new, 1)
 
-# Earlier patches can reflow the EpubReaderMenuActivity constructor call. Match
-# only the semantic boolean argument sequence instead of its indentation.
+# Earlier patches may alter/reflow the reader-menu constructor arguments. Replace
+# the generated brittle availability substitution with a semantic regex that
+# targets the boolean immediately following SETTINGS.orientation. This keeps the
+# Footnotes row enabled from the all-book index rather than only current-page refs.
 menu_old = '''replace_once(\n    "src/activities/reader/EpubReaderActivity.cpp",\n    \'\'\'                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',\n    \'\'\'                             SETTINGS.orientation, !bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',\n)'''
-menu_new = '''replace_once(\n    "src/activities/reader/EpubReaderActivity.cpp",\n    "!currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n    "!bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n)'''
+menu_new = '''p = Path("src/activities/reader/EpubReaderActivity.cpp")\ns = p.read_text(encoding="utf-8")\npat = re.compile(r'(SETTINGS\\.orientation,\\s*)![A-Za-z0-9_]*Footnotes\\.empty\\(\\)(\\s*,\\s*!cachedBookmarks\\.empty\\(\\)\\s*,\\s*startOnBookTab)')\ns2, n = pat.subn(r'\\1!bookFootnotes.empty()\\2', s, count=1)\nif n == 0 and "SETTINGS.orientation, !bookFootnotes.empty()" not in s:\n    raise SystemExit("CPHUN-135r4b: reader-menu footnote availability argument not found")\np.write_text(s2 if n else s, encoding="utf-8")'''
+if menu_old not in text:
+    # Previous driver revision may already have reduced this to a short replace_once.
+    menu_old = '''replace_once(\n    "src/activities/reader/EpubReaderActivity.cpp",\n    "!currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n    "!bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n)'''
 if menu_old not in text:
     raise SystemExit("CPHUN-135r4b driver: reader-menu footnote availability block not found")
 text = text.replace(menu_old, menu_new, 1)
