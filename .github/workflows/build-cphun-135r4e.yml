@@ -8,6 +8,7 @@ on:
       - '.github/workflows/build-cphun-135r4e.yml'
       - 'tools/build_cphun135r4e.sh'
       - 'tools/cphun135r4e_footnote_resolver_patch.py'
+      - 'tools/cphun135r4e_runner.py'
   workflow_dispatch:
 
 jobs:
@@ -23,7 +24,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply and verify CPHUN-135r4e
-        run: bash tools/build_cphun135r4e.sh
+        run: |
+          sed -i 's#python3 tools/cphun135r4e_footnote_resolver_patch.py#python3 tools/cphun135r4e_runner.py#' tools/build_cphun135r4e.sh
+          bash tools/build_cphun135r4e.sh
 
       - uses: astral-sh/setup-uv@v6
         with:
