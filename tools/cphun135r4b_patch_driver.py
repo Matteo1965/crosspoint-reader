@@ -17,5 +17,13 @@ if frag_old not in text:
     raise SystemExit("CPHUN-135r4b driver: footnote parser patch block not found")
 text = text.replace(frag_old, frag_new, 1)
 
+# Earlier patches can reflow the EpubReaderMenuActivity constructor call. Match
+# only the semantic boolean argument sequence instead of its indentation.
+menu_old = '''replace_once(\n    "src/activities/reader/EpubReaderActivity.cpp",\n    \'\'\'                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',\n    \'\'\'                             SETTINGS.orientation, !bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',\n)'''
+menu_new = '''replace_once(\n    "src/activities/reader/EpubReaderActivity.cpp",\n    "!currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n    "!bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab",\n)'''
+if menu_old not in text:
+    raise SystemExit("CPHUN-135r4b driver: reader-menu footnote availability block not found")
+text = text.replace(menu_old, menu_new, 1)
+
 patch.write_text(text, encoding="utf-8")
 exec(compile(text, str(patch), "exec"), {"__name__": "__main__", "__file__": str(patch)})
