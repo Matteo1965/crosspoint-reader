@@ -227,5 +227,13 @@ s, n = pat_extract.subn(safe_extract + "\n\n", s, count=1)
 if n != 1:
     raise SystemExit("CPHUN-135r4b: extractFootnoteText body not found")
 
+# Some feature-patch literals use Python '\0' escapes. If one becomes an actual
+# NUL byte in generated C++, grep treats the source as binary and the compiler
+# can also misparse the affected character literal. Normalize every such byte
+# back to the intended textual C++ escape.
+s = s.replace("\x00", "\\0")
+if "\x00" in s:
+    raise SystemExit("CPHUN-135r4b: NUL byte remained in EpubReaderActivity.cpp")
+
 src_path.write_text(s, encoding="utf-8")
-print("CPHUN-135r4b memory fix applied: lazy index + SD-streamed footnote parsing")
+print("CPHUN-135r4b memory fix applied: lazy index + SD-streamed footnote parsing + NUL cleanup")
