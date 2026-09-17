@@ -9,7 +9,6 @@ runpy.run_path(str(driver), run_name="__main__")
 
 # CPHUN-135r4b crash guard:
 # Opening the Reader menu must never trigger whole-book footnote indexing.
-# Keep ensureBookFootnotes() lazy and reachable only from the FOOTNOTES action.
 reader = Path("src/activities/reader/EpubReaderActivity.cpp")
 s = reader.read_text(encoding="utf-8")
 
@@ -19,14 +18,7 @@ open_menu = re.compile(
     re.S,
 )
 s, n = open_menu.subn(r'\1', s, count=1)
-if n > 1:
-    raise SystemExit(
-        f"CPHUN-135r4b: multiple eager ensureBookFootnotes() calls found in openReaderMenu: {n}"
-    )
 
-# Verify specifically inside openReaderMenu(), while allowing the intended lazy
-# call in the FOOTNOTES menu action elsewhere in the file. Zero substitutions is
-# valid when the main driver has already removed the eager call.
 menu_body = re.search(
     r'void EpubReaderActivity::openReaderMenu\(const bool startOnBookTab\)\s*\{(.*?)\n\}',
     s,
@@ -37,8 +29,25 @@ if not menu_body:
 if "ensureBookFootnotes();" in menu_body.group(1):
     raise SystemExit("CPHUN-135r4b: eager footnote indexing still present in openReaderMenu()")
 
+# CPHUN-135r4d crash guard:
+# Reader menu -> Footnotes must not scan every XHTML spine synchronously on X4.
+# Use the already parsed current-page footnote list. Whole-book indexing will be
+# reintroduced only through an incremental/background implementation.
+old_case = '''    case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
+      ensureBookFootnotes();
+      openFootnotesList(true, true);
+      break;
+    }'''
+new_case = '''    case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
+      openFootnotesList(false, true);
+      break;
+    }'''
+if old_case in s:
+    s = s.replace(old_case, new_case, 1)
+elif new_case not in s:
+    raise SystemExit("CPHUN-135r4d: FOOTNOTES menu action not found")
 reader.write_text(s, encoding="utf-8")
-print(f"CPHUN-135r4b Reader-menu guard passed: removed={n}, footnote indexing remains lazy")
+print("CPHUN-135r4d Reader-menu footnotes use current-page index; whole-book synchronous scan disabled")
 
 # -----------------------------------------------------------------------------
 # fn keyboard visual/layout correction.
@@ -114,14 +123,13 @@ if nv != 1:
     raise SystemExit("CPHUN-135r4b: SECTION_FILE_VERSION assignment not found")
 section_path.write_text(section2, encoding="utf-8")
 
-# CPHUN-135r4c identity: force the post-patch firmware ID so every test build
-# is distinguishable from the earlier r4b artifacts.
+# CPHUN-135r4d identity.
 build_id_path = Path("src/CPHUNBuildId.h")
 build_id = build_id_path.read_text(encoding="utf-8")
 build_id2, nbid = re.subn(r'#define CPHUN_BUILD_ID "[^"]+"',
-                           '#define CPHUN_BUILD_ID "CPHUN-260917-135R4C-EXP"',
+                           '#define CPHUN_BUILD_ID "CPHUN-260917-135R4D-EXP"',
                            build_id, count=1)
 if nbid != 1:
-    raise SystemExit("CPHUN-135r4c: CPHUN_BUILD_ID define not found")
+    raise SystemExit("CPHUN-135r4d: CPHUN_BUILD_ID define not found")
 build_id_path.write_text(build_id2, encoding="utf-8")
-print("CPHUN-135r4c build identity applied")
+print("CPHUN-135r4d build identity applied")
