@@ -8,6 +8,7 @@ on:
       - '.github/workflows/build-cphun-135r4b.yml'
       - 'tools/cphun135r4b_edit_footnotes_keyboard_patch.py'
       - 'tools/cphun135r4b_patch_driver.py'
+      - 'tools/cphun135r4b_patch_driver_v2.py'
       - 'src/activities/reader/FootnotePopupActivity.cpp'
       - 'src/activities/reader/FootnotePopupActivity.h'
   workflow_dispatch:
@@ -132,7 +133,7 @@ jobs:
         run: python3 tools/cphun135r4a_selection_keyboard_patch.py
 
       - name: Apply CPHUN-135r4b additions
-        run: python3 tools/cphun135r4b_patch_driver.py
+        run: python3 tools/cphun135r4b_patch_driver_v2.py
 
       - name: Finalize cache version
         run: sed -i 's/SECTION_FILE_VERSION = 57/SECTION_FILE_VERSION = 61/' lib/Epub/Epub/Section.cpp
