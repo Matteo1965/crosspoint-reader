@@ -179,7 +179,7 @@ replace_once(
 
 
 # -----------------------------------------------------------------------------
-# 8) Szerkesztés help block: move 50 px downward, use Hungarian control names,
+# 8) Szerkesztés help block: move 60 px downward, use Hungarian control names,
 #    and explain the right-side Up/Down buttons and their mode transition.
 # -----------------------------------------------------------------------------
 replace_once(
@@ -190,16 +190,18 @@ replace_once(
     y += tipsLh;
     if (cursorMode) {''',
     '''  if (title == "Szerkesztés") {
-    int y = (underlineBottom + kbRect.y) / 2 - 5 * tipsLh / 2 + 50;
+    int y = (underlineBottom + kbRect.y) / 2 - 5 * tipsLh / 2 + 60;
     drawTip("Tippek:", y);
     y += tipsLh;
-    drawTip("KIJELÖLÉS: kijelölt billentyű használata", y);
+    drawTip("KIJELÖLÉS: aktuális gomb használata", y);
     y += tipsLh;
-    drawTip("Fel/le: billentyűsor váltása", y);
+    drawTip("SHIFT: billentyűsor váltása", y);
     y += tipsLh;
-    drawTip("Fel hosszan: kurzor mód; Le: billentyűzet mód", y);
+    drawTip("FEL HOSSZAN: kurzor mód", y);
     y += tipsLh;
-    drawTip("TÖRLÉS hosszan: teljes szöveg törlése", y);
+    drawTip("LE: billentyűzet mód", y);
+    y += tipsLh;
+    drawTip("TÖRLÉS HOSSZAN: teljes szó törlése", y);
   } else if (tipCount > 0) {
     int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
     drawTip(tr(STR_KB_TIPS), y);
