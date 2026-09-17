@@ -19,13 +19,14 @@ open_menu = re.compile(
     re.S,
 )
 s, n = open_menu.subn(r'\1', s, count=1)
-if n != 1:
+if n > 1:
     raise SystemExit(
-        f"CPHUN-135r4b: expected one eager ensureBookFootnotes() call in openReaderMenu, found {n}"
+        f"CPHUN-135r4b: multiple eager ensureBookFootnotes() calls found in openReaderMenu: {n}"
     )
 
 # Verify specifically inside openReaderMenu(), while allowing the intended lazy
-# call in the FOOTNOTES menu action elsewhere in the file.
+# call in the FOOTNOTES menu action elsewhere in the file. Zero substitutions is
+# valid when the main driver has already removed the eager call.
 menu_body = re.search(
     r'void EpubReaderActivity::openReaderMenu\(const bool startOnBookTab\)\s*\{(.*?)\n\}',
     s,
@@ -37,4 +38,4 @@ if "ensureBookFootnotes();" in menu_body.group(1):
     raise SystemExit("CPHUN-135r4b: eager footnote indexing still present in openReaderMenu()")
 
 reader.write_text(s, encoding="utf-8")
-print("CPHUN-135r4b Reader-menu guard applied: footnote indexing remains lazy")
+print(f"CPHUN-135r4b Reader-menu guard passed: removed={n}, footnote indexing remains lazy")
