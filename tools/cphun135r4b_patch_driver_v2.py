@@ -23,20 +23,20 @@ if n_menu != 1:
     raise SystemExit("CPHUN-135r4b driver: reader-menu availability patch block not found")
 '''
 
-new_block = '''# Remove only the exact Reader-menu availability mutation from the generated
+new_block = """# Remove only the exact Reader-menu availability mutation from the generated
 # feature patch. Do not use a DOTALL expression beginning at an earlier
 # EpubReaderActivity.cpp replacement: that would erase unrelated point 4/5 and
 # dictionary patches as collateral damage.
-availability_patch = """replace_once(
-    \"src/activities/reader/EpubReaderActivity.cpp\",
-    '''                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),''',
-    '''                             SETTINGS.orientation, !bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),''',
+availability_patch = '''replace_once(
+    "src/activities/reader/EpubReaderActivity.cpp",
+    \'\'\'                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',
+    \'\'\'                             SETTINGS.orientation, !bookFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),\'\'\',
 )
-"""
+'''
 if availability_patch not in text:
     raise SystemExit("CPHUN-135r4b driver: exact reader-menu availability patch block not found")
 text = text.replace(availability_patch, "", 1)
-'''
+"""
 
 if old_block not in text:
     raise SystemExit("CPHUN-135r4b driver v2: unsafe menu-block rewrite not found")
