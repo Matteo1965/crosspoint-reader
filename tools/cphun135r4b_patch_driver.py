@@ -20,15 +20,19 @@ if frag_old not in text:
     raise SystemExit("CPHUN-135r4b driver: footnote parser patch block not found")
 text = text.replace(frag_old, frag_new, 1)
 
-# Do not change the reader-menu availability boolean here. More importantly,
-# never build the whole-book footnote index merely to open the Reader menu.
-# The index is built lazily only after the user selects Lábjegyzetek.
+# Do not change the Reader-menu availability boolean here. Remove only the
+# exact replacement block that switches current-page footnotes to whole-book
+# footnotes. This avoids deleting unrelated point 4/5 or dictionary patches.
 menu_block = re.compile(
-    r'replace_once\(\n\s*"src/activities/reader/EpubReaderActivity\.cpp",\n'
-    r'.*?!currentPageFootnotes\.empty\(\).*?!bookFootnotes\.empty\(\).*?\n\)\n', re.S)
+    r'replace_once\(\n'
+    r'\s*"src/activities/reader/EpubReaderActivity\.cpp",\n'
+    r'\s*\'\'\'\s*SETTINGS\.orientation, !currentPageFootnotes\.empty\(\), !cachedBookmarks\.empty\(\), startOnBookTab\),\'\'\',\n'
+    r'\s*\'\'\'\s*SETTINGS\.orientation, !bookFootnotes\.empty\(\), !cachedBookmarks\.empty\(\), startOnBookTab\),\'\'\',\n'
+    r'\)\n',
+)
 text, n_menu = menu_block.subn('', text, count=1)
 if n_menu != 1:
-    raise SystemExit("CPHUN-135r4b driver: reader-menu availability patch block not found")
+    raise SystemExit(f"CPHUN-135r4b driver: exact reader-menu availability patch block not found: {n_menu}")
 
 # Apply the feature patch first; then replace its RAM-heavy footnote routines
 # with bounded-memory, SD-backed streaming implementations.
