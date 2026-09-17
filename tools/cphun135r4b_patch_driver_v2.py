@@ -42,18 +42,10 @@ print(f"CPHUN-135r4b Reader-menu guard passed: removed={n}, footnote indexing re
 
 # -----------------------------------------------------------------------------
 # fn keyboard visual/layout correction.
-#
-# The symbol layouts previously fell back to FreeInk's generic keyboard()
-# renderer. That renderer does not know the Hungarian custom icons/geometry, so
-# Shift/Mode/OK became text (often truncated to S... / ...), and Delete/Backspace
-# did not match the normal Hungarian layout. Keep symbol layouts on the same
-# Hungarian renderer and reuse the normal NUM_ROW for an identical first row.
 # -----------------------------------------------------------------------------
 layout_path = Path("src/activities/util/HungarianKeyboardLayout.h")
 k = layout_path.read_text(encoding="utf-8")
 
-# First row must be exactly the normal Hungarian number row: 0..9 + forward
-# Delete icon. Reuse NUM_ROW rather than maintaining a second copy.
 k2, n1 = re.subn(r'(inline const fui::KeyboardRow SYMBOL_ROWS\[\] = \{\n\s*)\{SYMBOL_ROW1, 11, 0\}',
                   r'\1{NUM_ROW, 11, 0}', k, count=1)
 k = k2
@@ -63,9 +55,6 @@ k = k2
 if n1 != 1 or n2 != 1:
     raise SystemExit(f"CPHUN-135r4b: fn NUM_ROW substitution failed: symbol={n1}, symbol2={n2}")
 
-# On the fourth row use exactly the same Shift and Backspace key kinds/widths as
-# the normal Hungarian keyboard. Match the initializer independently of whether
-# the closing brace shares the final key's line or is on a separate line.
 def fix_symbol_action_row(text: str, name: str) -> str:
     pat = re.compile(rf'(inline const fui::KeyboardKey {name}\[\]\s*=\s*\{{)(.*?)(\}};)', re.S)
     m = pat.search(text)
@@ -81,7 +70,6 @@ def fix_symbol_action_row(text: str, name: str) -> str:
     )
     if ns != 1:
         raise SystemExit(f"CPHUN-135r4b: {name} Shift normalization failed: {ns}")
-    # Replace the final key on this row (Euro/plus-minus/etc.) with normal Backspace.
     body, nb = re.subn(
         r',\s*(?:HUKW|HUKS)\([^\n]*\)\s*$',
         ',\n    HUKS(nullptr, fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)',
@@ -109,7 +97,6 @@ if fallback not in r:
 r = r.replace(fallback, "", 1)
 renderer_path.write_text(r, encoding="utf-8")
 
-# Final semantic checks for the fn layout.
 kcheck = layout_path.read_text(encoding="utf-8")
 if not re.search(r'SYMBOL_ROWS\[\].*?\{NUM_ROW, 11, 0\}', kcheck, re.S):
     raise SystemExit("CPHUN-135r4b: fn first row is not NUM_ROW")
@@ -120,10 +107,21 @@ if 'HUKS("fn", fui::KeyKind::Mode' not in kcheck or 'HUKS("OK", fui::KeyKind::Ok
 print("CPHUN-135r4b fn keyboard fixed: normal number row + Hungarian Shift/Delete/Backspace/fn/OK rendering")
 
 # The workflow temporarily lowers the cache version to 56 for older patches.
-# Finalize robustly here so verification cannot depend on a stale 57->61 sed.
 section_path = Path("lib/Epub/Epub/Section.cpp")
 section = section_path.read_text(encoding="utf-8")
 section2, nv = re.subn(r'SECTION_FILE_VERSION = \d+', 'SECTION_FILE_VERSION = 61', section, count=1)
 if nv != 1:
     raise SystemExit("CPHUN-135r4b: SECTION_FILE_VERSION assignment not found")
 section_path.write_text(section2, encoding="utf-8")
+
+# CPHUN-135r4c identity: force the post-patch firmware ID so every test build
+# is distinguishable from the earlier r4b artifacts.
+build_id_path = Path("src/CPHUNBuildId.h")
+build_id = build_id_path.read_text(encoding="utf-8")
+build_id2, nbid = re.subn(r'#define CPHUN_BUILD_ID "[^"]+"',
+                           '#define CPHUN_BUILD_ID "CPHUN-260917-135R4C-EXP"',
+                           build_id, count=1)
+if nbid != 1:
+    raise SystemExit("CPHUN-135r4c: CPHUN_BUILD_ID define not found")
+build_id_path.write_text(build_id2, encoding="utf-8")
+print("CPHUN-135r4c build identity applied")
