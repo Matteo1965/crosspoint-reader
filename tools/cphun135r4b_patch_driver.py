@@ -37,12 +37,13 @@ exec(compile(text, str(patch), "exec"), {"__name__": "__main__", "__file__": str
 src_path = Path("src/activities/reader/EpubReaderActivity.cpp")
 s = src_path.read_text(encoding="utf-8")
 
-# Remove eager all-book indexing from openReaderMenu().
+# Remove eager all-book indexing from openReaderMenu() if that exact generated
+# call is present. Some earlier patch-chain variants already omit it.
 s, n = re.subn(
     r'(void EpubReaderActivity::openReaderMenu\(const bool startOnBookTab\) \{\n\s*pendingManualTurn = 0;)\n\s*ensureBookFootnotes\(\);',
     r'\1', s, count=1)
-if n != 1:
-    raise SystemExit("CPHUN-135r4b: eager footnote indexing call not found")
+if n > 1:
+    raise SystemExit("CPHUN-135r4b: multiple eager footnote indexing calls found")
 
 safe_ensure = r'''void EpubReaderActivity::ensureBookFootnotes() {
   if (bookFootnotesIndexed || !epub) return;
