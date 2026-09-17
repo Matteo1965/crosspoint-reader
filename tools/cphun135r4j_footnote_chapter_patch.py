@@ -176,9 +176,9 @@ new = '''  // CPHUN-135r4j: assign a noteref to the page where its marker is act
     if (fn.number[0] == '\\0') return false;
     const std::string marker(fn.number);
     for (uint16_t i = 0; i < line->wordCount(); ++i) {
-      const std::string word(line->wordText(i));
-      if (word == marker || word == ("{" + marker + "}") || word == ("[" + marker + "]") ||
-          word == ("(" + marker + ")")) {
+      const std::string renderedToken(line->wordText(i));
+      if (renderedToken == marker || renderedToken == ("{" + marker + "}") || renderedToken == ("[" + marker + "]") ||
+          renderedToken == ("(" + marker + ")")) {
         return true;
       }
     }
