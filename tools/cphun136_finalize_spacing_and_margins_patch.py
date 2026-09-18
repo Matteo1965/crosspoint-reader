@@ -121,7 +121,7 @@ int marginUiIndex(const uint8_t value) {
   int best = 0;
   int bestDistance = 1000;
   for (int i = 0; i < static_cast<int>(std::size(MARGIN_VALUES)); ++i) {
-    const int distance = std::abs(static_cast<int>(value) - static_cast<int>(MARGIN_VALUES[i]));
+    const int delta = static_cast<int>(value) - static_cast<int>(MARGIN_VALUES[i]);\n    const int distance = delta < 0 ? -delta : delta;
     if (distance < bestDistance) {
       bestDistance = distance;
       best = i;
