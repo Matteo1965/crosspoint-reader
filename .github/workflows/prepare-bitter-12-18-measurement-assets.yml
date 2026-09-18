@@ -81,13 +81,13 @@ jobs:
 
       - name: Commit normalized Bitter score table
         run: |
-          if git diff --quiet -- lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv; then
+          if [ -z "$(git status --porcelain -- lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv)" ]; then
             echo "Normalized Bitter score table unchanged"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv
+          git add -f lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv
           git commit -m "Add normalized Bitter 12-18 spacing score table"
           git push origin HEAD:agent/cphun-135r4b-edit-footnotes-keyboard
 
