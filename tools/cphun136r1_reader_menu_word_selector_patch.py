@@ -14,6 +14,17 @@ def write(path, s):
     Path(path).write_text(s, encoding="utf-8")
 
 # ---------------------------------------------------------------------------
+# Hungarian terminology consistency: Night mode -> Dark mode everywhere.
+# ---------------------------------------------------------------------------
+hu_path = "lib/I18n/translations/hungarian.yaml"
+hu = read(hu_path)
+old_night = 'STR_NIGHT_MODE: "Éjszakai mód"'
+new_night = 'STR_NIGHT_MODE: "Sötét mód"'
+if hu.count(old_night) != 1:
+    raise SystemExit(f"CPHUN-136R1: Hungarian STR_NIGHT_MODE matches={hu.count(old_night)}")
+write(hu_path, hu.replace(old_night, new_night, 1))
+
+# ---------------------------------------------------------------------------
 # Reader menu cleanup + dictionary row layout
 # ---------------------------------------------------------------------------
 menu_path = "src/activities/reader/EpubReaderMenuActivity.cpp"
@@ -262,4 +273,4 @@ for token in required:
     if token not in reader:
         raise SystemExit(f"CPHUN-136R1: direct selector dispatch missing: {token}")
 
-print("CPHUN-136R1 applied: Home removed, dictionary row compacted, 3-mode selector finalized, margin shortcuts use explicit scale")
+print("CPHUN-136R1 applied: terminology unified, Home removed, dictionary row compacted, 3-mode selector finalized, margin shortcuts use explicit scale")
