@@ -1,0 +1,65 @@
+name: Generate Bitter normalized spacing scores
+
+on:
+  push:
+    branches: [agent/cphun-135r4b-edit-footnotes-keyboard]
+    paths:
+      - '.github/workflows/generate-bitter-normalized-scores.yml'
+      - 'tools/generate_bitter_spacing_scores.py'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  generate-scores:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          fetch-depth: 0
+
+      - name: Download Bitter 12 14 16 18 metric artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Bitter-12-14-16-18-letterpair-metrics
+          path: bitter-metrics
+          repository: Matteo1965/crosspoint-reader
+          run-id: 35384631203
+          github-token: ${{ github.token }}
+
+      - name: Generate normalized score tables
+        run: |
+          python3 tools/generate_bitter_spacing_scores.py \
+            --metrics-dir bitter-metrics \
+            --legacy-patch tools/cphun119_fixedpoint_pair_tuning_patch.py \
+            --csv-out generated/BitterSpacingScores.csv \
+            --header-out generated/BitterSpacingScores.h
+
+      - name: Verify legacy 16 pt / 60 boundary
+        run: |
+          python3 - <<'PY'
+          import csv
+          from pathlib import Path
+          rows = list(csv.DictReader(Path("generated/BitterSpacingScores.csv").open()))
+          counts = {}
+          for size in (12, 14, 16, 18):
+              vals = [int(r[f"score{size}"]) for r in rows]
+              counts[size] = {t: sum(v >= t for v in vals) for t in (50,55,60,65,70,75)}
+          assert counts[16][60] == 655, counts
+          for size in (12,14,16,18):
+              print(size, counts[size])
+          PY
+
+      - name: Upload normalized score tables
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bitter-normalized-spacing-scores-12-14-16-18
+          path: generated/
+          if-no-files-found: error
+          retention-days: 90
