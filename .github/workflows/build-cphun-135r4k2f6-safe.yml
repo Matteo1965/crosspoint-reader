@@ -1,0 +1,48 @@
+name: Build CPHUN-135r4k2f6 SAFE
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/build-cphun-135r4k2f6-safe.yml'
+      - 'tools/build_cphun135r4k2f6_safe.sh'
+      - 'tools/cphun135r4k2f6_footnote_popup_ux_patch.py'
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply and verify CPHUN-135r4k2f6 SAFE
+        run: bash tools/build_cphun135r4k2f6_safe.sh
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-135r4k2f6 SAFE firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260918-135R4K2F6-SAFE-firmware
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
