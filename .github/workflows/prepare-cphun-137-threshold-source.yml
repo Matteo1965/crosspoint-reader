@@ -1,0 +1,39 @@
+name: Prepare CPHUN-137 threshold source
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/prepare-cphun-137-threshold-source.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          submodules: recursive
+          fetch-depth: 0
+      - name: Apply CPHUN-136R3 chain
+        run: bash tools/build_cphun136r3_safe.sh
+      - name: Upload final source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-136R3-final-source-snapshot
+          path: |
+            src/CrossPointSettings.h
+            src/CrossPointSettings.cpp
+            src/activities/settings/TextSettingsActivity.h
+            src/activities/settings/TextSettingsActivity.cpp
+            lib/Epub/Epub/ParsedText.h
+            lib/Epub/Epub/ParsedText.cpp
+            lib/Epub/Epub/LetterSpacingOptimization.h
+            lib/Epub/Epub/blocks/TextBlock.cpp
+          if-no-files-found: error
+          retention-days: 7
