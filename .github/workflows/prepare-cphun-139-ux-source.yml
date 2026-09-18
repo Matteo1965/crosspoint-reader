@@ -1,0 +1,37 @@
+name: Prepare CPHUN-139 UX source
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/prepare-cphun-139-ux-source.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          submodules: recursive
+          fetch-depth: 0
+      - name: Apply CPHUN-138 chain
+        run: bash tools/build_cphun138_exp.sh
+      - name: Upload final source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-138-final-source-snapshot
+          path: |
+            src/activities/reader/FootnotePopupActivity.cpp
+            src/activities/reader/FootnotePopupActivity.h
+            src/activities/reader/EpubReaderActivity.cpp
+            src/activities/reader/EpubReaderActivity.h
+            src/activities/reader/EpubReaderMenuActivity.cpp
+            src/activities/reader/EpubReaderMenuActivity.h
+          if-no-files-found: error
+          retention-days: 7
