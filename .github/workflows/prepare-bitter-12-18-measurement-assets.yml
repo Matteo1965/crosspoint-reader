@@ -50,11 +50,20 @@ jobs:
           done
           wc -l bitter-metrics/*.csv
 
+      - name: Generate normalized Bitter spacing scores
+        run: |
+          python tools/generate_bitter_spacing_scores.py \
+            --metrics-dir bitter-metrics \
+            --csv-out bitter-metrics/Bitter12-18_spacing_scores.csv \
+            --header-out bitter-metrics/BitterSpacingScores.generated.h
+
       - name: Upload Bitter metric tables
         uses: actions/upload-artifact@v4
         with:
           name: Bitter-12-14-16-18-letterpair-metrics
-          path: bitter-metrics/*.csv
+          path: |
+            bitter-metrics/*.csv
+            bitter-metrics/BitterSpacingScores.generated.h
           if-no-files-found: error
           retention-days: 30
 
