@@ -227,6 +227,11 @@ legacy_branch = '''  if (row.kind == RowKind::Export) {
 '''
 s = s.replace(legacy_branch, "")
 
+# Remove all remaining legacy Export-row guards now that RowKind::Export no longer exists.
+s = s.replace("  if (rows[index].kind == RowKind::Export) return;\n", "")
+s = s.replace(" && rows[nav.selected].kind != RowKind::Export", "")
+s = s.replace("  if (row.kind == RowKind::Export) return;\n", "")
+
 # Tolerate formatting variants of the same legacy branch.
 s = re.sub(
     r'  if \(row\.kind == RowKind::Export\) \{\n.*?\n  \}\n(?=  ProgressChangeResult result\{\};)',
