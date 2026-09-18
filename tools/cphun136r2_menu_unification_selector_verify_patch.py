@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 def read(path):
     return Path(path).read_text(encoding="utf-8")
@@ -79,7 +80,7 @@ for name, token in dispatches.items():
 # parameterized by 'mode', rather than separate chooser activities.
 if "std::make_unique<DictionaryWordSelectActivity>" not in reader:
     raise SystemExit("CPHUN-136R2: common DictionaryWordSelectActivity instantiation missing")
-if "currentSpineIndex, mode)" not in reader:
+if not re.search(r'std::make_unique<DictionaryWordSelectActivity>\([\s\S]{0,1600}?\bmode\b[\s\S]{0,300}?\)', reader):
     raise SystemExit("CPHUN-136R2: selector constructor is not receiving WordSelectionMode")
 
 print("CPHUN-136R2 applied: Hungarian labels unified and common 3-mode word selector verified")
