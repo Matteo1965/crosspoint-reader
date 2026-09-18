@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Includes corrected R4K2F8 TSV base.
+
 bash tools/build_cphun135r4k2f8_safe.sh
 python3 tools/cphun135r4k2f9_dark_mode_menu_patch.py
 
