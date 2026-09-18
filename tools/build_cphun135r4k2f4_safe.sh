@@ -5,6 +5,7 @@ set -euo pipefail
 # with bounded one-shot inflate for footnote targets.
 bash tools/build_cphun135r4k2f3_diag.sh
 python3 tools/cphun135r4k2f4_oneshot_footnote_patch.py
+python3 tools/cphun_logfiles_dir_patch.py
 
 python3 - <<'PY'
 from pathlib import Path
@@ -23,6 +24,7 @@ grep -F 'CPHUN-260918-135R4K2F4-SAFE' src/CPHUNBuildId.h
 grep -F 'MAX_FOOTNOTE_TARGET_BYTES' src/activities/reader/EpubReaderActivity.cpp
 grep -F 'EPUB_ZIP_ONESHOT_FAILED' src/activities/reader/EpubReaderActivity.cpp
 grep -F 'readItemContentsToBytes(targetHref' src/activities/reader/EpubReaderActivity.cpp
+grep -F 'constexpr const char* LOG_DIR = "/logfiles";' src/activities/reader/EpubReaderActivity.cpp
 
 python3 - <<'PY'
 from pathlib import Path
@@ -36,6 +38,8 @@ if 'readItemContentsToBytes(targetHref' not in reader:
     raise SystemExit('R4K2F4: one-shot footnote resolver missing')
 if 'MAX_FOOTNOTE_TARGET_BYTES = 96u * 1024u' not in reader:
     raise SystemExit('R4K2F4: footnote target size guard missing')
+if 'constexpr const char* LOG_DIR = "/logfiles";' not in reader:
+    raise SystemExit('R4K2F4: /logfiles diagnostic directory missing')
 if 'openFootnotesList(wholeBook, returnToMenu, sourceSpine)' not in reader:
     raise SystemExit('R4K2F4: stable source-spine fix missing')
 if '__cphun_pb_' in parser or 'pendingExplicitBreakAlias' in parser_h:
