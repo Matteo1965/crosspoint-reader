@@ -241,6 +241,65 @@ s = re.sub(
     flags=re.S,
 )
 
+# R132r5/r6 later converted the old TXT export into a Back-button export prompt.
+# Remove that legacy prompt path completely as part of the TSV migration.
+s = re.sub(
+    r'void EpubReaderBookmarksActivity::finishCancelled\(\) \{.*?\n\}\n\n'
+    r'void EpubReaderBookmarksActivity::showExportConfirmation\(\) \{.*?\n\}\n\n',
+    '',
+    s,
+    count=1,
+    flags=re.S,
+)
+
+s = re.sub(
+    r'bool EpubReaderBookmarksActivity::handleCustomInput\(\) \{.*?\n\}',
+    '''bool EpubReaderBookmarksActivity::handleCustomInput() {
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
+  if (confirmingDelete) { confirmingDelete = false; requestUpdate(); return true; }
+  return false;
+}''',
+    s,
+    count=1,
+    flags=re.S,
+)
+
+s = re.sub(
+    r'bool EpubReaderBookmarksActivity::handleButtons\(\) \{.*?\n\}',
+    '''bool EpubReaderBookmarksActivity::handleButtons() {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return true;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS && !rows.empty())
+      showDeleteConfirmation();
+    else
+      openSelectedItem();
+    return true;
+  }
+  return false;
+}''',
+    s,
+    count=1,
+    flags=re.S,
+)
+
 bc.write_text(s, encoding="utf-8")
 
-print("CPHUN-135r4k2f8 applied: unified /edits TSV export, legacy TXT export removed")
+# Header cleanup for the old TXT-export prompt state.
+s = bh.read_text(encoding="utf-8")
+for old in [
+    "  std::string exportStatus;\n",
+    "  bool exportMarkedWords();\n",
+    "  void finishCancelled();\n",
+    "  void showExportConfirmation();\n",
+    "  bool confirmingExport = false;\n",
+]:
+    s = s.replace(old, "")
+bh.write_text(s, encoding="utf-8")
+
+print("CPHUN-135r4k2f8 applied: unified /edits TSV export, legacy TXT export/prompt removed")
