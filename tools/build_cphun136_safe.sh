@@ -30,8 +30,13 @@ reader = Path('src/activities/reader/EpubReaderActivity.cpp').read_text(encoding
 # Letter-spacing optimization final semantics.
 if 'SETTINGS.letterSpacingOptimization = SETTINGS.letterSpacingOptimization ? 0 : 4;' not in ui:
     raise SystemExit('CPHUN-136: OFF/ON letter-spacing toggle missing')
-if '"25%", "50%", "75%", "100%"' in ui:
-    raise SystemExit('CPHUN-136: retired optimization percentage picker still present')
+opt_start = ui.find('case LayoutRow::LetterSpacingOptimization:')
+if opt_start < 0:
+    raise SystemExit('CPHUN-136: LetterSpacingOptimization UI case missing')
+opt_end = ui.find('case LayoutRow::', opt_start + 1)
+opt_block = ui[opt_start:opt_end if opt_end >= 0 else len(ui)]
+if '"25%"' in opt_block or '"50%"' in opt_block or '"75%"' in opt_block or '"100%"' in opt_block:
+    raise SystemExit('CPHUN-136: retired optimization percentage picker still present in optimization block')
 if '(doc["letterSpacingOptimization"] | (uint8_t)0) ? 4 : 0' not in settings_cpp:
     raise SystemExit('CPHUN-136: legacy optimization migration missing')
 if 'configured == ReaderAction::LetterSpacingOptimizationUp ? 4 : 0' not in reader:
