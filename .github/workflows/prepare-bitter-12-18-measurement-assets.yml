@@ -40,6 +40,24 @@ jobs:
         run: |
           find lib/EpdFont/scripts/output/Bitter -maxdepth 1 -type f -name '*.cpfont' -printf '%f %s bytes\n' | sort
 
+      - name: Measure Bitter 12 14 16 18 letter pairs
+        run: |
+          mkdir -p bitter-metrics
+          for size in 12 14 16 18; do
+            python tools/measure_cpfont_letterpairs.py \
+              "lib/EpdFont/scripts/output/Bitter/Bitter_${size}.cpfont" \
+              -o "bitter-metrics/Bitter${size}_letterpair_optical_gaps.csv"
+          done
+          wc -l bitter-metrics/*.csv
+
+      - name: Upload Bitter metric tables
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bitter-12-14-16-18-letterpair-metrics
+          path: bitter-metrics/*.csv
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload Bitter measurement assets
         uses: actions/upload-artifact@v4
         with:
