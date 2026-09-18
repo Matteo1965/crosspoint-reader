@@ -62,10 +62,10 @@ if old not in s:
 s = s.replace(old, new, 1)
 
 # Replace temp-file-based readNeedle with direct bounded-memory search.
-start = s.find('  bool tempReadFailed = false;\\n  auto readNeedle =')
+start = s.find('  bool tempReadFailed = false;\n  auto readNeedle =')
 if start < 0:
     raise SystemExit("R4K2F4: temp-file readNeedle start not found")
-end_marker = '\\n  std::vector<std::string> anchorNeedles;'
+end_marker = '\n  std::vector<std::string> anchorNeedles;'
 end = s.find(end_marker, start)
 if end < 0:
     raise SystemExit("R4K2F4: anchorNeedles marker not found")
