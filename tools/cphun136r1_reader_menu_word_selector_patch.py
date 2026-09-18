@@ -235,6 +235,22 @@ reader = reader.replace(raw_down_old, raw_down_new, 1)
 reader = reader.replace(raw_up_old, raw_up_new, 1)
 write(reader_path, reader)
 
+# Make the dictionary dispatch explicit too; previously it relied on the
+# default WordSelectionMode::Dictionary parameter.
+reader = read("src/activities/reader/EpubReaderActivity.cpp")
+dict_case_old = '''    case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
+      openDictionaryWordSelect();
+      break;
+    }'''
+dict_case_new = '''    case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
+      openDictionaryWordSelect(WordSelectionMode::Dictionary);
+      break;
+    }'''
+if reader.count(dict_case_old) != 1:
+    raise SystemExit(f"CPHUN-136R1: dictionary dispatch anchor matches={reader.count(dict_case_old)}")
+reader = reader.replace(dict_case_old, dict_case_new, 1)
+write("src/activities/reader/EpubReaderActivity.cpp", reader)
+
 # Reader dispatch must route all three direct menu items into the same selector.
 reader = read("src/activities/reader/EpubReaderActivity.cpp")
 required = [
