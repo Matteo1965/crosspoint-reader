@@ -11,6 +11,9 @@ on:
       - 'lib/EpdFont/scripts/fontconvert_sdcard.py'
       - 'lib/EpdFont/scripts/sd-fonts.yaml'
 
+permissions:
+  contents: write
+
 jobs:
   generate-bitter:
     runs-on: ubuntu-24.04
@@ -19,6 +22,7 @@ jobs:
         with:
           ref: agent/cphun-135r4b-edit-footnotes-keyboard
           submodules: recursive
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -52,10 +56,40 @@ jobs:
 
       - name: Generate normalized Bitter spacing scores
         run: |
+          mkdir -p tools/data
           python tools/generate_bitter_spacing_scores.py \
             --metrics-dir bitter-metrics \
-            --csv-out bitter-metrics/Bitter12-18_spacing_scores.csv \
-            --header-out bitter-metrics/BitterSpacingScores.generated.h
+            --csv-out tools/data/Bitter12-18_spacing_scores.csv \
+            --header-out lib/Epub/Epub/BitterSpacingScores.h
+          cp tools/data/Bitter12-18_spacing_scores.csv bitter-metrics/Bitter12-18_spacing_scores.csv
+          cp lib/Epub/Epub/BitterSpacingScores.h bitter-metrics/BitterSpacingScores.generated.h
+
+      - name: Verify calibrated thresholds
+        run: |
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          rows = list(csv.DictReader(Path("tools/data/Bitter12-18_spacing_scores.csv").open()))
+          counts = {}
+          for size in (12, 14, 16, 18):
+              vals = [int(r[f"score{size}"]) for r in rows]
+              counts[size] = {t: sum(v >= t for v in vals) for t in (50,55,60,65,70,75)}
+          assert counts[16][60] == 655, counts
+          for size in (12,14,16,18):
+              print(size, counts[size])
+          PY
+
+      - name: Commit normalized Bitter score table
+        run: |
+          if git diff --quiet -- lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv; then
+            echo "Normalized Bitter score table unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/Epub/Epub/BitterSpacingScores.h tools/data/Bitter12-18_spacing_scores.csv
+          git commit -m "Add normalized Bitter 12-18 spacing score table"
+          git push origin HEAD:agent/cphun-135r4b-edit-footnotes-keyboard
 
       - name: Upload Bitter metric tables
         uses: actions/upload-artifact@v4
