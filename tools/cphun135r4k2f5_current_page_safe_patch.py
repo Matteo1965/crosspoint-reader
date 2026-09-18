@@ -49,7 +49,7 @@ new_case = '''    case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
           HalFile logFile;
           if (Storage.openFileForWrite("ERS", path, logFile)) {
             std::string log = "CrossPoint Footnote Index Diagnostic\\nFormat version: 1\\n\\n";
-            log += "Firmware: " CPHUN_BUILD_ID "\\n";
+            log += std::string("Firmware: ") + CPHUN_BUILD_ID + "\\n";
             log += "Book: " + epub->getTitle() + "\\n";
             log += "EPUB: " + epub->getPath() + "\\n";
             log += "Source spine: " + std::to_string(currentSpineIndex) + "\\n";
