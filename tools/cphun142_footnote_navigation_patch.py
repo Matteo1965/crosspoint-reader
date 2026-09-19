@@ -20,16 +20,10 @@ struct FootnotePopupNavResult {
   int8_t delta = 0;  // -1 = previous, +1 = next
 };
 ''',1)
-old='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                 FilePathResult>;'''
+old="FootnoteResult, FilePathResult>"
 if s.count(old)!=1:
-    old='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                 FilePathResult>;'''
-if s.count(old)!=1:
-    raise SystemExit("CPHUN-142 ResultVariant anchor mismatch")
-new='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                 FootnotePopupNavResult, FilePathResult>;'''
-s=s.replace(old,new,1)
+    raise SystemExit(f"CPHUN-142 ResultVariant anchor mismatch: {s.count(old)}")
+s=s.replace(old, "FootnoteResult, FootnotePopupNavResult, FilePathResult", 1)
 write(p,s)
 
 # ---------------------------------------------------------------------------
