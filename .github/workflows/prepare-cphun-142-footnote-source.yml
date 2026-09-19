@@ -1,0 +1,32 @@
+name: Prepare CPHUN-142 footnote source
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/prepare-cphun-142-footnote-source.yml'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  prepare-source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          submodules: recursive
+      - run: bash tools/build_cphun141_exp.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-141-final-footnote-source
+          path: |
+            src/activities/ActivityResult.h
+            src/activities/reader/EpubReaderActivity.h
+            src/activities/reader/EpubReaderActivity.cpp
+            src/activities/reader/FootnotePopupActivity.h
+            src/activities/reader/FootnotePopupActivity.cpp
+          retention-days: 7
