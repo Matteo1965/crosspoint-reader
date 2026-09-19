@@ -23,7 +23,7 @@ struct FootnotePopupNavResult {
 old="FootnoteResult, FilePathResult>"
 if s.count(old)!=1:
     raise SystemExit(f"CPHUN-142 ResultVariant anchor mismatch: {s.count(old)}")
-s=s.replace(old, "FootnoteResult, FootnotePopupNavResult, FilePathResult", 1)
+s=s.replace(old, "FootnoteResult, FootnotePopupNavResult, FilePathResult>", 1)
 write(p,s)
 
 # ---------------------------------------------------------------------------
