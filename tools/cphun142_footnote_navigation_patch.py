@@ -22,10 +22,13 @@ struct FootnotePopupNavResult {
 ''',1)
 old='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
                  FilePathResult>;'''
-new='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                 FootnotePopupNavResult, FilePathResult>;'''
+if s.count(old)!=1:
+    old='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                 FilePathResult>;'''
 if s.count(old)!=1:
     raise SystemExit("CPHUN-142 ResultVariant anchor mismatch")
+new='''                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                 FootnotePopupNavResult, FilePathResult>;'''
 s=s.replace(old,new,1)
 write(p,s)
 
