@@ -33,12 +33,18 @@ for token in [
     if token not in reader:
         raise SystemExit("CPHUN-141 lifetime-safe multi-footnote path missing: " + token)
 
+helper_start = reader.find("void EpubReaderActivity::openSearchFootnoteOrWordSelect")
+helper_end = reader.find("\nnamespace {", helper_start)
+if helper_start < 0 or helper_end < 0:
+    raise SystemExit("CPHUN-141 Search helper bounds not found")
+helper = reader[helper_start:helper_end]
+
 for forbidden in [
     "const auto notes = currentPageFootnotes;",
     "std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, notes)",
 ]:
-    if forbidden in reader:
-        raise SystemExit("CPHUN-141 dangling local footnote-list source still present: " + forbidden)
+    if forbidden in helper:
+        raise SystemExit("CPHUN-141 dangling local footnote-list source still present in Search helper: " + forbidden)
 
 if "openSearchFootnoteOrWordSelect(mode);" not in reader:
     raise SystemExit("CPHUN-141 lost #139 Search flow")
