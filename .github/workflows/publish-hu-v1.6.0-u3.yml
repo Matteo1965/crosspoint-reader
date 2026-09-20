@@ -1,0 +1,128 @@
+name: Publish Hungarian Edition v1.6.0 Update 3
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/publish-hu-v1.6.0-u3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  RELEASE_TAG: hu-v1.6.0-u3
+  RELEASE_NAME: CrossPoint Hungarian Edition v1.6.0 Update 3
+  SOURCE_RUN_ID: "35522153929"
+  SOURCE_ARTIFACT: CPHUN-260920-146-EXP-Version-Page-FW
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+          fetch-depth: 0
+
+      - name: Download tested CPHUN-146 firmware artifact
+        run: |
+          mkdir -p release
+          gh run download "$SOURCE_RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name "$SOURCE_ARTIFACT" \
+            --dir release
+          test -f release/firmware.bin
+          sha256sum release/firmware.bin | tee release/SHA256SUMS.txt
+
+      - name: Create release notes
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## CrossPoint Hungarian Edition 1.6.0 Update 3
+
+          **A CrossPoint firmware magyar nyelvre optimalizált és jelentősen kibővített kiadása Xteink X4 e-könyv-olvasóhoz.**
+
+          Az **Update 3** a Hungarian Edition 1.6.0 eddigi fejlesztéseit egyesíti a legújabb olvasási, tipográfiai, szótár-, szerkesztési és lábjegyzet-kezelési fejlesztésekkel.
+
+          ### Főbb Hungarian Edition fejlesztések
+
+          - **Magyar felhasználói felület** és magyar billentyűzet.
+          - **Megjelölés és Szerkesztés mód**, külön üzemmódválasztó gombbal.
+          - A szerkesztések **TSV fájlba exportálhatók**.
+          - **Továbbfejlesztett lábjegyzet-kezelés**, közvetlen lábjegyzet-megnyitással.
+          - Több lábjegyzet közötti navigáció és görgethető lábjegyzetszöveg.
+          - **Magyar kiterjesztett elválasztás**, speciális magyar esetek támogatásával.
+          - EPUB-ba ágyazott **Soft Hyphen** feltételes elválasztások támogatása.
+          - **Javított magyar szótárkezelés és szótövezés** ragozott és toldalékolt szóalakokhoz.
+          - **Javított sorkizárt szedés** és finomított szóközkezelés.
+          - **Betűköz-korrekció** és font-/betűpár-alapú **betűköz-optimalizálás**, állítható optimalizációs küszöbbel.
+          - Szabályozható szóközök és automatikus párbeszédköz-javítás.
+          - **Sorköz 6 fokozatban**, opcionális extra bekezdésközzel.
+          - **Optikai margó (Hanging punctuation)**.
+          - Az alsó gombokhoz **1× / 2× / Hosszú nyomás** műveletek rendelhetők.
+          - **Automatikus fejezetgenerálás** tartalomjegyzék nélküli EPUB-okhoz.
+          - Kibővített, **5 oldalas CrossPoint verzióinformáció**, automatikus Hungarian Edition buildszámmal.
+
+          ### CrossPoint 1.6.0 funkciók
+
+          - **Éjszakai mód**
+          - **Átlátszó alvóképernyők**
+          - **Jobb StarDict szótárkezelés**
+          - **Stabilitási és hibajavítások**
+
+          ### Magyar szótár
+
+          A firmware **nem tartalmaz magyar szótáradatbázist**.  
+          A szótárfunkcióhoz kompatibilis StarDict szótár szükséges az SD-kártyán.
+
+          ### Elválasztási nyelvek
+
+          A Hungarian Edition **magyar és angol automatikus elválasztást** támogat.
+
+          ### Verzió
+
+          **CrossPoint:** 1.6.0  
+          **Kiadás:** Hungarian Edition v.146  
+          **Firmware build:** `CPHUN-260920-146-EXP`  
+          **GitHub Actions Run:** `35522153929`  
+          **Tag:** `hu-v1.6.0-u3`
+
+          ### Telepítés
+
+          A Release-hez mellékelt **`firmware.bin`** használható az Xteink X4 firmware frissítéséhez.
+
+          A **`SHA256SUMS.txt`** fájl a publikált firmware ellenőrzőösszegét tartalmazza.
+
+          > A kiadás az Xteink X4 készülékhez készült.
+          EOF
+
+      - name: Publish GitHub Release
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; replacing assets and notes."
+            gh release edit "$RELEASE_TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$RELEASE_NAME" \
+              --notes-file release-notes.md \
+              --latest
+            gh release upload "$RELEASE_TAG" release/firmware.bin release/SHA256SUMS.txt \
+              --repo "${{ github.repository }}" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              release/firmware.bin release/SHA256SUMS.txt \
+              --repo "${{ github.repository }}" \
+              --target "97e42d4047cbc2244c15e5914dc5567f6d13b8fa" \
+              --title "$RELEASE_NAME" \
+              --notes-file release-notes.md \
+              --latest
+          fi
+
+      - name: Verify published release
+        run: |
+          gh release view "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --json url,tagName,name,isDraft,isPrerelease,assets
