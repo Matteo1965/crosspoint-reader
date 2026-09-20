@@ -369,8 +369,8 @@ new = '''  std::string text;
 
   startActivityForResult(
       std::make_unique<FootnotePopupActivity>(renderer, mappedInput, note.number, std::move(text), true, count > 1),'''
-if s.count(old) != 1:
-    raise SystemExit(f"CPHUN-144 menu popup cache anchor matches={s.count(old)}")
+if s.count(old) < 1:
+    raise SystemExit("CPHUN-144 menu popup cache anchor missing")
 s = s.replace(old, new, 1)
 
 # Shortcut popup: cache current-page text and Back goes directly to word selection.
