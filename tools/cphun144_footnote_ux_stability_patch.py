@@ -298,17 +298,14 @@ s = read(p)
 if '#include <array>' not in s:
     s = s.replace('#include <atomic>\n', '#include <array>\n#include <atomic>\n', 1)
 
-old = '''  std::vector<FootnoteEntry> currentPageFootnotes;
-  struct SavedPosition {'''
+old = '''  std::vector<FootnoteEntry> currentPageFootnotes;'''
 new = '''  std::vector<FootnoteEntry> currentPageFootnotes;
   static constexpr size_t FOOTNOTE_TEXT_CACHE_SLOTS = 8;
   std::array<int, FOOTNOTE_TEXT_CACHE_SLOTS> footnoteTextCacheIndexes_ = {-1, -1, -1, -1, -1, -1, -1, -1};
   std::array<std::string, FOOTNOTE_TEXT_CACHE_SLOTS> footnoteTextCacheTexts_;
   int footnoteTextCacheSpine_ = -1;
   int footnoteTextCachePage_ = -1;
-  const std::string& getCachedCurrentPageFootnoteText(int sourceSpineIndex, int noteIndex);
-
-  struct SavedPosition {'''
+  const std::string& getCachedCurrentPageFootnoteText(int sourceSpineIndex, int noteIndex);'''
 if s.count(old) != 1:
     raise SystemExit("CPHUN-144 currentPageFootnotes header anchor mismatch")
 write(p, s.replace(old, new, 1))
