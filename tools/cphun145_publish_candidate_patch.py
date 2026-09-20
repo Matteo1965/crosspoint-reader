@@ -100,6 +100,8 @@ write(p, s)
 # ---------------------------------------------------------------------------
 p = "src/activities/settings/CrossPointVersionActivity.cpp"
 s = read(p)
+if "#include <algorithm>" not in s:
+    s = s.replace("#include <cstdio>\\n", "#include <algorithm>\\n#include <cstdio>\\n", 1)
 
 old = '''  const int bodyLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int linkLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
