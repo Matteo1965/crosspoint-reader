@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# CPHUN-144 workflow trigger
 bash tools/build_cphun143_exp.sh
 python3 tools/cphun144_footnote_ux_stability_patch.py
 
@@ -42,13 +43,11 @@ for token in [
     if token not in reader and token not in reader_h:
         raise SystemExit("CPHUN-144 reader missing: " + token)
 
-# Reader-menu path must still preserve the list-first flow.
 if "std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, notes)" not in reader:
     raise SystemExit("CPHUN-144 lost Reader-menu list-first path")
 if "openFootnotesList(wholeBook, returnToMenu, sourceSpineIndex);" not in reader:
     raise SystemExit("CPHUN-144 lost popup Back -> list on Reader-menu path")
 
-# #143 physical mapping must remain intact.
 for token in [
     "MappedInputManager::Button::Up",
     "MappedInputManager::Button::Down",
