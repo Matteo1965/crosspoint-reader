@@ -1,0 +1,34 @@
+name: Add Hungarian Edition OTA marker
+
+on:
+  push:
+    branches:
+      - agent/cphun-135r4b-edit-footnotes-keyboard
+    paths:
+      - '.github/workflows/add-cphun-ota-marker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  upload-marker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-135r4b-edit-footnotes-keyboard
+      - name: Upload OTA marker to public release
+        run: |
+          cp tools/cphun-ota-release-146.json cphun-build-146.json
+          gh release upload hu-v1.6.0-u3 cphun-build-146.json \
+            --repo "${{ github.repository }}" \
+            --clobber
+      - name: Verify marker
+        run: |
+          gh release view hu-v1.6.0-u3 \
+            --repo "${{ github.repository }}" \
+            --json assets
