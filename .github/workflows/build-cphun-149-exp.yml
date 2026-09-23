@@ -1,0 +1,71 @@
+name: Build CPHUN-149 EXP Spacing Hyphen OTA
+
+on:
+  push:
+    branches:
+      - agent/cphun-149-spacing-hyphen-ota
+    paths:
+      - '.github/workflows/build-cphun-149-exp.yml'
+      - 'tools/cphun149_spacing_hyphen_ota_patch.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-149-spacing-hyphen-ota
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply CPHUN-148 baseline with final OTA
+        run: bash tools/build_cphun148_exp.sh
+
+      - name: Apply CPHUN-149 and verify source
+        run: |
+          python3 tools/cphun149_spacing_hyphen_ota_patch.py
+          python3 -m py_compile tools/cphun149_spacing_hyphen_ota_patch.py
+          git diff --check
+          grep -q 'CPHUN-260923-149-EXP' src/CPHUNBuildId.h
+          grep -q '0, 550, 520, 480, 430, 370, 300, 220' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'checkedHungarianPrefixLength' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          ! grep -q 'CPHUN_OTA_TEST_BASELINE_BUILD' src/network/OtaUpdater.cpp
+
+      - name: C++ unit and Hungarian hyphenation regression tests
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-149 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload experimental firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260923-149-EXP-Spacing-Hyphen-OTA-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
