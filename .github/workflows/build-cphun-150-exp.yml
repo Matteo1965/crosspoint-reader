@@ -1,0 +1,86 @@
+name: Build CPHUN-150 EXP Render Consistency
+
+on:
+  push:
+    branches:
+      - agent/cphun-150-spacing-render-consistency
+    paths:
+      - '.github/workflows/build-cphun-150-exp.yml'
+      - 'tools/cphun150_spacing_measure_render_patch.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  verify-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-150-spacing-render-consistency
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply known-good CPHUN-148 and CPHUN-149
+        run: |
+          bash tools/build_cphun148_exp.sh
+          python3 tools/cphun149_spacing_hyphen_ota_patch.py
+
+      - name: Apply and verify CPHUN-150
+        run: |
+          python3 tools/cphun150_spacing_measure_render_patch.py
+          python3 -m py_compile tools/cphun150_spacing_measure_render_patch.py
+          git diff --check
+          python3 - <<'PY'
+          # Regression for cumulative-vs-pair fixed-point rounding:
+          # two 4.4 advances of 0.5px each are individually one pixel but
+          # previously summed to one pixel total.
+          to_px = lambda n: (n + 8) >> 4
+          assert to_px(8) + to_px(8) == 2
+          assert to_px(8 + 8) == 1
+          from pathlib import Path
+          header = Path("lib/Epub/Epub/LetterSpacingOptimization.h").read_text()
+          render = Path("lib/Epub/Epub/blocks/TextBlock.cpp").read_text()
+          gfx = Path("lib/GfxRenderer/GfxRenderer.cpp").read_text()
+          assert "consumeGuardedPair(prevPrev, prev, cp, next, style, acc)" in header
+          assert "consumeGuardedPair(" in render
+          assert "font.getKerning(previous, cp, style)" in gfx
+          assert "trailingShortHyphenInkShift" in render
+          print("CPHUN-150 invariant and fixed-point tests passed")
+          PY
+
+      - name: C++ unit tests including Hungarian hyphenation
+        run: |
+          cmake -S test -B build/test -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Compile CPHUN-150 experimental firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload experimental firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-150-EXP-Render-Consistency
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
