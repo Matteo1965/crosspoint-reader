@@ -231,9 +231,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
   softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
   letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
-  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 200 && letterSpacingLimitPercent != 250 &&
-      letterSpacingLimitPercent != 300 && letterSpacingLimitPercent != 350 && letterSpacingLimitPercent != 400 &&
-      letterSpacingLimitPercent != 450 && letterSpacingLimitPercent != 500) {
+  // Keep this whitelist in sync with the values in TextSettingsActivity.
+  // 10..70% are stored as 240, 220, 200, 180, 160, 140 and 120.
+  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 240 && letterSpacingLimitPercent != 220 &&
+      letterSpacingLimitPercent != 200 && letterSpacingLimitPercent != 180 && letterSpacingLimitPercent != 160 &&
+      letterSpacingLimitPercent != 140 && letterSpacingLimitPercent != 120) {
     letterSpacingLimitPercent = 0;
     needsResave = true;
   }
