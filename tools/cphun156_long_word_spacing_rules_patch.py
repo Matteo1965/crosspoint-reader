@@ -120,9 +120,15 @@ normal_extra='''      if (LongWordTracking::isConfig(letterSpacingPx)) {
                     LongWordTracking::unpackBudget(letterSpacingPx);
       }
 '''
-if s.count(normal_anchor)!=1:
-    raise SystemExit(f"CPHUN-156 normal decoration anchor count={s.count(normal_anchor)}")
-s=s.replace(normal_anchor,normal_extra+normal_anchor,1)
+# Limit this replacement to the decoration-width block: the same condition
+# also occurs in an unrelated rendering path.
+decoration_start=s.index("if (EpdFontFamily::hasTextDecoration(currentStyle))")
+decoration_end=s.index("// Do not decorate the synthetic em-space",decoration_start)
+decoration_block=s[decoration_start:decoration_end]
+if decoration_block.count(normal_anchor)!=1:
+    raise SystemExit(f"CPHUN-156 decoration-block anchor count={decoration_block.count(normal_anchor)}")
+decoration_block=decoration_block.replace(normal_anchor,normal_extra+normal_anchor,1)
+s=s[:decoration_start]+decoration_block+s[decoration_end:]
 visible_anchor='''        if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {'''
 visible_extra='''        if (LongWordTracking::isConfig(letterSpacingPx)) {
           lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir) +
