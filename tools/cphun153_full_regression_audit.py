@@ -25,7 +25,7 @@ assert values==[0,550,520,480,430,370,300,220],values
 # Compare the actual loader whitelist with the active UI values. The loader
 # uses std::find on validLetterSpacingThresholds, not an != expression chain.
 loader_match = re.search(
-    r'constexpr uint16_t validLetterSpacingThresholds\\[\\] = \\{([^}]+)\\};', settings
+    r'constexpr uint16_t validLetterSpacingThresholds\[\] = \{([^}]+)\};', settings
 )
 assert loader_match, "correction loader whitelist missing"
 loader_values = [int(v.strip()) for v in loader_match.group(1).split(",")]
