@@ -1,0 +1,45 @@
+name: Build CPHUN-152 settings persistence fix
+on:
+  push:
+    branches:
+      - agent/cphun-152-persistence-audit
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-test-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Audit settings persistence
+        run: python3 tools/cphun152_persistence_audit.py
+      - name: Configure unit tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build unit tests
+        run: cmake --build build/test
+      - name: Run unit tests
+        run: ctest --test-dir build/test --output-on-failure -j 2
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260924-152-settings-persistence-FW
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 30
