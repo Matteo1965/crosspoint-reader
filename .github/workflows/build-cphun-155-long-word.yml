@@ -1,0 +1,60 @@
+name: CPHUN-155 long-word optical justification + full regression
+on:
+  push:
+    branches: [agent/cphun-155-long-word-optical-justify]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  full-regression-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Restore every approved CPHUN feature through 148
+        run: bash tools/build_cphun148_exp.sh
+      - name: Apply CPHUN-149 spacing hyphenation and OTA
+        run: python3 tools/cphun149_spacing_hyphen_ota_patch.py
+      - name: Apply CPHUN-150 measuring and rendering consistency
+        run: python3 tools/cphun150_spacing_measure_render_patch.py
+      - name: Apply CPHUN-153 correct persistent spacing scale
+        run: python3 tools/cphun153_complete_persistence_fix.py
+      - name: Add azután / ezután exceptions and regression tests
+        run: python3 tools/cphun154_azutan_ezutan_exception_patch.py
+      - name: Apply CPHUN-155 bounded long-word justification
+        run: python3 tools/cphun155_long_word_justification_patch.py
+      - name: Audit complete feature inventory and persistence
+        run: |
+          python3 tools/cphun153_full_regression_audit.py
+          grep -q 'CPHUN-154: azután / ezután' lib/Epub/Epub/hyphenation/Hyphenator.cpp
+          grep -q 'CPHUN154AzutanEzutanCompoundExceptions' test/hyphenation_eval/HyphenationEvaluationTest.cpp
+          grep -q 'CPHUN-155: single long lexical word' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'spaceAtPair(eligibleIndex' lib/Epub/Epub/blocks/TextBlock.cpp
+          git diff --check
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build restored X4 firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Upload regression-verified firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260924-155-LONG-WORD-X4
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
