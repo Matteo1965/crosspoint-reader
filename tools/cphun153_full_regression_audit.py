@@ -40,8 +40,15 @@ expect("src/activities/reader/EpubReaderMenuActivity.cpp",
        "Szerkesztés", "Megjelölés", "Szótár", "EXPORT_EDITS")
 expect("src/activities/reader/DictionaryWordSelectActivity.cpp",
        "WordSelectionMode::Edit", "WordSelectionMode::Highlight")
+# CPHUN-135r4k2f8 intentionally removed the old "Megjelölt szavak mentése"
+# TXT row; the combined bookmarks/highlights list remains, and the new
+# "Szerkesztések exportálása" action writes one TSV under /edits.
 expect("src/activities/reader/EpubReaderBookmarksActivity.cpp",
-       "Megjelölt", "Highlight")
+       "RowKind::Highlight", "highlightStore")
+expect("src/activities/reader/EpubReaderMenuActivity.cpp",
+       "Szerkesztések exportálása", "EXPORT_EDITS")
+expect("src/activities/reader/EpubReaderActivity.cpp",
+       '"/edits"', ".tsv")
 expect("src/highlights/HighlightStore.cpp", "/.crosspoint/highlights/")
 expect("src/highlights/TextEditStore.cpp", "/.crosspoint/edits/")
 expect("src/highlights/HighlightRenderer.cpp", "HighlightRenderer::render")
