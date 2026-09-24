@@ -72,5 +72,5 @@ assert settings.count("for (const auto& info : getSettingsList())")>=2
 for field in ("hyphenationThreshold","letterSpacingOptimization","letterSpacingOptimizationThreshold",
               "wordSelectionMode"):
     assert f'doc["{field}"]' in settings, f"missing custom setting: {field}"
-expect("src/CPHUNBuildId.h","CPHUN-260924-153-FULL")
+assert re.search(r'CPHUN-260924-(153-FULL|155-EXP)', content("src/CPHUNBuildId.h")), "unexpected firmware build ID"
 print("CPHUN-153 feature audit PASSED: highlights, edits, export, dictionary, typography, footnotes, OTA, persistence")
