@@ -33,7 +33,7 @@ jobs:
           python3 tools/cphun153_full_regression_audit.py
           grep -q 'CPHUN-154: azután / ezután' lib/Epub/Epub/hyphenation/Hyphenator.cpp
           grep -q 'CPHUN154AzutanEzutanCompoundExceptions' test/hyphenation_eval/HyphenationEvaluationTest.cpp
-          grep -q 'CPHUN-155: single long lexical word' lib/Epub/Epub/ParsedText.cpp
+          grep -q 'CPHUN-156: single long lexical word' lib/Epub/Epub/ParsedText.cpp
           grep -q 'spaceAtPair(eligibleIndex' lib/Epub/Epub/blocks/TextBlock.cpp
           grep -q 'letterSpacingLimitPercent > 0 && lineWordCount == 1' lib/Epub/Epub/ParsedText.cpp
           grep -q 'letterSpacingOptimizationThresholdCode > 0' lib/Epub/Epub/ParsedText.cpp
