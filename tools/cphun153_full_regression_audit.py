@@ -22,8 +22,17 @@ m=re.search(r'constexpr uint16_t LETTER_SPACING_THRESHOLDS\[\] = \{([^}]+)\};',u
 assert m,"correction menu missing"
 values=[int(v.strip()) for v in m.group(1).split(",")]
 assert values==[0,550,520,480,430,370,300,220],values
-for val in values:
-    assert f"letterSpacingLimitPercent != {val}" in settings,f"loader rejects {val}"
+# Compare the actual loader whitelist with the active UI values. The loader
+# uses std::find on validLetterSpacingThresholds, not an != expression chain.
+loader_match = re.search(
+    r'constexpr uint16_t validLetterSpacingThresholds\\[\\] = \\{([^}]+)\\};', settings
+)
+assert loader_match, "correction loader whitelist missing"
+loader_values = [int(v.strip()) for v in loader_match.group(1).split(",")]
+assert loader_values == values, f"loader/UI mismatch: {loader_values} vs {values}"
+assert "std::find(std::begin(validLetterSpacingThresholds)" in settings, "loader validation disconnected"
+reader = content("src/activities/reader/EpubReaderActivity.cpp")
+assert "{0, 550, 520, 480, 430, 370, 300, 220}" in reader, "reader button scale mismatch"
 expect("src/activities/reader/EpubReaderActivity.cpp",
        "highlightStore", "textEditStore", "openDictionaryWordSelect",
        "FootnotePopupActivity", "EXPORT_EDITS")
