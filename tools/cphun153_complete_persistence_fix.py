@@ -23,10 +23,20 @@ if old not in s:
 s = s.replace(old, new, 1)
 settings.write_text(s, encoding="utf-8")
 
-# Reader button actions must use the same active scale.
-for v in values[1:]:
-    if str(v) not in reader:
-        raise SystemExit(f"CPHUN-153: reader missing threshold {v}")
+# Reader hardware actions must use exactly the same persisted scale as Text Settings.
+reader_path = Path("src/activities/reader/EpubReaderActivity.cpp")
+reader = reader_path.read_text(encoding="utf-8")
+reader = reader.replace(
+    "constexpr uint16_t values[] = {0, 360, 340, 320, 300, 280, 260, 240};",
+    "constexpr uint16_t values[] = {0, 550, 520, 480, 430, 370, 300, 220};"
+)
+reader = reader.replace(
+    "SETTINGS.letterSpacingLimitPercent = SETTINGS.letterSpacingLimitPercent == 360 ? 240 : 360;",
+    "SETTINGS.letterSpacingLimitPercent = SETTINGS.letterSpacingLimitPercent == 550 ? 220 : 550;"
+)
+reader_path.write_text(reader, encoding="utf-8")
+if "0, 550, 520, 480, 430, 370, 300, 220" not in reader:
+    raise SystemExit("CPHUN-153: reader correction scale could not be aligned")
 
 bid = Path("src/CPHUNBuildId.h")
 t = bid.read_text(encoding="utf-8")
