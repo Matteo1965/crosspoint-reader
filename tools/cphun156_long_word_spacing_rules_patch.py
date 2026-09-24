@@ -110,18 +110,28 @@ new='''  const bool distributed = LongWordTracking::isConfig(letterSpacingPx);
 if s.count(old)!=1: raise SystemExit(f"CPHUN-156 raster config anchor count={s.count(old)}")
 s=s.replace(old,new,1)
 
-# Underline/strike width must use the decoded long-word pixel budget, not the encoded byte.
-old='''        if (letterSpacingPx != 0 && visibleCps > 1) {
-          lineWidth += static_cast<int>(visibleCps - 1) * letterSpacingPx;
-        }'''
-new='''        if (LongWordTracking::isConfig(letterSpacingPx)) {
-          lineWidth += LongWordTracking::unpackBudget(letterSpacingPx);
-        } else if (letterSpacingPx != 0 && !LetterSpacingOptimization::isPackedConfig(letterSpacingPx) &&
-                   visibleCps > 1) {
-          lineWidth += static_cast<int>(visibleCps - 1) * letterSpacingPx;
-        }'''
-if s.count(old)!=1: raise SystemExit(f"CPHUN-156 decoration width anchor count={s.count(old)}")
-s=s.replace(old,new,1)
+# Underline/strike width: existing packed optimizer already has its own
+# width logic. For the new long-word code, override the measured width *after*
+# that logic, before superscript/subscript scaling; never multiply encoded 0xE*
+# byte as if it were a pixel value.
+normal_anchor='''      if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {'''
+normal_extra='''      if (LongWordTracking::isConfig(letterSpacingPx)) {
+        lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir) +
+                    LongWordTracking::unpackBudget(letterSpacingPx);
+      }
+'''
+if s.count(normal_anchor)!=1:
+    raise SystemExit(f"CPHUN-156 normal decoration anchor count={s.count(normal_anchor)}")
+s=s.replace(normal_anchor,normal_extra+normal_anchor,1)
+visible_anchor='''        if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {'''
+visible_extra='''        if (LongWordTracking::isConfig(letterSpacingPx)) {
+          lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir) +
+                      LongWordTracking::unpackBudget(letterSpacingPx);
+        }
+'''
+if s.count(visible_anchor)!=1:
+    raise SystemExit(f"CPHUN-156 visible decoration anchor count={s.count(visible_anchor)}")
+s=s.replace(visible_anchor,visible_extra+visible_anchor,1)
 p.write_text(s,encoding="utf-8")
 
 # 4) Regression tests: tag separation and exact distributed budget.
