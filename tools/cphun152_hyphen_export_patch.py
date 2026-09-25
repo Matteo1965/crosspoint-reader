@@ -75,6 +75,12 @@ once(parsed,
      '      sanitized += SHORT_HYPHEN_UTF8;',
      '      sanitized += short_hyphen::select(renderer, fontId, style).utf8;',
      "width measurement uses selected glyph")
+# The actual suffix must have the same width in optical-margin mode too.
+# Otherwise the fallback U+2010 may render past the measured line boundary.
+once(parsed,
+     'if (ParsedText::isShortHyphenEnabled() && !ParsedText::isOpticalMarginEnabled()) {',
+     'if (ParsedText::isShortHyphenEnabled()) {',
+     "identical glyph metrics with optical margin enabled")
 once(parsed,
      '      renderer.ensureSdCardFontReady(fontId, SHORT_HYPHEN_UTF8, styleMask);',
      '      renderer.ensureSdCardFontReady(fontId, "\\xE2\\x80\\x91\\xE2\\x80\\x90-", styleMask);',
