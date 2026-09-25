@@ -22,8 +22,8 @@ reader_cpp = "src/activities/reader/EpubReaderActivity.cpp"
 
 replace_once(
     menu_h,
-    "    DELETE_CACHE,\n    DICTIONARY,",
-    "    DELETE_CACHE,\n    REINDEX_CHAPTER,\n    DICTIONARY,",
+    "    DELETE_CACHE,",
+    "    DELETE_CACHE,\n    REINDEX_CHAPTER,",
     "new menu action",
 )
 replace_once(
