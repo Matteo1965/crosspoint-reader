@@ -111,6 +111,13 @@ replace_once(
     "clear the request only after successful complete build",
 )
 
+replace_once(
+    "src/CPHUNBuildId.h",
+    '#define CPHUN_BUILD_ID "CPHUN-260925-150-EXP"',
+    '#define CPHUN_BUILD_ID "CPHUN-260925-151-EXP"',
+    "build identifier",
+)
+
 # No change to SECTION_FILE_VERSION: full and partial section formats are
 # unchanged. Only current chapter's page cache is invalidated.
 print("CPHUN-151 chapter-only reindex patch applied")
