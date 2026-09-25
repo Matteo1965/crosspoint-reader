@@ -26,13 +26,24 @@ replace_once(
     "    DELETE_CACHE,\n    REINDEX_CHAPTER,",
     "new menu action",
 )
-replace_once(
-    menu_cpp,
-    "       {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE},\n",
-    '       {MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE},\n'
-    '       {MenuAction::REINDEX_CHAPTER, StrId::STR_DELETE_CACHE, "Fejezet újraindexelése"},\n',
-    "last item on Book tab",
+# Earlier menu patches add and rename rows, so match the action rather than
+# assuming the original DELETE_CACHE label and whitespace remain unchanged.
+import re
+menu_file = Path(menu_cpp)
+menu_source = menu_file.read_text(encoding="utf-8")
+menu_pattern = r"(?m)^([ \\t]*\\{MenuAction::DELETE_CACHE,[^\\n]*\\},\\n)"
+menu_matches = list(re.finditer(menu_pattern, menu_source))
+if len(menu_matches) != 1:
+    raise SystemExit(
+        f"CPHUN-151 last item on Book tab: expected one DELETE_CACHE row; got {len(menu_matches)}"
+    )
+match = menu_matches[0]
+menu_source = (
+    menu_source[:match.end()]
+    + '      {MenuAction::REINDEX_CHAPTER, StrId::STR_DELETE_CACHE, "Fejezet újraindexelése"},\\n'.replace("\\\\n", "\\n")
+    + menu_source[match.end():]
 )
+menu_file.write_text(menu_source, encoding="utf-8")
 replace_once(
     reader_h,
     "  bool buildPopupPending = false;\n",
