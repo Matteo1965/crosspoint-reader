@@ -144,6 +144,9 @@ s = s.replace('if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {\n'
               '      glyphX += trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph);',1)
 # CPHUN-149 also inserts a measured rendering branch with the same original
 # constants. Both paths are inside drawTrackedText, where shortGlyph is live.
+# Adapt every remaining call site to the new glyph-accepting function signature.
+s = s.replace("trailingShortHyphenInkShift(renderer, fontId, style)",
+              "trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph)")
 s = s.replace("SHORT_HYPHEN_BYTES", "strlen(shortGlyph.utf8)")
 s = s.replace("SHORT_HYPHEN_UTF8", "shortGlyph.utf8")
 if "SHORT_HYPHEN_UTF8" in s or "SHORT_HYPHEN_BYTES" in s:
