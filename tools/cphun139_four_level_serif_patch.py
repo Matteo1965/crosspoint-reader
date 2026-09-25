@@ -6,7 +6,7 @@ def change(path, old, new, description):
     text = p.read_text(encoding="utf-8")
     count = text.count(old)
     if count != 1:
-        raise SystemExit(f"CPHUN-139 {description}: expected 1 anchor, got {count}")
+        raise SystemExit(f"CPHUN-149 {description}: expected 1 anchor, got {count}")
     p.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 def regex_change(path, pattern, replacement, description):
@@ -14,7 +14,7 @@ def regex_change(path, pattern, replacement, description):
     text = p.read_text(encoding="utf-8")
     text, n = re.subn(pattern, replacement, text, count=1, flags=re.S)
     if n != 1:
-        raise SystemExit(f"CPHUN-139 {description}: expected 1 anchor, got {n}")
+        raise SystemExit(f"CPHUN-149 {description}: expected 1 anchor, got {n}")
     p.write_text(text, encoding="utf-8")
 
 ui = "src/activities/settings/TextSettingsActivity.cpp"
@@ -204,7 +204,7 @@ change(header,
        "Noto Serif measured profile plus score transfer")
 
 change("src/CPHUNBuildId.h",
-       '#define CPHUN_BUILD_ID "CPHUN-260918-138-EXP"',
-       '#define CPHUN_BUILD_ID "CPHUN-260925-139-EXP"',
+       '#define CPHUN_BUILD_ID "CPHUN-260921-148-EXP"',
+       '#define CPHUN_BUILD_ID "CPHUN-260925-149-EXP"',
        "new build identifier")
-print("CPHUN-139: four-level UI, score-unfiltered KI, Serif transfer applied.")
+print("CPHUN-149: four-level UI, score-unfiltered KI, Serif transfer applied.")
