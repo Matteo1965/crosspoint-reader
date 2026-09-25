@@ -1,0 +1,51 @@
+name: Build CPHUN-149 Four-Level Serif Experiment
+
+on:
+  push:
+    branches:
+      - agent/cphun-139-four-level-serif
+    paths:
+      - '.github/workflows/build-cphun-149-spacing.yml'
+      - 'tools/cphun139_four_level_serif_patch.py'
+      - 'tools/build_cphun149_spacing_exp.sh'
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-24.04
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/cphun-139-four-level-serif
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Apply and verify CPHUN-149 spacing experiment
+        run: bash tools/build_cphun149_spacing_exp.sh
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build CPHUN-149 firmware
+        run: .venv/bin/pio run -e gh_release
+
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+
+      - name: Upload CPHUN-149 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260925-149-EXP-firmware
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
