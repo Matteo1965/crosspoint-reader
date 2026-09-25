@@ -31,7 +31,7 @@ replace_once(
 import re
 menu_file = Path(menu_cpp)
 menu_source = menu_file.read_text(encoding="utf-8")
-menu_pattern = r"(?m)^([ \\t]*\\{MenuAction::DELETE_CACHE,[^\\n]*\\},\\n)"
+menu_pattern = r"(?m)^([ \t]*\{MenuAction::DELETE_CACHE,[^\n]*\},\n)"
 menu_matches = list(re.finditer(menu_pattern, menu_source))
 if len(menu_matches) != 1:
     raise SystemExit(
@@ -40,7 +40,7 @@ if len(menu_matches) != 1:
 match = menu_matches[0]
 menu_source = (
     menu_source[:match.end()]
-    + '      {MenuAction::REINDEX_CHAPTER, StrId::STR_DELETE_CACHE, "Fejezet újraindexelése"},\\n'.replace("\\\\n", "\\n")
+    + '      {MenuAction::REINDEX_CHAPTER, StrId::STR_DELETE_CACHE, "Fejezet újraindexelése"},\n'
     + menu_source[match.end():]
 )
 menu_file.write_text(menu_source, encoding="utf-8")
