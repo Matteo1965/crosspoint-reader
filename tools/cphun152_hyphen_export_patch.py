@@ -137,7 +137,7 @@ s = s.replace('if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {\n'
               'if (adjustTrailingHyphen && cp == shortGlyph.codepoint && *cursor == 0) {\n'
               '      glyphX += trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph);',1)
 if "SHORT_HYPHEN_UTF8" in s or "SHORT_HYPHEN_BYTES" in s:
-    raise SystemExit("CPHUN-152 TextBlock retains hardcoded synthetic hyphen")
+    raise SystemExit("CPHUN-152 residual hardcoded glyph: " + "\\n".join(\n        line for line in s.splitlines() if "SHORT_HYPHEN_" in line))
 a.write_text(s, encoding="utf-8")
 
 reader = "src/activities/reader/EpubReaderActivity.cpp"
