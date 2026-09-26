@@ -25,12 +25,25 @@ jobs:
         run: bash tools/build_cphun152_hyphen_export_exp.sh
       - name: Verify CPHUN-157 selection, chapter and low-power fixes
         run: |
-          grep -q 'rawInputActive' lib/hal/HalGPIO.cpp
-          grep -q 'pendingSelection.exchange' src/activities/UiListActivity.cpp
-          grep -q 'ChapterPosition EpubReaderActivity::chapterPosition' src/activities/reader/EpubReaderActivity.cpp
-          grep -q 'std::atomic<int> selector' src/activities/reader/EndOfBookOptions.h
-          grep -q 'Incomplete sleep-screen BMP' src/activities/boot_sleep/SleepActivity.cpp
-          test -z "$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          for spec in \
+            'lib/hal/HalGPIO.cpp|rawInputActive' \
+            'src/activities/UiListActivity.cpp|pendingSelection.exchange' \
+            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
+            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
+            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
+            file="${spec%%|*}"
+            token="${spec#*|}"
+            if ! grep -aFq "$token" "$file"; then
+              echo "::error file=$file::Missing CPHUN-157 source token: $token"
+              exit 1
+            fi
+            echo "Verified $file: $token"
+          done
+          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          if [ -n "$usb_diff" ]; then
+            echo "::error::Unexpected USB files changed: $usb_diff"
+            exit 1
+          fi
           sed -i 's/CPHUN-260925-152-EXP/CPHUN-260926-157-EXP/g' src/CPHUNBuildId.h
           git diff --check
       - name: Configure regression tests
