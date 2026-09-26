@@ -746,6 +746,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   const char* textCursor = renderedText;
   uint32_t cp;
   uint32_t prevCp = 0;
+  bool havePreviousGlyph = false;  // Advance even after a cross-font substitute.
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
@@ -781,7 +782,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     const auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
     // No cross-font kerning. If a substitute belongs to the primary font,
     // kerning uses the actual substituted codepoint, just as measurement does.
-    if (prevCp != 0) {
+    if (havePreviousGlyph) {
       const auto kernFP = (choice.fontId == resolvedFontId)
                               ? font.getKerning(prevCp, choice.cp, style) : 0;
       lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
@@ -836,6 +837,7 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       renderCharImpl<TextRotation::None>(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle);
     }
     prevCp = (glyphFont == &font) ? renderedCp : 0;
+    havePreviousGlyph = true;
   }
 }
 
@@ -2168,6 +2170,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
 
   uint32_t cp;
   uint32_t prevCp = 0;
+  bool havePreviousGlyph = false;  // Advance even after a cross-font substitute.
   int widthPx = 0;
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   const auto& font = fontIt->second;
@@ -2184,7 +2187,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     const auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
     // Exactly the same effective codepoint and font as drawText(). Kerning
     // across a font boundary is zero; native local substitutions still kern.
-    if (prevCp != 0) {
+    if (havePreviousGlyph) {
       const auto kernFP = (choice.fontId == resolvedFontId)
                               ? font.getKerning(prevCp, choice.cp, style) : 0;
       widthPx += fp4::toPixel(prevAdvanceFP + kernFP);
@@ -2199,6 +2202,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
     }
     prevCp = otherFont ? 0 : choice.cp;
+    havePreviousGlyph = true;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
   return widthPx;
