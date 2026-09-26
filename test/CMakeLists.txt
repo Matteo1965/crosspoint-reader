@@ -52,6 +52,7 @@ add_subdirectory(credential_integrity)
 add_subdirectory(xml_parser_utils)
 add_subdirectory(token_boundary)
 add_subdirectory(reader_button_gestures)
+add_subdirectory(koreader_xpath_resolver)
 add_subdirectory(css_parser)
 
 add_subdirectory(font_cache_manager)
