@@ -1,0 +1,61 @@
+name: CPHUN-157 four upstream fixes (USB unchanged)
+on:
+  push:
+    branches:
+      - agent/cphun-157-upstream-input-sleep-navigation
+    paths:
+      - '.github/workflows/build-cphun-157-four-fixes.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Restore last tested CPHUN-152 build scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild full tested CPHUN-152 feature chain
+        run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Verify CPHUN-157 selection, chapter and low-power fixes
+        run: |
+          grep -q 'rawInputActive' lib/hal/HalGPIO.cpp
+          grep -q 'pendingSelection.exchange' src/activities/UiListActivity.cpp
+          grep -q 'ChapterPosition EpubReaderActivity::chapterPosition' src/activities/reader/EpubReaderActivity.cpp
+          grep -q 'std::atomic<int> selector' src/activities/reader/EndOfBookOptions.h
+          grep -q 'Incomplete sleep-screen BMP' src/activities/boot_sleep/SleepActivity.cpp
+          test -z "$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          sed -i 's/CPHUN-260925-152-EXP/CPHUN-260926-157-EXP/g' src/CPHUNBuildId.h
+          git diff --check
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 Hungarian Edition firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+      - name: Upload CPHUN-157 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260926-157-FOUR-FIXES-X4
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
