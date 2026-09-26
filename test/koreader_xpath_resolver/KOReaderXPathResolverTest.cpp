@@ -140,3 +140,16 @@ TEST(KOReaderXPathResolver, KeepsParagraphOnlyResolutionUnchanged) {
   EXPECT_EQ(ChapterXPathResolver::findXPathForParagraph(epub, 0, 2),
             "/body/DocFragment[1]/body/div[1]/section[1]/p[2]");
 }
+
+// CPHUN-159: the EPUB parser suppresses HTML-hidden subtrees; precise sync
+// offsets must skip exactly the same text, including nested hidden elements.
+TEST(KOReaderXPathResolver, IgnoresHtmlHiddenAttributeInOffsetMapping) {
+  const auto epub = epubWith(
+      R"(<html><body><p>before<span hidden="hidden"><em>invisible</em></span>after</p></body></html>)");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 6),
+            "/body/DocFragment[1]/body/p[1]/text()[2].0");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 7),
+            "/body/DocFragment[1]/body/p[1]/text()[2].1");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForProgress(epub, 0, 1.0f),
+            "/body/DocFragment[1]/body/p[1]/text()[2].5");
+}
