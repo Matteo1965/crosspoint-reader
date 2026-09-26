@@ -4,6 +4,8 @@
 #include "components/UiAppHost.h"
 #include "util/ButtonNavigator.h"
 
+#include <atomic>
+
 // Base for activities hosting a single FreeInkUI list screen. UiAppHost owns
 // the app-hosting protocol (render target, FreeInkApp, uiReady handshake);
 // this base layers the list protocol on top: the touch-routing / swipe-scroll
@@ -81,6 +83,12 @@ class UiListActivity : public Activity, protected UiAppHost {
   // activeNav() in shared code; `nav` is the single-list default storage.
   freeink::ui::ListNav nav;
   ButtonNavigator buttonNavigator;
+
+  // Physical-button navigation is queued without waiting on the render lock.
+  // This keeps the input task polling while the e-ink display refreshes.
+  std::atomic<int> pendingSelection{-1};
+  std::atomic<int> inputSelection{0};
+  std::atomic<int> lastRenderedPageRows{1};
 
  private:
   static void screenTrampoline(UiScreen& screen, void* user);
