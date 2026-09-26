@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "FontCacheManager.h"
+#include "ReaderGlyphFallback.h"
 
 namespace {
 
@@ -178,6 +179,41 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   if (!result.second) {
     LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
   }
+}
+
+// CPHUN-163: exact coverage must be checked before getGlyph(): getGlyph()
+// returns U+FFFD on a miss and would hide the missing-character condition.
+GfxRenderer::ReaderGlyphChoice GfxRenderer::chooseReaderGlyph(
+    const int fontId, const uint32_t cp, const EpdFontFamily::Style style) const {
+  ReaderGlyphChoice original{fontId, cp, style, false};
+  if (!readerGlyphFallbackEnabled_) return original;
+  const auto primaryIt = fontMap.find(fontId);
+  if (primaryIt == fontMap.end()) return original;
+  const auto& primary = primaryIt->second;
+  if (primary.hasCodepoint(cp, style)) return original;
+
+  const uint32_t local = ReaderGlyphFallback::localSubstitute(
+      cp, [&primary, style](uint32_t candidate) { return primary.hasCodepoint(candidate, style); });
+  if (local != cp) return {fontId, local, style, true};
+
+  // Use the closest loaded Noto Serif size; match bold/italic if that face
+  // contains the missing codepoint. Preserve the primary line baseline.
+  const int primaryHeight = getLineHeight(fontId);
+  int bestId = 0;
+  int bestDelta = 0x7fffffff;
+  for (int candidateId : readerGlyphFallbackIds_) {
+    if (candidateId == 0 || candidateId == fontId) continue;
+    const auto candidateIt = fontMap.find(candidateId);
+    if (candidateIt == fontMap.end() || !candidateIt->second.hasCodepoint(cp, style)) continue;
+    int delta = getLineHeight(candidateId) - primaryHeight;
+    if (delta < 0) delta = -delta;
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestId = candidateId;
+    }
+  }
+  if (bestId) return {bestId, cp, style, true};
+  return original;  // No known glyph: retain existing U+FFFD fallback.
 }
 
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
@@ -615,6 +651,7 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     ensureSdGlyphsResident(resolvedFontId, renderedText, style, true);
   }
 
+  if (readerGlyphFallbackEnabled_) return getTextAdvanceX(fontId, text, style);
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
   return w;
@@ -664,6 +701,24 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     if (missingGlyphFallbackFontId_ != 0 &&
         (missingGlyphFallbackFontId_ != resolvedFontId || style != EpdFontFamily::REGULAR)) {
       fontCacheManager_->recordText(renderedText, missingGlyphFallbackFontId_, EpdFontFamily::REGULAR);
+    }
+    // The reader's fallback face needs prewarming before the draw pass, too.
+    // Record at most once per target font for this text.
+    if (readerGlyphFallbackEnabled_) {
+      int recorded[4] = {0, 0, 0, 0};
+      size_t used = 0;
+      const char* scan = renderedText;
+      uint32_t candidateCp;
+      while ((candidateCp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&scan)))) {
+        const auto choice = chooseReaderGlyph(resolvedFontId, candidateCp, style);
+        if (choice.fontId == resolvedFontId) continue;
+        bool already = false;
+        for (size_t i = 0; i < used; ++i) already = already || recorded[i] == choice.fontId;
+        if (!already && used < 4) {
+          recorded[used++] = choice.fontId;
+          fontCacheManager_->recordText(renderedText, choice.fontId, style);
+        }
+      }
     }
     return;
   }
@@ -723,26 +778,41 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     cp = font.applyLigatures(cp, textCursor, style);
 
-    // Differential rounding: snap (previous advance + current kern) as one unit so
-    // identical character pairs always produce the same pixel step regardless of
-    // where they fall on the line.
+    const auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
+    // No cross-font kerning. If a substitute belongs to the primary font,
+    // kerning uses the actual substituted codepoint, just as measurement does.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = (choice.fontId == resolvedFontId)
+                              ? font.getKerning(prevCp, choice.cp, style) : 0;
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
     }
 
     const EpdFontFamily* glyphFont = &font;
     EpdFontFamily::Style glyphStyle = style;
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    uint32_t renderedCp = choice.cp;
     bool usingMissingGlyphFallback = false;
-    if (!glyph && missingGlyphFallback != nullptr) {
+    const EpdGlyph* glyph = nullptr;
+    if (choice.fontId != resolvedFontId) {
+      const auto altIt = fontMap.find(choice.fontId);
+      if (altIt != fontMap.end()) {
+        glyphFont = &altIt->second;
+        glyph = glyphFont->getGlyph(renderedCp, style);
+        usingMissingGlyphFallback = glyph != nullptr;
+      }
+    } else if (font.hasCodepoint(renderedCp, style)) {
+      glyph = font.getGlyph(renderedCp, style);
+    }
+    if (!glyph && missingGlyphFallback != nullptr &&
+        missingGlyphFallback->hasCodepoint(cp, EpdFontFamily::REGULAR)) {
       glyph = missingGlyphFallback->getGlyph(cp, EpdFontFamily::REGULAR);
       if (glyph) {
         glyphFont = missingGlyphFallback;
         glyphStyle = EpdFontFamily::REGULAR;
+        renderedCp = cp;
         usingMissingGlyphFallback = true;
       }
     }
+    if (!glyph) glyph = font.getGlyph(cp, style);  // Existing replacement glyph.
 
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
@@ -761,11 +831,11 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
     if (isSupSub) {
       // yPos already carries the vertical offset applied by TextBlock::render().
-      renderCharScaled(*this, renderMode, *glyphFont, cp, lastBaseX, yPos, black, glyphStyle);
+      renderCharScaled(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle);
     } else {
-      renderCharImpl<TextRotation::None>(*this, renderMode, *glyphFont, cp, lastBaseX, yPos, black, glyphStyle);
+      renderCharImpl<TextRotation::None>(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle);
     }
-    prevCp = cp;
+    prevCp = (glyphFont == &font) ? renderedCp : 0;
   }
 }
 
