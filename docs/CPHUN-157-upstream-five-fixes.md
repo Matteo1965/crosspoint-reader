@@ -1,23 +1,33 @@
-# CPHUN-157 — First round: four upstream 1.6.5rc fixes
+# CPHUN-157 — Four selective 1.6.5rc repairs, USB excluded
 
-Base: agent/cphun-156-longword-settings-and-encoding (available development branch; not independently verified as the source of the last tested firmware).
-Upstream reference: https://github.com/crosspoint-reader/crosspoint-reader/releases/tag/1.6.5rc
+Source baseline: same tracked src/lib tree as the last successful CPHUN-152 branch. The CPHUN-157 workflow restores the successful CPHUN-152 patch/build chain from that branch before regression testing and firmware compilation. The developer branch was originally forked from CPHUN-156, which shares the tracked src/lib baseline but not the same build scripts.
 
-## Scope and status
+## Implementation
 
-- [ ] **DEFERRED — not in first round:** USB cable unplug / soft-disconnect. Previous USB problems during the 1.6.0 integration make this a separate later task. Leave the existing Hungarian Edition USB implementation unchanged during CPHUN-157.
-- [ ] Short button taps while idle. Upstream: src/main.cpp 50 ms idle polling in 10 ms slices plus HalGPIO::rawInputActive(). The HU HAL lacks this helper; verify the selected freeink-sdk InputManager exposes isPowerButtonPhysicallyPressed/readButtonAdc before using the upstream implementation.
-- [ ] Dropped presses during list repaint. Upstream UiListActivity uses requestSelection/requestScroll and new FreeInk viewport API. The HU branch uses RenderLock and an older viewport API; do not replace wholesale without adapting the UI SDK and preserving the HU row-height changes.
-- [ ] Sleep-screen grayscale and transparency. Upstream requires gray-plane capability checks; preserve HU sleep-overlay BMP/PNG handling and verify screen capabilities before porting.
-- [x] End-of-book menu selection race. Ported upstream atomic selector with relaxed load/store for input and render tasks into EndOfBookOptions.h/.cpp.
-- [ ] Chapter position display fix. Compare upstream EpubReaderActivity chapterPosition() and menu construction with HU reader page calculation, preserving reindexing and Hungarian hyphenation.
+- [x] Short button taps: 50 ms low-power delay now divided into 10 ms slices and interrupted on raw input contact (HalGPIO and main loop); requires real X4 debounce tests.
+- [x] List redraw input: normal single-list button navigation queues requested selections atomically while the renderer holds its render lock, including a post-refresh re-request if input arrives during display; tab-list navigation retains its prior implementation.
+- [x] X4-compatible sleep-overlay safety: the grayscale BMP rendering path now checks each rewind and avoids committing a partially prepared gray frame. The upstream *absolute-gray* rendering overhaul is intentionally not copied because the current Hungarian Edition renderer/SDK uses legacy X4 differential grayscale; fully porting that pipeline is a separate compatibility change. Transparent PNG/BGRA BMP support remains intact.
+- [x] Chapter position: cached page/total remain available while section is released, and progress is bounded; end-of-book menu selection uses atomic cross-task state.
+- [ ] CI and physical X4 verification (do not mark complete solely on source checks).
 
-## Test matrix before a release build
+## Explicit exclusions
 
-1. Rapid short Up/Down/Confirm/Back taps after prolonged idle and immediately after wake.
-2. Repeated taps while large list repaints, including RoundedRaff dense rows.
-3. Transparent PNG/BGRA BMP overlays over dark/light pages, grayscale and inverted cover.
-4. Chapter first/middle/last pages, in-progress reindex, end-of-book selection with rapid navigation and confirm.
-5. Ensure Hungarian extended hyphenation, letter spacing, SD card fonts and setting persistence are unchanged.
+- USB connection and forced disconnect are OUT OF SCOPE: no changes to existing Hungarian Edition USB handler or HalStorage.
+- No blanket merge of upstream 1.6.5rc or its FreeInk SDK dependency; protect Hungarian hyphenation and custom typography.
 
-Do not touch the USB implementation in this round. Do not merge to a tested release branch or mark the four in-scope areas complete until the remaining code ports and hardware tests pass.
+## Build
+
+Workflow: .github/workflows/build-cphun-157-four-fixes.yml
+Firmware name: CPHUN-260926-157-FOUR-FIXES-X4
+Pipeline: restore tested CPHUN-152 tools, apply all CPHUN-152 source patches, static checks, CMake regression tests, PlatformIO gh_release firmware compilation, upload artifact.
+
+## X4 regression checklist
+
+1. Rapid short Up/Down/Confirm/Back after long idle and immediately after wake.
+2. Repeated Up/Down/Confirm while a long file list is being repainted. Repeat with RoundedRaff dense rows and tabbed Settings lists.
+3. Transparent PNG / BGRA BMP sleep overlays over light and dark text, white and grayscale overlay pixels, corrupt-BMP fallback.
+4. First / middle / final chapter pages, during and after reindex, end-of-book navigation and rapid Confirm.
+5. Hungarian extended hyphenation, letter-spacing profiles, SD card fonts, existing successful export notification, chapter reindex and settings persistence.
+6. Existing USB behavior unchanged (smoke check only, no new USB-disconnect handling).
+
+This is a test build, not a tested release.
