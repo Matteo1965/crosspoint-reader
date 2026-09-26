@@ -41,9 +41,9 @@ jobs:
           grep -Fq '/*accumulate=*/false' lib/GfxRenderer/FontCacheManager.cpp
           grep -Fq 'fontCache->releaseSdFontCaches()' lib/Epub/Epub/Section.cpp
           echo "Verified CPHUN-160 and CPHUN-161 SD-font memory changes."
-      - name: Verify SD SPI batching remains enabled after legacy build patches
-        run: |
-          grep -Eq '^  -DUSE_SPI_ARRAY_TRANSFER=1
+      - name: Verify SPI batching is enabled
+        run: grep -Fq -- '-DUSE_SPI_ARRAY_TRANSFER=1' platformio.ini
+      - name: Verify exact KOReader positions skip hidden EPUB text
         run: |
           grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
           grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
@@ -98,125 +98,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CPHUN-260926-162-SPI-BATCH-X4
-          path: .pio/build/gh_release/firmware.bin
-          if-no-files-found: error
-          retention-days: 90
- platformio.ini
-          grep -Eq '^  -DUSE_UTF8_LONG_NAMES=1
-        run: |
-          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
-          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
-      - name: Verify CPHUN-157r1, CPHUN-159 and font-cache integration; tested buttons unchanged
-        run: |
-          for spec in \
-            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
-            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
-            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
-            file="${spec%%|*}"
-            token="${spec#*|}"
-            if ! grep -aFq "$token" "$file"; then
-              echo "::error file=$file::Missing CPHUN-157 source token: $token"
-              exit 1
-            fi
-            echo "Verified $file: $token"
-          done
-          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
-          if [ -n "$usb_diff" ]; then
-            echo "::error::Unexpected USB files changed: $usb_diff"
-            exit 1
-          fi
-          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
-            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
-              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
-              exit 1
-            fi
-            echo "Verified tested button handling unchanged: $path"
-          done
-          sed -i 's/CPHUN-260925-152-EXP/CPHUN-260926-161-SD-CACHE/g' src/CPHUNBuildId.h
-          git diff --check
-      - name: Configure regression tests
-        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build regression tests
-        run: cmake --build build/test -j2
-      - name: Run regression tests
-        run: ctest --test-dir build/test --output-on-failure -j2
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: latest
-          enable-cache: false
-      - name: Install PlatformIO
-        run: |
-          uv venv .venv
-          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
-          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
-      - name: Build X4 Hungarian Edition firmware
-        run: .venv/bin/pio run -e gh_release
-      - name: Report firmware size
-        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-161 firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: CPHUN-260926-161-SD-CACHE-X4
-          path: .pio/build/gh_release/firmware.bin
-          if-no-files-found: error
-          retention-days: 90
- platformio.ini
-          echo 'SdFat SPI batching and UTF-8 filenames enabled.'
-      - name: Verify exact KOReader positions skip hidden EPUB text
-        run: |
-          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
-          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
-      - name: Verify CPHUN-157r1, CPHUN-159 and font-cache integration; tested buttons unchanged
-        run: |
-          for spec in \
-            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
-            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
-            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
-            file="${spec%%|*}"
-            token="${spec#*|}"
-            if ! grep -aFq "$token" "$file"; then
-              echo "::error file=$file::Missing CPHUN-157 source token: $token"
-              exit 1
-            fi
-            echo "Verified $file: $token"
-          done
-          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
-          if [ -n "$usb_diff" ]; then
-            echo "::error::Unexpected USB files changed: $usb_diff"
-            exit 1
-          fi
-          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
-            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
-              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
-              exit 1
-            fi
-            echo "Verified tested button handling unchanged: $path"
-          done
-          sed -i 's/CPHUN-260925-152-EXP/CPHUN-260926-161-SD-CACHE/g' src/CPHUNBuildId.h
-          git diff --check
-      - name: Configure regression tests
-        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build regression tests
-        run: cmake --build build/test -j2
-      - name: Run regression tests
-        run: ctest --test-dir build/test --output-on-failure -j2
-      - uses: astral-sh/setup-uv@v6
-        with:
-          version: latest
-          enable-cache: false
-      - name: Install PlatformIO
-        run: |
-          uv venv .venv
-          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
-          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
-      - name: Build X4 Hungarian Edition firmware
-        run: .venv/bin/pio run -e gh_release
-      - name: Report firmware size
-        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-161 firmware
-        uses: actions/upload-artifact@v4
-        with:
-          name: CPHUN-260926-161-SD-CACHE-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
