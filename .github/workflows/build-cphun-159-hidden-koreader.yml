@@ -27,6 +27,10 @@ jobs:
         run: python3 .github/scripts/cphun157_restore_chapter.py
       - name: Verify CPHUN-159 integration and invalidate stale chapter cache
         run: python3 .github/scripts/cphun159_post_chain.py
+      - name: Verify exact KOReader positions skip hidden EPUB text
+        run: |
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
       - name: Verify CPHUN-157r1 and CPHUN-159; button source byte-for-byte equals tested CPHUN-152
         run: |
           for spec in \
