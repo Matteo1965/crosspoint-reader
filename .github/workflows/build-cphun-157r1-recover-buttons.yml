@@ -1,4 +1,4 @@
-name: CPHUN-157r1 recovery: restore tested hardware-button handling
+name: 'CPHUN-157r1 recovery: restore tested hardware-button handling'
 on:
   push:
     branches:
