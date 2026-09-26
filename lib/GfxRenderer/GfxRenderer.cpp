@@ -2140,12 +2140,22 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
       }
-      int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
-      if (advFP == 0 && !utf8IsCombiningMark(cp)) {
-        const EpdGlyph* glyph = font.getGlyph(cp, style);
-        advFP = glyph ? glyph->advanceX : 0;
+      const auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
+      int32_t advFP = 0;
+      if (choice.fontId == resolvedFontId) {
+        advFP = sdIt->second->getAdvance(choice.cp, styleIdx);
+        if (advFP == 0 && !utf8IsCombiningMark(cp)) {
+          const EpdGlyph* glyph = font.getGlyph(choice.cp, style);
+          advFP = glyph ? glyph->advanceX : 0;
+        }
+      } else {
+        const auto altIt = fontMap.find(choice.fontId);
+        if (altIt != fontMap.end()) {
+          const EpdGlyph* glyph = altIt->second.getGlyph(choice.cp, style);
+          advFP = glyph ? glyph->advanceX : 0;
+        }
       }
-      widthFP += isSupSub ? (advFP + 1) / 2 : advFP;
+      widthFP += (isSupSub && choice.fontId == resolvedFontId) ? (advFP + 1) / 2 : advFP;
     }
     return fp4::toPixel(widthFP);
   }
@@ -2171,19 +2181,24 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     cp = font.applyLigatures(cp, text, style);
 
-    // Differential rounding: snap (previous advance + current kern) together,
-    // matching drawText so measurement and rendering agree exactly.
+    const auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
+    // Exactly the same effective codepoint and font as drawText(). Kerning
+    // across a font boundary is zero; native local substitutions still kern.
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);         // snap 12.4 fixed-point to nearest pixel
+      const auto kernFP = (choice.fontId == resolvedFontId)
+                              ? font.getKerning(prevCp, choice.cp, style) : 0;
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);
     }
 
-    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    const auto altIt = fontMap.find(choice.fontId);
+    const bool otherFont = altIt != fontMap.end() && choice.fontId != resolvedFontId;
+    const EpdGlyph* glyph =
+        otherFont ? altIt->second.getGlyph(choice.cp, style) : font.getGlyph(choice.cp, style);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
-    if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+    if (!otherFont && (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
     }
-    prevCp = cp;
+    prevCp = otherFont ? 0 : choice.cp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
   return widthPx;
