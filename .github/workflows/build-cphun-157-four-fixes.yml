@@ -23,6 +23,8 @@ jobs:
           git checkout origin/agent/cphun-152-hyphen-export -- tools/
       - name: Rebuild full tested CPHUN-152 feature chain
         run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Restore chapter-position repair after legacy patch chain
+        run: python3 .github/scripts/cphun157_restore_chapter.py
       - name: Verify CPHUN-157 selection, chapter and low-power fixes
         run: |
           for spec in \
