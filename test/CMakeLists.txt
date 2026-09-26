@@ -58,3 +58,5 @@ add_subdirectory(css_parser)
 add_subdirectory(font_cache_manager)
 
 add_subdirectory(sd_card_font)
+
+add_subdirectory(cphun163_glyph_dictionary)
