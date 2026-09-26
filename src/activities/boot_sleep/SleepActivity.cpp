@@ -643,19 +643,26 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   if (hasGreyscale) {
-    bitmap.rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-    renderer.copyGrayscaleLsbBuffers();
-
-    bitmap.rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-renderer.copyGrayscaleMsbBuffers();
-
-    renderer.displayGrayBuffer();
+    // Do not send an incomplete gray plane after a damaged/truncated BMP.
+    // Keep the already displayed B/W base on a rewind failure.
+    bool planesReady = true;
+    for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+      if (bitmap.rewindToData() != BmpReaderError::Ok) {
+        planesReady = false;
+        break;
+      }
+      renderer.clearScreen(0x00);
+      renderer.setRenderMode(plane);
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+      if (plane == GfxRenderer::GRAYSCALE_LSB)
+        renderer.copyGrayscaleLsbBuffers();
+      else
+        renderer.copyGrayscaleMsbBuffers();
+    }
+    if (planesReady)
+      renderer.displayGrayBuffer();
+    else
+      LOG_ERR("SLP", "Incomplete sleep-screen BMP; retaining B/W base");
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
