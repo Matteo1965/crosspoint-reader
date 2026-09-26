@@ -1,0 +1,81 @@
+name: CPHUN-157r1 recovery: restore tested hardware-button handling
+on:
+  push:
+    branches:
+      - agent/cphun-157r1-recover-hardware-buttons
+    paths:
+      - '.github/workflows/build-cphun-157r1-recover-buttons.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Restore last tested CPHUN-152 build scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild full tested CPHUN-152 feature chain
+        run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Restore chapter-position repair after legacy patch chain
+        run: python3 .github/scripts/cphun157_restore_chapter.py
+      - name: Verify chapter and sleep fixes; button source byte-for-byte equals tested CPHUN-152
+        run: |
+          for spec in \
+            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
+            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
+            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
+            file="${spec%%|*}"
+            token="${spec#*|}"
+            if ! grep -aFq "$token" "$file"; then
+              echo "::error file=$file::Missing CPHUN-157 source token: $token"
+              exit 1
+            fi
+            echo "Verified $file: $token"
+          done
+          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          if [ -n "$usb_diff" ]; then
+            echo "::error::Unexpected USB files changed: $usb_diff"
+            exit 1
+          fi
+          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
+            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
+              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
+              exit 1
+            fi
+            echo "Verified tested button handling unchanged: $path"
+          done
+          sed -i 's/CPHUN-260925-152-EXP/CPHUN-260926-157R1-RECOVERY/g' src/CPHUNBuildId.h
+          git diff --check
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 Hungarian Edition firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+      - name: Upload CPHUN-157 firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260926-157R1-RECOVERY-X4
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
