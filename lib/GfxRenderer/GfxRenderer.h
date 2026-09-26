@@ -91,6 +91,18 @@ class GfxRenderer {
   // on the requested font for the first CPHUN-86 iteration.
   int missingGlyphFallbackFontId_ = 0;
 
+  // CPHUN-163: optional EPUB reader-only, per-codepoint fallback. Bound to the
+  // reader lifetime; dictionary's render-only fallback is independent.
+  bool readerGlyphFallbackEnabled_ = false;
+  int readerGlyphFallbackIds_[4] = {0, 0, 0, 0};  // Noto Serif 12/14/16/18 pt
+  struct ReaderGlyphChoice {
+    int fontId;
+    uint32_t cp;
+    EpdFontFamily::Style style;
+    bool substituted;
+  };
+  ReaderGlyphChoice chooseReaderGlyph(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
+
   // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
   // has a registered fallback, returns the fallback id; otherwise returns
   // fontId unchanged. The whole string is routed as a unit so each draw/measure
@@ -179,6 +191,16 @@ class GfxRenderer {
   // by DictionaryDefinitionActivity so normal reader/UI rendering is unchanged.
   void setMissingGlyphFallbackFont(int fontId) { missingGlyphFallbackFontId_ = fontId; }
   void clearMissingGlyphFallbackFont() { missingGlyphFallbackFontId_ = 0; }
+  // Set at EPUB reader entry, clear when the reader is destroyed. Never alters
+  // the EPUB's original Unicode codepoints or dictionary lookup inputs.
+  void setReaderGlyphFallbackFonts(int noto12, int noto14, int noto16, int noto18) {
+    readerGlyphFallbackIds_[0] = noto12;
+    readerGlyphFallbackIds_[1] = noto14;
+    readerGlyphFallbackIds_[2] = noto16;
+    readerGlyphFallbackIds_[3] = noto18;
+    readerGlyphFallbackEnabled_ = true;
+  }
+  void clearReaderGlyphFallbackFonts() { readerGlyphFallbackEnabled_ = false; }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
