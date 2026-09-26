@@ -95,7 +95,7 @@ jobs:
       - name: Upload CPHUN-161 firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260926-160-FONT-CACHE-X4
+          name: CPHUN-260926-161-SD-CACHE-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
