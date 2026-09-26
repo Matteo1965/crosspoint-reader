@@ -15,6 +15,16 @@
 #include <vector>
 
 namespace {
+// Match EPUB parser's HTML hidden-attribute suppression so sync positions
+// count only text that can appear on the reader.
+bool hasHiddenAttribute(const XML_Char** atts) {
+  if (!atts) return false;
+  for (int i = 0; atts[i]; i += 2) {
+    if (std::strcmp(atts[i], "hidden") == 0) return true;
+  }
+  return false;
+}
+
 std::string stripPrefix(const XML_Char* name) {
   if (!name) {
     return "";
@@ -129,9 +139,9 @@ class ParagraphTextCounter final : public Print {
   size_t totalVisibleChars() const { return visibleChars; }
 
  private:
-  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char**) {
+  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
     auto* self = static_cast<ParagraphTextCounter*>(userData);
-    self->onStartElement(name);
+    self->onStartElement(name, atts);
   }
 
   static void XMLCALL endElement(void* userData, const XML_Char* name) {
@@ -144,7 +154,7 @@ class ParagraphTextCounter final : public Print {
     self->onCharacterData(data, len);
   }
 
-  void onStartElement(const XML_Char* rawName) {
+  void onStartElement(const XML_Char* rawName, const XML_Char** atts) {
     const std::string name = stripPrefix(rawName);
 
     if (!insideBody) {
@@ -156,7 +166,7 @@ class ParagraphTextCounter final : public Print {
       return;
     }
 
-    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name) || hasHiddenAttribute(atts)) {
       nonVisibleDepth++;
     }
     if (name == "p") {
@@ -402,9 +412,9 @@ class XPathProgressResolver final : public Print {
   int spineIndex = 0;
 
  private:
-  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char**) {
+  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
     auto* self = static_cast<XPathProgressResolver*>(userData);
-    self->onStartElement(name);
+    self->onStartElement(name, atts);
   }
 
   static void XMLCALL endElement(void* userData, const XML_Char* name) {
@@ -437,7 +447,7 @@ class XPathProgressResolver final : public Print {
     self->onMarkupBoundary();
   }
 
-  void onStartElement(const XML_Char* rawName) {
+  void onStartElement(const XML_Char* rawName, const XML_Char** atts) {
     const std::string name = stripPrefix(rawName);
 
     if (!insideBody) {
@@ -456,7 +466,7 @@ class XPathProgressResolver final : public Print {
     textNodeIndexStack.push_back(0);
     pendingTextNode = true;
 
-    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name) || hasHiddenAttribute(atts)) {
       nonVisibleDepth++;
     }
 
