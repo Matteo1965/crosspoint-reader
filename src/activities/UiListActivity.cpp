@@ -18,6 +18,9 @@ UiListActivity::UiListActivity(const char* name, GfxRenderer& renderer, MappedIn
 void UiListActivity::onEnter() {
   Activity::onEnter();
   activeNav().reset();
+  inputSelection.store(activeNav().selected, std::memory_order_relaxed);
+  pendingSelection.store(-1, std::memory_order_relaxed);
+  lastRenderedPageRows.store(1, std::memory_order_relaxed);
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
   app.setScreen(&UiListActivity::screenTrampoline, this);
@@ -35,7 +38,9 @@ void UiListActivity::rowActionTrampoline(const fui::ActionEvent& event, void* us
 }
 
 void UiListActivity::onRowAction(const fui::ActionEvent& event) {
-  activeNav().selected = event.value;
+  // A touch selection is queued like a button selection, never written into
+  // ListNav while the render task may be rebuilding its viewport.
+  moveSelectionTo(event.value);
   if (event.longPress) {
     onRowLongPress(event.value);
     return;
@@ -49,7 +54,7 @@ bool UiListActivity::handleButtons() {
     return true;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const int selected = activeNav().selected;
+    const int selected = inputSelection.load(std::memory_order_relaxed);
     if (selected >= 0 && selected < listCount()) activateIndex(selected);
     return true;
   }
@@ -68,14 +73,10 @@ bool UiListActivity::routeListTouch() {
 }
 
 void UiListActivity::moveSelectionTo(const int index) {
-  {
-    // The render task reads nav mid-build (syncToProps, layout feedback); a
-    // press landing during a render would otherwise tear selection/viewport.
-    RenderLock lock(*this);
-    auto& n = activeNav();
-    n.selected = index;
-    n.follow(listCount());
-  }
+  // Do not block the main/input task on a slow e-ink render: the render task
+  // consumes this latest requested selection before rebuilding the screen.
+  inputSelection.store(index, std::memory_order_relaxed);
+  pendingSelection.store(index, std::memory_order_release);
   requestUpdate();
 }
 
@@ -106,17 +107,23 @@ void UiListActivity::loop() {
 
 void UiListActivity::navigateButtons() {
   const int count = listCount();
-  auto& n = activeNav();
-  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
-  buttonNavigator.onPreviousRelease(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
+  buttonNavigator.onNextRelease([this, count] {
+    moveSelectionTo(ButtonNavigator::nextIndex(inputSelection.load(std::memory_order_relaxed), count));
+  });
+  buttonNavigator.onPreviousRelease([this, count] {
+    moveSelectionTo(ButtonNavigator::previousIndex(inputSelection.load(std::memory_order_relaxed), count));
+  });
   // Page by the rows the last build actually drew (pageRows), not the
   // fixed-height visibleRows estimate: with wrapped labels the estimate
   // overshoots and rows between pages would never be shown.
-  buttonNavigator.onNextContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())); });
-  buttonNavigator.onPreviousContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())); });
+  buttonNavigator.onNextContinuous([this, count] {
+    moveSelectionTo(ButtonNavigator::nextPageIndex(inputSelection.load(std::memory_order_relaxed), count,
+                                                    lastRenderedPageRows.load(std::memory_order_relaxed)));
+  });
+  buttonNavigator.onPreviousContinuous([this, count] {
+    moveSelectionTo(ButtonNavigator::previousPageIndex(inputSelection.load(std::memory_order_relaxed), count,
+                                                        lastRenderedPageRows.load(std::memory_order_relaxed)));
+  });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
@@ -149,6 +156,15 @@ void UiListActivity::drawFooter() {
 }
 
 void UiListActivity::render(RenderLock&&) {
+  // RenderLock is owned by this task; all ListNav mutation stays here. A fast
+  // sequence of short key presses can advance inputSelection without waiting
+  // for any of the intermediate frames to finish drawing.
+  const int requested = pendingSelection.exchange(-1, std::memory_order_acquire);
+  if (requested >= 0) {
+    auto& nav = activeNav();
+    nav.selected = requested;
+    nav.follow(listCount());
+  }
   renderer.clearScreen();
   drawChrome();
   renderUi();
@@ -162,6 +178,9 @@ void UiListActivity::render(RenderLock&&) {
     drawChrome();
     renderUi();
   }
+  lastRenderedPageRows.store(activeNav().pageRows(), std::memory_order_relaxed);
   drawFooter();
   renderer.displayBuffer();
+  // A press received during displayBuffer() must still get its own frame.
+  if (pendingSelection.load(std::memory_order_acquire) >= 0) requestUpdate();
 }
