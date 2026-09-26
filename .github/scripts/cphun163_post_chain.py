@@ -41,7 +41,7 @@ marker = "// CPHUN-163: glyph fallback changes line widths and pagination."
 if marker not in source:
     if "// CPHUN-159: HTML hidden attribute changes section layout." not in source:
         raise SystemExit("CPHUN-159 cache invalidation was lost")
-    pattern = r"(?m)^(constexpr uint8_t SECTION_FILE_VERSION = )(\\d+)(;.*)$"
+    pattern = r"(?m)^(constexpr uint8_t SECTION_FILE_VERSION = )(\d+)(;.*)$"
     match = re.search(pattern, source)
     if not match:
         raise SystemExit("No section version found")
