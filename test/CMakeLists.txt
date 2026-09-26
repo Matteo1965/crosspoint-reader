@@ -56,3 +56,5 @@ add_subdirectory(koreader_xpath_resolver)
 add_subdirectory(css_parser)
 
 add_subdirectory(font_cache_manager)
+
+add_subdirectory(sd_card_font)
