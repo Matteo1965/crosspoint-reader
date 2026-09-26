@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "BookmarkEntry.h"
+#include "ChapterPosition.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
@@ -103,6 +104,8 @@ class EpubReaderActivity final : public ReaderActivity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  ChapterPosition chapterPosition() const;
+  int bookPercentFor(const ChapterPosition& position) const;
   void openReaderMenu(bool startOnBookTab = false);
   void openDictionaryWordSelect();
   bool launchKOReaderSync();
