@@ -145,6 +145,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
+  renderer.clearReaderGlyphFallbackFonts();
   ImageBlock::setExtractor(nullptr, nullptr);
 
   if (footnoteDepth > 0 && epub) {
@@ -165,6 +166,10 @@ EpubReaderActivity::~EpubReaderActivity() {
 }
 
 bool EpubReaderActivity::loadBook() {
+  // CPHUN-163: EPUB-only glyph coverage fallback. Nearest loaded Noto Serif
+  // size is chosen per missing codepoint; normal primary font stays intact.
+  renderer.setReaderGlyphFallbackFonts(NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID,
+                                       NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID);
   auto loadedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
   if (!loadedEpub) {
     LOG_ERR("ERS", "Failed to allocate EPUB object");
