@@ -1,0 +1,25 @@
+name: 'CPHUN-166 screenshot numbering validation'
+on:
+  push:
+    branches: [agent/cphun-166-optical-diagnostics-screenshot-sequence]
+    paths: ['.github/workflows/cphun166-screenshot-check.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  screenshot-unit-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 1}
+      - name: Confirm wall-clock-free sequential naming
+        run: |
+          grep -Fq 'kScreenshotCounter' src/util/ScreenshotUtil.cpp
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'ScreenshotSequence::next' src/util/ScreenshotUtil.cpp
+          ! grep -Fq 'const unsigned long ts = millis()' src/util/ScreenshotUtil.cpp
+      - name: Compile native screenshot numbering regression
+        run: |
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test --target CPHUN166ScreenshotSequenceTest -j2
+          ctest --test-dir build/test --output-on-failure -R '^CPHUN166ScreenshotSequence.'
