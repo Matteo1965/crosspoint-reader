@@ -43,3 +43,16 @@ TEST(CPHUN164OpticalSpacing, PureTrackingAndOptimizerCodesRemainDistinct) {
   EXPECT_FALSE(OpticalLineCorrection::isStandaloneWordSpacing(1));
   EXPECT_FALSE(OpticalLineCorrection::isStandaloneWordSpacing(32));
 }
+
+TEST(CPHUN164OpticalSpacing, GuardAAAndBothSidesOfABAWhenOptimizationIsOn) {
+  using OpticalLineCorrection::isProtectedPair;
+  // meddig: dd; tovább: bb.
+  EXPECT_TRUE(isProtectedPair('e', 'd', 'd', 'i'));
+  EXPECT_TRUE(isProtectedPair('á', 'b', 'b', 0));
+  // kerestek: both e-r and r-e in the e-r-e triplet are protected.
+  EXPECT_TRUE(isProtectedPair('k', 'e', 'r', 'e'));
+  EXPECT_TRUE(isProtectedPair('e', 'r', 'e', 's'));
+  // The remaining ordinary word pairs must stay eligible.
+  EXPECT_FALSE(isProtectedPair(0, 'k', 'e', 'r'));
+  EXPECT_FALSE(isProtectedPair('r', 'e', 's', 't'));
+}
