@@ -7,7 +7,7 @@
 // leftover pixels to gaps spread across a line, including the rightmost gap;
 // it is deterministic in both layout and rasterization.
 namespace OpticalLineCorrection {
-constexpr int MAX_INK_CORRECTION_PX = 5;
+constexpr int MAX_INK_CORRECTION_PX = 8;
 
 // GfxRenderer's BW pass draws ANY non-white source pixel (2-bit raw
 // coverage 1, 2 or 3). Treat light-gray edge pixels as painted ink too;
