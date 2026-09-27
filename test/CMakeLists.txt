@@ -64,3 +64,7 @@ add_subdirectory(cphun163_glyph_dictionary)
 add_subdirectory(cphun164_optical_spacing)
 
 add_subdirectory(cphun166_screenshot_sequence)
+
+# CPHUN-170: host validation of the SD library index and Hungarian title folding
+add_subdirectory(library_format)
+add_subdirectory(library_text)
