@@ -100,7 +100,7 @@ jobs:
           grep -Fq 'CPHUN-164: guarded optimization' lib/Epub/Epub/Section.cpp
       - name: Verify CPHUN-165 render-time source and cache wiring
         run: |
-          grep -Fq 'SECTION_FILE_VERSION = 67' lib/Epub/Epub/Section.cpp
+          grep -Fq 'SECTION_FILE_VERSION = 68' lib/Epub/Epub/Section.cpp
           grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
           grep -Fq 'OpticalLineCorrection::missingFinalInkPixels' lib/Epub/Epub/blocks/TextBlock.cpp
           grep -Fq 'const uint8_t* opticalGapsArr' lib/Epub/Epub/blocks/TextBlock.h
