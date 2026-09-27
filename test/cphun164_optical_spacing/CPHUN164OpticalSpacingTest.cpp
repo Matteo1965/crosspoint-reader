@@ -48,7 +48,7 @@ TEST(CPHUN164OpticalSpacing, GuardAAAndBothSidesOfABAWhenOptimizationIsOn) {
   using OpticalLineCorrection::isProtectedPair;
   // meddig: dd; tovább: bb.
   EXPECT_TRUE(isProtectedPair('e', 'd', 'd', 'i'));
-  EXPECT_TRUE(isProtectedPair('á', 'b', 'b', 0));
+  EXPECT_TRUE(isProtectedPair(0x00E1u, 'b', 'b', 0));
   // kerestek: both e-r and r-e in the e-r-e triplet are protected.
   EXPECT_TRUE(isProtectedPair('k', 'e', 'r', 'e'));
   EXPECT_TRUE(isProtectedPair('e', 'r', 'e', 's'));
