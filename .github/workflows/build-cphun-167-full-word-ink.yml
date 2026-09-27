@@ -1,0 +1,154 @@
+name: 'CPHUN-167: full-word ink correction and diagnostics'
+on:
+  push:
+    branches:
+      - agent/cphun-167-full-word-rendered-ink
+    paths:
+      - '.github/workflows/build-cphun-167-full-word-ink.yml'
+      - '.github/scripts/cphun165_layout_patch.py'
+      - '.github/scripts/cphun165_render_patch.py'
+      - 'test/cphun164_optical_spacing/**'
+      - '.github/scripts/cphun166_diagnostic_patch.py'
+      - 'src/util/ScreenshotUtil.cpp'
+      - '.github/scripts/cphun167_word_ink_patch.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Restore last tested CPHUN-152 build scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild full tested CPHUN-152 feature chain
+        run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Restore chapter-position repair after legacy patch chain
+        run: python3 .github/scripts/cphun157_restore_chapter.py
+      - name: Verify CPHUN-159 integration and invalidate stale chapter cache
+        run: python3 .github/scripts/cphun159_post_chain.py
+      - name: Reapply CPHUN-160 font cache fix after HU patch chain
+        run: python3 .github/scripts/cphun160_post_chain.py
+      - name: Verify CPHUN-163 dictionary and reader glyph fallback
+        run: python3 .github/scripts/cphun163_post_chain.py
+      - name: Apply CPHUN-164 guarded tracking and five-pixel optical alignment
+        run: python3 .github/scripts/cphun164_post_chain.py
+      - name: Apply CPHUN-165 render-time optical closure and new section cache
+        run: |
+          python3 .github/scripts/cphun165_layout_patch.py
+          python3 .github/scripts/cphun165_render_patch.py
+      - name: Apply CPHUN-166 optical line diagnostics and numbered screenshot sidecars
+        run: python3 .github/scripts/cphun166_diagnostic_patch.py
+      - name: Apply CPHUN-167 actual full-word ink correction and new cache version
+        run: python3 .github/scripts/cphun167_word_ink_patch.py
+      - name: Verify CPHUN-167 native pair-kerning and screenshot diagnostics
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 67' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'effectiveFinalInkInset' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'OpticalLineDiagnostics::record' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+      - name: Confirm CPHUN-166 telemetry and screenshot sequence
+        run: |
+          grep -Fq 'OpticalLineDiagnostics::record' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'OpticalLineDiagnostics::oldestAt' src/util/ScreenshotUtil.cpp
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+          ! grep -Fq 'const unsigned long ts = millis()' src/util/ScreenshotUtil.cpp
+      - name: Verify CPHUN-161 font-cache patch survives legacy regeneration
+        run: |
+          git diff --exit-code HEAD -- \
+            lib/EpdFont/SdCardFont.cpp \
+            lib/EpdFont/SdCardFont.h \
+            lib/GfxRenderer/FontCacheManager.cpp \
+            lib/GfxRenderer/FontCacheManager.h
+          grep -Fq 'makeUniqueNoThrow<CpGlyphMapping[]>' lib/EpdFont/SdCardFont.cpp
+          grep -Fq 'bool accumulate' lib/EpdFont/SdCardFont.h
+          grep -Fq '/*accumulate=*/false' lib/GfxRenderer/FontCacheManager.cpp
+          grep -Fq 'fontCache->releaseSdFontCaches()' lib/Epub/Epub/Section.cpp
+          echo "Verified CPHUN-160 and CPHUN-161 SD-font memory changes."
+      - name: Verify new regression suite is registered
+        run: |
+          grep -Fq 'add_subdirectory(cphun163_glyph_dictionary)' test/CMakeLists.txt
+          grep -Fq 'ReaderGlyphFallback::localSubstitute' lib/GfxRenderer/GfxRenderer.cpp
+          grep -Fq 'DictWordEdges::trim(word)' src/util/Dictionary.cpp
+      - name: Verify CPHUN-164 integration and cache invalidation
+        run: |
+          grep -Fq 'add_subdirectory(cphun164_optical_spacing)' test/CMakeLists.txt
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+          grep -Fq 'OpticalLineCorrection::extraForSlot' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'CPHUN-164: guarded optimization' lib/Epub/Epub/Section.cpp
+      - name: Verify CPHUN-165 render-time source and cache wiring
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 67' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'OpticalLineCorrection::missingFinalInkPixels' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'const uint8_t* opticalGapsArr' lib/Epub/Epub/blocks/TextBlock.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+      - name: Verify SPI batching is enabled
+        run: grep -Fq -- '-DUSE_SPI_ARRAY_TRANSFER=1' platformio.ini
+      - name: Verify exact KOReader positions skip hidden EPUB text
+        run: |
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
+      - name: Verify CPHUN-157r1, CPHUN-159 and font-cache integration; tested buttons unchanged
+        run: |
+          for spec in \
+            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
+            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
+            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
+            file="${spec%%|*}"
+            token="${spec#*|}"
+            if ! grep -aFq "$token" "$file"; then
+              echo "::error file=$file::Missing CPHUN-157 source token: $token"
+              exit 1
+            fi
+            echo "Verified $file: $token"
+          done
+          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          if [ -n "$usb_diff" ]; then
+            echo "::error::Unexpected USB files changed: $usb_diff"
+            exit 1
+          fi
+          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
+            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
+              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
+              exit 1
+            fi
+            echo "Verified tested button handling unchanged: $path"
+          done
+          sed -i 's/CPHUN-260925-152-EXP/CPHUN-260927-167-WORD-INK/g' src/CPHUNBuildId.h
+          git diff --check
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Build X4 Hungarian Edition firmware
+        run: .venv/bin/pio run -e gh_release
+      - name: Report firmware size
+        run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
+      - name: Upload CPHUN-167 full-word ink firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-260927-167-WORD-INK-X4
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 90
