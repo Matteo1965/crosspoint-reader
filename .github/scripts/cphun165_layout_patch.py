@@ -48,12 +48,10 @@ new="""  // CPHUN-165: final-glyph bitmap inspection must happen AFTER glyph pre
 
 """
 s=s[:start]+new+s[end:]
-import re
-s,n=re.subn(r"(\\s*)std::move\\(lineRubyTexts\\), letterSpacingPx\\);",
-            lambda m: m.group(1) + "std::move(lineRubyTexts), letterSpacingPx,\\n" +
-                 m.group(1) + "opticalTargetRightX, opticalLastWordAdvance, opticalGaps);",
-            s, count=1)
-assert n==1, "single-block constructor anchor"
+needle="std::move(lineRubyTexts), letterSpacingPx);"
+assert s.count(needle)==1, "single-block constructor anchor"
+s=s.replace(needle, "std::move(lineRubyTexts), letterSpacingPx,\\n"
+                    "                                              opticalTargetRightX, opticalLastWordAdvance, opticalGaps);",1)
 p.write_text(s,encoding="utf-8")
 p=Path("lib/Epub/Epub/Section.cpp")
 s=p.read_text(encoding="utf-8")
