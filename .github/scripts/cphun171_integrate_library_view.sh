@@ -34,18 +34,28 @@ paths=(
 )
 # Per-file application identifies the exact incompatibility if a Hungarian
 # customization needs a manual port; it never silently discards a failed hunk.
+conflicts=0
 for file in "${paths[@]}"; do
   echo "::group::Library View upstream merge: $file"
   git diff --binary "$BASE" "$HEAD" -- "$file" >/tmp/library-one.patch
   if test -s /tmp/library-one.patch; then
     if ! git apply --reject --whitespace=nowarn /tmp/library-one.patch; then
-      echo "::error file=$file::Upstream patch has incompatible CPHUN hunks; rejected portions:"
-      find . -name '*.rej' -print -exec cat {} \\;
-      exit 1
+      echo "::warning file=$file::Incompatible upstream hunks; retaining the Hungarian source and collecting rejects"
+      conflicts=$((conflicts + 1))
     fi
   fi
   echo "::endgroup::"
 done
+if (( conflicts > 0 )); then
+  echo "::error::Upstream UI integration: $conflicts files need targeted Hungarian merges"
+  find lib src -name '*.rej' -print | sort
+  for reject in $(find lib src -name '*.rej' | sort); do
+    echo "::group::REJECTED $reject"
+    cat "$reject"
+    echo "::endgroup::"
+  done
+  exit 1
+fi
 # PR #3366 depends on FreeInk UI's newer list navigation, tab indicators,
 # touch long-press and GfxRendererTarget constructor.
 git -C freeink-sdk fetch --no-tags origin f4e2469415044bf766faeca06075f95aecd532f6
