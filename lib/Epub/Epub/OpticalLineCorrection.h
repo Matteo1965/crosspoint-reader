@@ -17,6 +17,20 @@ inline int extraForSlot(int slot, int slotCount, int extra) {
   return base + ((slot + 1) * remainder / slotCount - slot * remainder / slotCount);
 }
 
+// Protect native AA pairs and both gaps of ABA only when the optimized
+// letter-spacing path is enabled. Case-sensitive Unicode codepoint equality
+// matches the calibrated optimizer. The other spacing path never calls this.
+inline bool isLatinLetter(uint32_t cp) {
+  return (cp >= 'A' && cp <= 'Z') || (cp >= 'a' && cp <= 'z') ||
+         (cp >= 0x00C0u && cp <= 0x024Fu);
+}
+inline bool isProtectedPair(uint32_t beforeLeft, uint32_t left,
+                            uint32_t right, uint32_t afterRight) {
+  return !isLatinLetter(left) || !isLatinLetter(right) || left == right ||
+         (beforeLeft != 0 && beforeLeft == right) ||
+         (afterRight != 0 && left == afterRight);
+}
+
 // The normal letter-spacing mode uses 0 or 1. Values 2..31 are reserved for
 // single-word, no-space lines and encode a total budget of 1..30 pixels.
 // Packed font-score optimization (threshold code 1..7) uses values >= 32.
