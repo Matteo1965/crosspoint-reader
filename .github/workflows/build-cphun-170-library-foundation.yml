@@ -11,6 +11,8 @@ on:
       - 'test/library_format/**'
       - 'test/library_text/**'
       - '.github/scripts/cphun171_integrate_library_view.sh'
+      - '.github/scripts/cphun171_resolve_library_hunks.py'
+      - '.github/scripts/cphun171_manual_port.py'
       - 'src/activities/library/**'
   workflow_dispatch:
 permissions:
@@ -217,7 +219,7 @@ jobs:
       - name: Upload CPHUN-171 integrated library UI and Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260927-170-LIB-FOUNDATION-X4
+          name: CPHUN-260927-171-LIB-VIEW-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
