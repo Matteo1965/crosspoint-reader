@@ -306,6 +306,13 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  if (button == Button::Confirm && suppressConfirmRelease) {
+    if (mapButton(button, &HalGPIO::wasReleased)) {
+      suppressConfirmRelease = false;
+      confirmLongPressLatched = false;
+    }
+    return false;
+  }
   if (button == Button::Back && wasBackGesture()) return true;
 #if FREEINK_CAP_TOUCH
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
@@ -314,6 +321,20 @@ bool MappedInputManager::wasReleased(const Button button) const {
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
+
+bool MappedInputManager::wasLongPressed(const Button button, const unsigned long thresholdMs) const {
+  // Confirm is the Library's only long-hold action. Other buttons retain
+  // their existing press/release semantics and the original input pipeline.
+  if (button != Button::Confirm) return false;
+  if (!isPressed(button)) {
+    if (!suppressConfirmRelease) confirmLongPressLatched = false;
+    return false;
+  }
+  if (confirmLongPressLatched || getHeldTime() < thresholdMs) return false;
+  confirmLongPressLatched = true;
+  suppressConfirmRelease = true;
+  return true;
+}
 
 bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
