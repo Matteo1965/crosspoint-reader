@@ -38,8 +38,9 @@ for file in "${paths[@]}"; do
   echo "::group::Library View upstream merge: $file"
   git diff --binary "$BASE" "$HEAD" -- "$file" >/tmp/library-one.patch
   if test -s /tmp/library-one.patch; then
-    if ! git apply --3way --index /tmp/library-one.patch; then
-      echo "::error file=$file::Library View upstream merge requires a manual CPHUN port"
+    if ! git apply --reject --whitespace=nowarn /tmp/library-one.patch; then
+      echo "::error file=$file::Upstream patch has incompatible CPHUN hunks; rejected portions:"
+      find . -name '*.rej' -print -exec cat {} \\;
       exit 1
     fi
   fi
