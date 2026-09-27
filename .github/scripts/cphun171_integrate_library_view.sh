@@ -47,14 +47,13 @@ for file in "${paths[@]}"; do
   echo "::endgroup::"
 done
 if (( conflicts > 0 )); then
-  echo "::error::Upstream UI integration: $conflicts files need targeted Hungarian merges"
-  find lib src -name '*.rej' -print | sort
-  for reject in $(find lib src -name '*.rej' | sort); do
-    echo "::group::REJECTED $reject"
-    cat "$reject"
-    echo "::endgroup::"
-  done
-  exit 1
+  echo "Resolving $conflicts known upstream/Hungarian file conflicts"
+  python3 .github/scripts/cphun171_resolve_library_conflicts.py
+  if find lib src -name '*.rej' | grep -q .; then
+    echo "::error::Unresolved upstream patches remain"
+    find lib src -name '*.rej'
+    exit 1
+  fi
 fi
 # PR #3366 depends on FreeInk UI's newer list navigation, tab indicators,
 # touch long-press and GfxRendererTarget constructor.
