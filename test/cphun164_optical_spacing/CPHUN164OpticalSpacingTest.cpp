@@ -56,3 +56,14 @@ TEST(CPHUN164OpticalSpacing, GuardAAAndBothSidesOfABAWhenOptimizationIsOn) {
   EXPECT_FALSE(isProtectedPair(0, 'k', 'e', 'r'));
   EXPECT_FALSE(isProtectedPair('r', 'e', 's', 't'));
 }
+
+TEST(CPHUN164OpticalSpacing, RenderTimeInkClosureAfterBitmapLoad) {
+  // Logical advance reaches the right edge, but visible ink ends 3px short.
+  EXPECT_EQ(3, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, 3));
+  EXPECT_EQ(5, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, 8));
+  EXPECT_EQ(2, OpticalLineCorrection::missingFinalInkPixels(460, 381, 77, 0));
+  EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(460, 381, 81, 0));
+  // Missing/unloaded bitmap is NOT treated as an exact visual alignment.
+  EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, -1));
+  EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(0, 381, 79, 3));
+}
