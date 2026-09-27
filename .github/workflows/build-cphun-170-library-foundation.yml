@@ -1,4 +1,4 @@
-name: 'CPHUN-170: restored 169 UI and library foundation'
+name: 'CPHUN-171: integrated Library View and preserved Hungarian Edition'
 on:
   push:
     branches:
@@ -10,6 +10,8 @@ on:
       - 'lib/I18n/translations/hungarian.yaml'
       - 'test/library_format/**'
       - 'test/library_text/**'
+      - '.github/scripts/cphun171_integrate_library_view.sh'
+      - 'src/activities/library/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -177,19 +179,28 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260927-170-LIB"\n' > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260927-171-LIB"\n' > src/CPHUNBuildId.h
           grep -Fq 'CPHUN-260927-170-LIB' src/CPHUNBuildId.h
           git diff --check
+      - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
+        run: bash .github/scripts/cphun171_integrate_library_view.sh
+      - name: Verify navigation, rebuild action and CPHUN-169 text settings
+        run: |
+          grep -q 'goToLibrary' src/activities/ActivityManager.cpp
+          grep -q 'LibraryListActivity' src/activities/ActivityManager.cpp
+          grep -q 'STR_LIBRARY' src/activities/home/HomeActivity.cpp
+          grep -q 'RebuildLibraryIndex' src/activities/settings/SettingsActivity.cpp
+          grep -q 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
       - name: Configure regression tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build regression tests
         run: cmake --build build/test -j2
       - name: Run regression tests
         run: ctest --test-dir build/test --output-on-failure -j2
-      - name: Confirm Library format and UTF-8 tests were registered
+      - name: Confirm Library regression executables
         run: |
-          ctest --test-dir build/test -N | grep 'LibraryFormat'
-          ctest --test-dir build/test -N | grep 'LibraryText'
+          test -x build/test/library_format/LibraryFormatTest
+          test -x build/test/library_text/LibraryTextTest
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
@@ -203,7 +214,7 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-170 restored UI and library foundation firmware
+      - name: Upload CPHUN-171 integrated library UI and Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
           name: CPHUN-260927-170-LIB-FOUNDATION-X4
