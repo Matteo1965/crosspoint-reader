@@ -105,5 +105,10 @@ for reject in rejects:
     a, f = resolve(reject)
     total_applied += a
     total_failed += f
-print(f"Library View merge: {total_applied} exact edits applied, {total_failed} ambiguous edits left across {len(rejects)} rejected files.")
-sys.exit(0 if total_failed == 0 else 1)
+print(f"Library View merge: {total_applied} exact edits applied, {total_failed} custom HU edits to port across {len(rejects)} rejected files.")
+if total_failed:
+    from cphun171_manual_port import port_all
+    port_all()
+if any(list(root.rglob("*.rej")) for root in ROOTS):
+    raise SystemExit("CPHUN-171: unresolved patch files")
+print("CPHUN-171: all upstream Library View patches integrated")
