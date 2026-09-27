@@ -9,6 +9,12 @@
 namespace OpticalLineCorrection {
 constexpr int MAX_INK_CORRECTION_PX = 5;
 
+// GfxRenderer's BW pass draws ANY non-white source pixel (2-bit raw
+// coverage 1, 2 or 3). Treat light-gray edge pixels as painted ink too;
+// using only raw >= 2 makes the visible line overrun the normal margin.
+inline bool countsAsPaintedInk(uint8_t rawCoverage) { return rawCoverage != 0; }
+
+
 // slot is zero based. The allocation always sums to extra for slotCount > 0.
 inline int extraForSlot(int slot, int slotCount, int extra) {
   if (slotCount <= 0 || slot < 0 || slot >= slotCount || extra <= 0) return 0;
