@@ -67,3 +67,20 @@ TEST(CPHUN164OpticalSpacing, RenderTimeInkClosureAfterBitmapLoad) {
   EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, -1));
   EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(0, 381, 79, 3));
 }
+
+TEST(CPHUN164OpticalSpacing, MeasuredAdvanceVersusPaintedKerningRegression) {
+  // CPHUN-166 measured 137px for "kerestek" but the last glyph's own
+  // bitmap reported no inset. Three pixels of cross-pair kerning are enough
+  // to make the *full* rendered word three pixels shorter.
+  EXPECT_EQ(3, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 134, 0));
+  EXPECT_EQ(3, OpticalLineCorrection::missingFinalInkPixels(
+      446, 309, 137, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 134, 0)));
+  EXPECT_EQ(5, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 128, 5) > 5
+                   ? OpticalLineCorrection::missingFinalInkPixels(446, 309, 137,
+                       OpticalLineCorrection::effectiveFinalInkInset(137, 137, 128, 5))
+                   : 0);
+  // Already reserved tracking shifts glyphs and must not count as missing ink.
+  EXPECT_EQ(3, OpticalLineCorrection::effectiveFinalInkInset(140, 137, 134, 0));
+  EXPECT_EQ(0, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 137, 0));
+  EXPECT_EQ(-1, OpticalLineCorrection::effectiveFinalInkInset(137, 138, 134, 0));
+}
