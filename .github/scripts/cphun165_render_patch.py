@@ -97,9 +97,9 @@ int renderedFinalInkInset(const GfxRenderer& renderer, const int fontId,
     off += wc;
   }
   textArr = reinterpret_cast<const char*>(base + off);""","bind gap flags")
-    old="""                      std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)
+    old="""std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)
     : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), letterSpacingPx(letterSpacingPx) {"""
-    new="""                      std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx,
+    new="""std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx,
                       const uint16_t opticalTargetRightX,
                       const uint16_t opticalLastWordAdvance,
                       const std::vector<uint8_t>& opticalGaps)
