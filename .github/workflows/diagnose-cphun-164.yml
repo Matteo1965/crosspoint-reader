@@ -1,0 +1,47 @@
+name: 'CPHUN-164 diagnostic generated layout source'
+on:
+  push:
+    branches:
+      - agent/cphun-164-optical-line-end-aa-aba
+    paths:
+      - '.github/workflows/diagnose-cphun-164.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Restore tested patch scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild legacy and retained fixes
+        run: |
+          bash tools/build_cphun152_hyphen_export_exp.sh
+          python3 .github/scripts/cphun157_restore_chapter.py
+          python3 .github/scripts/cphun159_post_chain.py
+          python3 .github/scripts/cphun160_post_chain.py
+          python3 .github/scripts/cphun163_post_chain.py
+      - name: Inspect generated typography source
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          paths = [
+            ("lib/Epub/Epub/ParsedText.cpp",[(1590,1730),(1850,1980)]),
+            ("lib/Epub/Epub/blocks/TextBlock.cpp",[(1,210)]),
+            ("lib/Epub/Epub/LetterSpacingOptimization.h",[(125,285)]),
+            ("lib/Epub/Epub/ParsedText.h",[(60,150)]),
+          ]
+          for path,ranges in paths:
+            lines=Path(path).read_text().splitlines()
+            print(f"===== {path} ({len(lines)} lines) =====")
+            for start,end in ranges:
+              print(f"--- {start}-{end} ---")
+              for n in range(start,min(end,len(lines))+1):
+                print(f"{n}: {lines[n-1]}")
+          PY
