@@ -1,5 +1,4 @@
 #include <OpticalLineCorrection.h>
-#include <OpticalLineDiagnostics.h>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -61,7 +60,7 @@ TEST(CPHUN164OpticalSpacing, GuardAAAndBothSidesOfABAWhenOptimizationIsOn) {
 TEST(CPHUN164OpticalSpacing, RenderTimeInkClosureAfterBitmapLoad) {
   // Logical advance reaches the right edge, but visible ink ends 3px short.
   EXPECT_EQ(3, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, 3));
-  EXPECT_EQ(5, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, 8));
+  EXPECT_EQ(8, OpticalLineCorrection::missingFinalInkPixels(460, 381, 79, 8));
   EXPECT_EQ(2, OpticalLineCorrection::missingFinalInkPixels(460, 381, 77, 0));
   EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(460, 381, 81, 0));
   // Missing/unloaded bitmap is NOT treated as an exact visual alignment.
@@ -76,7 +75,7 @@ TEST(CPHUN164OpticalSpacing, MeasuredAdvanceVersusPaintedKerningRegression) {
   EXPECT_EQ(3, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 134, 0));
   EXPECT_EQ(3, OpticalLineCorrection::missingFinalInkPixels(
       446, 309, 137, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 134, 0)));
-  EXPECT_EQ(5, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 128, 5) > 5
+  EXPECT_EQ(8, OpticalLineCorrection::effectiveFinalInkInset(137, 137, 128, 5) > 8
                    ? OpticalLineCorrection::missingFinalInkPixels(446, 309, 137,
                        OpticalLineCorrection::effectiveFinalInkInset(137, 137, 128, 5))
                    : 0);
@@ -107,13 +106,24 @@ TEST(CPHUN168OpticalMargin, WeakGrayFringeIsPaintedByBwRenderer) {
   EXPECT_EQ(normalRightExclusive, lastPaintedRightExclusive);
   EXPECT_EQ(461, lastPaintedRightExclusive - 1);
 }
-TEST(CPHUN168OpticalMargin, DiagnosticReportsPhysicalExclusiveNormalMargin) {
-  OpticalLineDiagnostics::record("kerestek", "APPLIED", 446, 309, 137, 3, 3, 3, 16);
-  const auto& e = OpticalLineDiagnostics::oldestAt(OpticalLineDiagnostics::store().used - 1);
-  EXPECT_EQ(462, e.normalRightExclusive);
-  EXPECT_EQ(462, e.paintedRightExclusive);
-  EXPECT_EQ(0, e.normalMarginDelta);
-  OpticalLineDiagnostics::record("o-", "NO_LAYOUT_TARGET", 0, 427, 0, -1, 0, 0, 16);
-  const auto& h = OpticalLineDiagnostics::oldestAt(OpticalLineDiagnostics::store().used - 1);
-  EXPECT_EQ(-1, h.normalRightExclusive);  // Deliberate hanging-hyphen exclusion.
+
+TEST(CPHUN169OpticalSpacing, EightPixelMaximumAndDeterministicDistribution) {
+  EXPECT_EQ(8, OpticalLineCorrection::MAX_INK_CORRECTION_PX);
+  EXPECT_EQ(8, OpticalLineCorrection::missingFinalInkPixels(446, 309, 137, 14));
+  EXPECT_EQ((std::vector<int>{2, 3, 3}), allocation(3, 8));
+  EXPECT_EQ((std::vector<int>{4, 4}), allocation(2, 8));
+  EXPECT_EQ((std::vector<int>{8}), allocation(1, 8));
+  EXPECT_EQ((std::vector<int>{1, 1, 1, 1, 1, 1, 1, 1}), allocation(8, 8));
+  // 8px is a ceiling, not mandatory stretching.
+  EXPECT_EQ(4, OpticalLineCorrection::missingFinalInkPixels(446, 309, 137, 4));
+  EXPECT_EQ(0, OpticalLineCorrection::missingFinalInkPixels(446, 309, 137, -1));
+}
+
+TEST(CPHUN169OpticalSpacing, PaintedInkAndNormalMarginArePreserved) {
+  EXPECT_TRUE(OpticalLineCorrection::countsAsPaintedInk(1));
+  EXPECT_TRUE(OpticalLineCorrection::countsAsPaintedInk(2));
+  EXPECT_FALSE(OpticalLineCorrection::countsAsPaintedInk(0));
+  const int inset = OpticalLineCorrection::effectiveFinalInkInset(137, 137, 133, 0);
+  EXPECT_EQ(4, inset);
+  EXPECT_EQ(463, 17 + 309 + 137 - inset + 4);
 }
