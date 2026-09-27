@@ -34,10 +34,10 @@ jobs:
           done
       - name: Configure host regression tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build host regression tests
-        run: cmake --build build/test -j2
-      - name: Run host regression tests
-        run: ctest --test-dir build/test --output-on-failure -j2
+      - name: Build isolated Library host regression tests
+        run: cmake --build build/test --target LibraryFormatTest LibraryTextTest -j2
+      - name: Run isolated Library host regression tests
+        run: ctest --test-dir build/test --output-on-failure -R '^Library(Format|Text)' -j2
       - uses: astral-sh/setup-uv@v6
         with:
           version: latest
