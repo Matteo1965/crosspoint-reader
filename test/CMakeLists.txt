@@ -60,3 +60,5 @@ add_subdirectory(font_cache_manager)
 add_subdirectory(sd_card_font)
 
 add_subdirectory(cphun163_glyph_dictionary)
+
+add_subdirectory(cphun164_optical_spacing)
