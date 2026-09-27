@@ -6,7 +6,7 @@ set -euo pipefail
 UPSTREAM=https://github.com/crosspoint-reader/crosspoint-reader.git
 BASE=123f3760e8f4c9d3977df3430bd5102db927ebec
 HEAD=e64317ae3b54fa1c7120e14c4bfda0ec249fb269
-git fetch --no-tags "$UPSTREAM" "$BASE" "$HEAD"
+git -c fetch.recurseSubmodules=false fetch --no-recurse-submodules --no-tags "$UPSTREAM" "$BASE" "$HEAD"
 paths=(
  lib/Epub/Epub.cpp lib/Epub/Epub.h
  lib/Epub/Epub/parsers/ContentOpfParser.cpp lib/Epub/Epub/parsers/ContentOpfParser.h
