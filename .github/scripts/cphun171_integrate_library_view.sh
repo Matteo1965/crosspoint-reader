@@ -7,6 +7,9 @@ UPSTREAM=https://github.com/crosspoint-reader/crosspoint-reader.git
 BASE=123f3760e8f4c9d3977df3430bd5102db927ebec
 HEAD=e64317ae3b54fa1c7120e14c4bfda0ec249fb269
 git -c fetch.recurseSubmodules=false fetch --no-recurse-submodules --no-tags "$UPSTREAM" "$BASE" "$HEAD"
+# The CPHUN-169 build regenerates tracked files in the worktree. A three-way
+# apply needs its index to reflect that exact regenerated state.
+git add -u
 paths=(
  lib/Epub/Epub.cpp lib/Epub/Epub.h
  lib/Epub/Epub/parsers/ContentOpfParser.cpp lib/Epub/Epub/parsers/ContentOpfParser.h
@@ -35,7 +38,7 @@ for file in "${paths[@]}"; do
   echo "::group::Library View upstream merge: $file"
   git diff --binary "$BASE" "$HEAD" -- "$file" >/tmp/library-one.patch
   if test -s /tmp/library-one.patch; then
-    if ! git apply --3way /tmp/library-one.patch; then
+    if ! git apply --3way --index /tmp/library-one.patch; then
       echo "::error file=$file::Library View upstream merge requires a manual CPHUN port"
       exit 1
     fi
