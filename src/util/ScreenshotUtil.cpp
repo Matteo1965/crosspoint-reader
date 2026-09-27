@@ -10,21 +10,60 @@
 #include <cstring>
 #include <string>
 
+#include "ScreenshotSequence.h"
+
 #include "Bitmap.h"  // Required for BmpHeader struct definition
 #include "activities/Activity.h"
 
-void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
-  const unsigned long ts = millis();
+namespace {
+constexpr const char* kScreenshotRoot = "/screenshots";
+constexpr const char* kScreenshotCounter = "/screenshots/.last-screenshot-id";
+
+// The counter records IDs before BMP creation. A failed save may leave a gap,
+// but a successful image never reuses an earlier ID after reboot.
+bool reserveScreenshotId(const ScreenshotInfo& info, char* filename, size_t capacity,
+                         void (*format)(const ScreenshotInfo&, char*, size_t, uint32_t)) {
+  if (!Storage.ensureDirectoryExists(kScreenshotRoot)) return false;
+  char saved[32] = {};
+  uint32_t last = 0;
+  if (Storage.exists(kScreenshotCounter)) {
+    const size_t read = Storage.readFileToBuffer(kScreenshotCounter, saved, sizeof(saved));
+    if (read == 0 || !ScreenshotSequence::parseLastReserved(saved, last)) {
+      LOG_ERR("SCR", "Corrupt screenshot sequence; refusing to overwrite an existing screenshot");
+      return false;
+    }
+  }
+  uint32_t candidate = last;
+  do {
+    if (!ScreenshotSequence::next(candidate, candidate)) {
+      LOG_ERR("SCR", "Screenshot sequence exhausted");
+      return false;
+    }
+    format(info, filename, capacity, candidate);
+    if (filename[0] == '\\0') return false;
+  } while (Storage.exists(filename));
+  if (!Storage.writeFile(kScreenshotCounter, String(candidate))) {
+    LOG_ERR("SCR", "Could not persist screenshot sequence");
+    return false;
+  }
+  return true;
+}
+}  // namespace
+
+void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize,
+                                   uint32_t sequence) {
+  char id[16];
+  ScreenshotSequence::formatId(id, sizeof(id), sequence);
 
   if (info.readerType == ScreenshotInfo::ReaderType::None || info.title[0] == '\0') {
-    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    snprintf(buf, bufSize, "/screenshots/screenshot_%s.bmp", id);
     return;
   }
 
   char sanitizedTitle[64];
   FsHelpers::sanitizePathComponentForFat32(info.title, sanitizedTitle, sizeof(sanitizedTitle));
   if (sanitizedTitle[0] == '\0') {
-    snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+    snprintf(buf, bufSize, "/screenshots/screenshot_%s.bmp", id);
     return;
   }
 
@@ -37,10 +76,10 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
 
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
     snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
-             info.currentPage, pct, ts);
+             info.currentPage, pct, id);
   } else {
     snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
-             pct, ts);
+             pct, id);
   }
 
   // Truncate title if total path exceeds FAT32 limit
@@ -56,13 +95,13 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
       sanitizedTitle[maxTitleLen] = '\0';
       if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
         snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
-                 info.currentPage, pct, ts);
+                 info.currentPage, pct, id);
       } else {
         snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
-                 pct, ts);
+                 pct, id);
       }
     } else {
-      snprintf(buf, bufSize, "/screenshots/screenshot-%lu.bmp", ts);
+      snprintf(buf, bufSize, "/screenshots/screenshot_%s.bmp", id);
     }
   }
 }
@@ -76,7 +115,11 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   ScreenshotInfo info = activityManager.getScreenshotInfo();
   char filename[256];
-  buildFilename(info, filename, sizeof(filename));
+  filename[0] = '\\0';
+  if (!reserveScreenshotId(info, filename, sizeof(filename), &ScreenshotUtil::buildFilename)) {
+    LOG_ERR("SCR", "Screenshot sequence reservation failed");
+    return;
+  }
 
   bool saved = saveFramebufferAsBmp(filename, fb, renderer.getDisplayWidth(), renderer.getDisplayHeight());
   if (saved) {
@@ -102,8 +145,8 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 }
 
 bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* framebuffer, int width, int height) {
-  if (!framebuffer) {
-    return false;
+  if (!framebuffer || !filename || Storage.exists(filename)) {
+    return false;  // Never overwrite an earlier screenshot, including legacy names.
   }
 
   // Note: the width and height, we rotate the image 90d counter-clockwise to match the default display orientation
