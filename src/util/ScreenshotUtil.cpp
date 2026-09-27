@@ -40,7 +40,7 @@ bool reserveScreenshotId(const ScreenshotInfo& info, char* filename, size_t capa
       return false;
     }
     format(info, filename, capacity, candidate);
-    if (filename[0] == '\\0') return false;
+    if (filename[0] == '\0') return false;
   } while (Storage.exists(filename));
   if (!Storage.writeFile(kScreenshotCounter, String(candidate))) {
     LOG_ERR("SCR", "Could not persist screenshot sequence");
@@ -75,10 +75,10 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
   const int chapterNum = info.spineIndex + 1;
 
   if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-    snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+    snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%s.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
              info.currentPage, pct, id);
   } else {
-    snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+    snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%s.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
              pct, id);
   }
 
@@ -94,10 +94,10 @@ void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t
       }
       sanitizedTitle[maxTitleLen] = '\0';
       if (info.readerType == ScreenshotInfo::ReaderType::Epub && info.spineIndex >= 0) {
-        snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
+        snprintf(buf, bufSize, "/screenshots/%s/%s_ch%d_p%d_%dpct_%s.bmp", sanitizedTitle, sanitizedTitle, chapterNum,
                  info.currentPage, pct, id);
       } else {
-        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%lu.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
+        snprintf(buf, bufSize, "/screenshots/%s/%s_p%d_%dpct_%s.bmp", sanitizedTitle, sanitizedTitle, info.currentPage,
                  pct, id);
       }
     } else {
@@ -115,7 +115,7 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
 
   ScreenshotInfo info = activityManager.getScreenshotInfo();
   char filename[256];
-  filename[0] = '\\0';
+  filename[0] = '\0';
   if (!reserveScreenshotId(info, filename, sizeof(filename), &ScreenshotUtil::buildFilename)) {
     LOG_ERR("SCR", "Screenshot sequence reservation failed");
     return;
