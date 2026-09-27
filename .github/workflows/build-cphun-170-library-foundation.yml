@@ -180,7 +180,7 @@ jobs:
             echo "Verified tested button handling unchanged: $path"
           done
           printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260927-171-LIB"\n' > src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260927-170-LIB' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260927-171-LIB' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
