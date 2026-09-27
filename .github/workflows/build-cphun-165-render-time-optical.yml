@@ -5,6 +5,9 @@ on:
       - agent/cphun-165-render-time-optical-edge
     paths:
       - '.github/workflows/build-cphun-165-render-time-optical.yml'
+      - '.github/scripts/cphun165_layout_patch.py'
+      - '.github/scripts/cphun165_render_patch.py'
+      - 'test/cphun164_optical_spacing/**'
   workflow_dispatch:
 permissions:
   contents: read
