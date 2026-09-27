@@ -27,6 +27,12 @@ jobs:
           python3 .github/scripts/cphun159_post_chain.py
           python3 .github/scripts/cphun160_post_chain.py
           python3 .github/scripts/cphun163_post_chain.py
+          python3 .github/scripts/cphun164_post_chain.py
+      - name: Build native regression tests
+        run: |
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test -j2
+          ctest --test-dir build/test --output-on-failure -j2
       - name: Inspect generated typography source
         run: |
           python3 - <<'PY'
