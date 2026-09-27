@@ -62,3 +62,5 @@ add_subdirectory(sd_card_font)
 add_subdirectory(cphun163_glyph_dictionary)
 
 add_subdirectory(cphun164_optical_spacing)
+
+add_subdirectory(cphun166_screenshot_sequence)
