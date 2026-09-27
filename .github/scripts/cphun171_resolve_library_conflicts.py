@@ -249,8 +249,9 @@ edit("src/components/icons/listIcons.h",icons)
 edit("src/components/icons/listIcons.manifest",lambda s:
     s if "blocks = blocks" in s else s.rstrip()+"\nblocks = blocks\n")
 edit("src/components/themes/BaseTheme.h",lambda s:
-    one(s,"  Bookmark }","  Bookmark, Blocks }","Blocks UIIcon") if "  Bookmark }" in s else
-    one(s,"  Bookmark,","  Bookmark, Blocks,","Blocks UIIcon") if "Blocks" not in s else s)
+    s if "Bookmark, Blocks" in s else
+    one(s,"Bookmark };","Bookmark, Blocks };","Blocks UIIcon") if "Bookmark };" in s else
+    one(s,"  Bookmark,","  Bookmark, Blocks,","Blocks UIIcon"))
 
 def app_icons(s):
     if "icon_blocks_32" not in s:
