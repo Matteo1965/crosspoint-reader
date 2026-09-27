@@ -18,6 +18,10 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // stored in NFD (e.g. some EPUB chapter titles) otherwise renders broken.
 std::string utf8ComposeNfc(const std::string& in);
 
+// Reverse lookup in the existing NFC table; needed for accent-insensitive
+// Hungarian and multilingual Library title/author search.
+uint32_t utf8DecomposedBase(uint32_t cp);
+
 // Truncate a raw char buffer to the last complete UTF-8 codepoint boundary.
 // Returns the new length (<= len). If the buffer ends mid-sequence, the
 // incomplete trailing bytes are excluded.
