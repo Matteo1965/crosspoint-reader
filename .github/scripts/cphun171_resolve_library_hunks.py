@@ -13,12 +13,14 @@ HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@")
 
 def hunks(text):
     block = []
+    started = False
     for line in text.splitlines(keepends=True):
         if HUNK.match(line):
             if block:
                 yield block
             block = []
-        elif block and line[:1] in (" ", "-", "+"):
+            started = True
+        elif started and line[:1] in (" ", "-", "+"):
             block.append(line)
         elif not block and line[:1] in (" ", "-", "+"):
             # Only called for .rej; discard header until first @@.
