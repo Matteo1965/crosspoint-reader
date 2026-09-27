@@ -1,0 +1,38 @@
+name: 'CPHUN-165 generated renderer inspection'
+on:
+  push:
+    branches: [agent/cphun-165-render-time-optical-edge]
+    paths: ['.github/workflows/diag165.yml']
+  workflow_dispatch:
+permissions: {contents: read}
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Recreate tested sources
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+          bash tools/build_cphun152_hyphen_export_exp.sh
+          python3 .github/scripts/cphun157_restore_chapter.py
+          python3 .github/scripts/cphun159_post_chain.py
+          python3 .github/scripts/cphun160_post_chain.py
+          python3 .github/scripts/cphun163_post_chain.py
+          python3 .github/scripts/cphun164_post_chain.py
+      - name: Print generated integration anchors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for file,ranges in [
+            ('lib/Epub/Epub/blocks/TextBlock.h',[(32,135)]),
+            ('lib/Epub/Epub/blocks/TextBlock.cpp',[(175,285),(555,705)]),
+            ('lib/Epub/Epub/ParsedText.cpp',[(2050,2190)]),
+            ('lib/Epub/Epub/Section.cpp',[(40,74)]),
+          ]:
+            a=Path(file).read_text().splitlines()
+            print('FILE',file,len(a))
+            for start,end in ranges:
+              print('\n'.join(f'{i+1}: {a[i]}' for i in range(start-1,min(end,len(a)))))
+          PY
