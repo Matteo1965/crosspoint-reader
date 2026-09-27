@@ -14,6 +14,8 @@ on:
       - '.github/scripts/cphun171_resolve_library_hunks.py'
       - '.github/scripts/cphun171_manual_port.py'
       - 'src/activities/library/**'
+      - 'src/MappedInputManager.h'
+      - 'src/MappedInputManager.cpp'
   workflow_dispatch:
 permissions:
   contents: read
@@ -188,6 +190,8 @@ jobs:
         run: bash .github/scripts/cphun171_integrate_library_view.sh
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
           grep -q 'goToLibrary' src/activities/ActivityManager.cpp
           grep -q 'LibraryListActivity' src/activities/ActivityManager.cpp
           grep -q 'STR_LIBRARY' src/activities/home/HomeActivity.cpp
