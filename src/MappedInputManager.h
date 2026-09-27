@@ -47,6 +47,9 @@ class MappedInputManager {
 #endif
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
+  // Fires once during a held physical press; suppresses the subsequent release
+  // so a dialog opened by the hold cannot accidentally confirm itself.
+  bool wasLongPressed(Button button, unsigned long thresholdMs) const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
@@ -135,6 +138,8 @@ class MappedInputManager {
 #endif
   void rememberTouchHeldTime() const;
 
+  mutable bool confirmLongPressLatched = false;
+  mutable bool suppressConfirmRelease = false;
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
   mutable unsigned long touchHeldOverrideAt = 0;
