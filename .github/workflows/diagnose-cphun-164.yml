@@ -32,9 +32,9 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           paths = [
-            ("lib/Epub/Epub/ParsedText.cpp",[(1590,1730),(1850,1980)]),
-            ("lib/Epub/Epub/blocks/TextBlock.cpp",[(1,210)]),
-            ("lib/Epub/Epub/LetterSpacingOptimization.h",[(125,285)]),
+            ("lib/Epub/Epub/ParsedText.cpp",[(180,320),(1655,1795),(1980,2110)]),
+            ("lib/Epub/Epub/blocks/TextBlock.cpp",[(325,490)]),
+            ("lib/Epub/Epub/LetterSpacingOptimization.h",[(1,124)]),
             ("lib/Epub/Epub/ParsedText.h",[(60,150)]),
           ]
           for path,ranges in paths:
