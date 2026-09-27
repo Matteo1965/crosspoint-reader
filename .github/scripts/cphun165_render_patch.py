@@ -109,7 +109,8 @@ int renderedFinalInkInset(const GfxRenderer& renderer, const int fontId,
     s=rep(s,old,new,"constructor")
     s=rep(s,"words.size() != wordVisibleOffsets.size() || words.size() > 10000 ||","""words.size() != wordVisibleOffsets.size() || words.size() > 10000 ||
        (!opticalGaps.empty() && words.size() != opticalGaps.size()) ||""","constructor validation")
-    s=rep(s,"arenaSize(numWords, focusPresent, textBytes);","arenaSize(numWords, focusPresent, textBytes, opticalTargetRightX_ != 0);","constructor arena")
+    assert s.count("arenaSize(numWords, focusPresent, textBytes);")==2
+    s=s.replace("arenaSize(numWords, focusPresent, textBytes);","arenaSize(numWords, focusPresent, textBytes, opticalTargetRightX_ != 0);",1)
     s=rep(s,"  if (focusPresent) {\n    auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);","""  if (opticalTargetRightX_ > 0) {
     memcpy(const_cast<uint8_t*>(opticalGapsArr), opticalGaps.data(), numWords);
   }
