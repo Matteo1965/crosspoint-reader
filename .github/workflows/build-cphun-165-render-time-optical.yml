@@ -61,7 +61,7 @@ jobs:
         run: |
           grep -Fq 'add_subdirectory(cphun164_optical_spacing)' test/CMakeLists.txt
           grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
-          grep -Fq 'OpticalLineCorrection::extraForSlot' lib/Epub/Epub/ParsedText.cpp
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
           grep -Fq 'OpticalLineCorrection::extraForSlot' lib/Epub/Epub/blocks/TextBlock.cpp
           grep -Fq 'CPHUN-164: guarded optimization' lib/Epub/Epub/Section.cpp
       - name: Verify CPHUN-165 render-time source and cache wiring
