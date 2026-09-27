@@ -1,0 +1,4 @@
+add_executable(CPHUN166ScreenshotSequenceTest CPHUN166ScreenshotSequenceTest.cpp)
+target_include_directories(CPHUN166ScreenshotSequenceTest PRIVATE ${REPO_ROOT}/src/util)
+target_link_libraries(CPHUN166ScreenshotSequenceTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(CPHUN166ScreenshotSequenceTest)
