@@ -17,6 +17,9 @@ struct Entry {
   int16_t inset = -1;
   int16_t gaps = 0;
   int16_t correction = 0;
+  int16_t normalRightExclusive = -1;
+  int16_t paintedRightExclusive = -1;
+  int16_t normalMarginDelta = 0;
 };
 struct Store {
   Entry rows[64]{};
@@ -29,7 +32,7 @@ inline Store& store() {
 }
 inline void record(const char* lastWord, const char* status,
                    int target, int wordX, int advance, int inset,
-                   int gaps, int extra) {
+                   int gaps, int extra, int screenX) {
   auto& s = store();
   auto& e = s.rows[s.head];
   std::snprintf(e.ending, sizeof(e.ending), "%s", lastWord ? lastWord : "");
@@ -40,6 +43,19 @@ inline void record(const char* lastWord, const char* status,
   e.inset = static_cast<int16_t>(inset);
   e.gaps = static_cast<int16_t>(gaps);
   e.correction = static_cast<int16_t>(extra);
+  // Right boundary is EXCLUSIVE; the final admissible pixel is right - 1.
+  // Hyphenated lines are excluded from optical closure and may hang outward.
+  if (target > 0 && inset >= 0) {
+    const int right = screenX + target;
+    const int painted = screenX + wordX + advance - inset + extra;
+    e.normalRightExclusive = static_cast<int16_t>(right);
+    e.paintedRightExclusive = static_cast<int16_t>(painted);
+    e.normalMarginDelta = static_cast<int16_t>(right - painted);
+  } else {
+    e.normalRightExclusive = -1;
+    e.paintedRightExclusive = -1;
+    e.normalMarginDelta = 0;
+  }
   s.head = (s.head + 1) % 64;
   if (s.used < 64) ++s.used;
 }
