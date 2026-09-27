@@ -1,0 +1,58 @@
+name: 'CPHUN-170: library index integration check'
+on:
+  push:
+    branches:
+      - agent/cphun-170-library-view-foundation
+    paths:
+      - 'lib/LibraryIndex/**'
+      - 'lib/Utf8/**'
+      - 'lib/I18n/translations/english.yaml'
+      - 'lib/I18n/translations/hungarian.yaml'
+      - 'test/CMakeLists.txt'
+      - 'test/library_format/**'
+      - 'test/library_text/**'
+      - '.github/workflows/build-cphun-170-library-foundation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  library-foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Verify index and translated interface resources
+        run: |
+          test -f lib/LibraryIndex/LibraryBuilder.cpp
+          test -f lib/LibraryIndex/LibraryIndexFile.cpp
+          grep -q 'CLIX_MAX_RECORDS = 4096' lib/LibraryIndex/LibraryFormat.h
+          for key in STR_LIBRARY STR_LIBRARY_TAB_RECENT STR_LIBRARY_TAB_TITLE STR_LIBRARY_TAB_AUTHOR STR_LIBRARY_REBUILD STR_LIBRARY_NO_RESULTS; do
+            grep -q "^$key:" lib/I18n/translations/english.yaml
+            grep -q "^$key:" lib/I18n/translations/hungarian.yaml
+          done
+      - name: Configure host regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build host regression tests
+        run: cmake --build build/test -j2
+      - name: Run host regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+      - name: Compile X4 firmware from CPHUN-170 foundation source
+        run: .venv/bin/pio run -e gh_release
+      - name: Publish integration-check firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: CPHUN-170-LIBRARY-FOUNDATION-X4-NOT-FULL-UI
+          path: .pio/build/gh_release/firmware.bin
+          if-no-files-found: error
+          retention-days: 30
