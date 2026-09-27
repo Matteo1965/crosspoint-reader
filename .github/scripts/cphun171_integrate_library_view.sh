@@ -47,11 +47,10 @@ for file in "${paths[@]}"; do
   echo "::endgroup::"
 done
 if (( conflicts > 0 )); then
-  echo "Resolving $conflicts known upstream/Hungarian file conflicts"
-  python3 .github/scripts/cphun171_resolve_library_conflicts.py
+  echo "Resolving $conflicts incompatible source files using uniquely anchored, non-destructive edits"
+  python3 .github/scripts/cphun171_resolve_library_hunks.py
   if find lib src -name '*.rej' | grep -q .; then
-    echo "::error::Unresolved upstream patches remain"
-    find lib src -name '*.rej'
+    echo "::error::Manual merge required for remaining upstream Library View hunks"
     exit 1
   fi
 fi
