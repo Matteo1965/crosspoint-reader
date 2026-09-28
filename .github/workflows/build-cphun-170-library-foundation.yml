@@ -15,6 +15,7 @@ on:
       - '.github/scripts/cphun171_manual_port.py'
       - '.github/scripts/cphun172_release_library_sync.sh'
       - '.github/scripts/cphun172_release_library_sync.py'
+      - '.github/scripts/cphun173_roundedraff_ui_tuning.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
