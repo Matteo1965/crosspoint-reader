@@ -1,4 +1,4 @@
-name: 'CPHUN-175: upstream small integrations and sleep-timeout relocation'
+name: 'CPHUN-176: sleep-screen #3541 safe backport'
 on:
   push:
     branches:
@@ -18,6 +18,7 @@ on:
       - '.github/scripts/cphun173_roundedraff_ui_tuning.py'
       - '.github/scripts/cphun174_ui_spacing_polish.py'
       - '.github/scripts/cphun175_upstream_small_integrations.py'
+      - '.github/scripts/cphun176_sleep3541_backport.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -188,9 +189,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260928-175-UP"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260928-176-SLP"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260928-175-UP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260928-176-SLP' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -202,7 +203,9 @@ jobs:
         run: python3 .github/scripts/cphun174_ui_spacing_polish.py
       - name: Apply CPHUN-175 upstream #3569 and sleep-timeout relocation
         run: python3 .github/scripts/cphun175_upstream_small_integrations.py
-      - name: Verify CPHUN-175 integrations and retained navigation
+      - name: Apply CPHUN-176 sleep-screen #3541 safe backport
+        run: python3 .github/scripts/cphun176_sleep3541_backport.py
+      - name: Verify CPHUN-176 integrations and retained navigation
         run: |
           grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
           grep -q 'props.rowGap = 4' src/activities/settings/SettingsActivity.cpp
@@ -222,6 +225,9 @@ jobs:
           ! grep -q '"sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM' src/SettingsListBase.h
           grep -q 'erase it below when unavailable' src/SettingsListBase.h
           grep -q 'releaseSdFontCaches' lib/Epub/Epub/Section.cpp
+          grep -q 'ditheredGray = gray >> 6' lib/Epub/Epub/converters/PngToFramebufferConverter.cpp
+          grep -q 'CPHUN-176 / upstream #3541' lib/GfxRenderer/GfxRenderer.cpp
+          grep -q 'Direct/Absolute grayscale branch depends on' src/activities/boot_sleep/SleepActivity.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -256,10 +262,10 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-175 Hungarian Edition firmware
+      - name: Upload CPHUN-176 Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260928-175-UP-X4
+          name: CPHUN-260928-176-SLP-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
