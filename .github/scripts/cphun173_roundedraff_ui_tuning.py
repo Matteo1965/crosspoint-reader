@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 def replace_once(path, old, new):
     p = Path(path)
@@ -31,24 +32,19 @@ replace_once(
 
 p = Path("src/activities/UiTabListActivity.cpp")
 ts = p.read_text(encoding="utf-8")
-needle = "fui::listVisibleRows(screen.body(), rowHeight, screen.theme().listRowGap)"
-if needle not in ts:
-    raise SystemExit("CPHUN-173 row-gap call anchor missing in src/activities/UiTabListActivity.cpp")
-ts = ts.replace(
-    needle,
-    "fui::listVisibleRows(screen.body(), rowHeight, rowGap)",
-    1,
+pattern = re.compile(
+    r"(?m)^(?P<indent>\s*)const uint16_t rows = fui::listVisibleRows\(screen\.body\(\),\s*rowHeight,\s*[^;]+\);$"
 )
-line = "const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);"
-if line not in ts:
-    raise SystemExit("CPHUN-173 row-gap declaration anchor missing after replacement")
-ts = ts.replace(
-    line,
-    "const int customRowGap = listRowGapPx();\n"
-    "  const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;\n"
-    "  const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);",
-    1,
+m = pattern.search(ts)
+if not m:
+    raise SystemExit("CPHUN-173 row-gap listVisibleRows declaration not found in src/activities/UiTabListActivity.cpp")
+indent = m.group("indent")
+replacement = (
+    f"{indent}const int customRowGap = listRowGapPx();\n"
+    f"{indent}const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;\n"
+    f"{indent}const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);"
 )
+ts = ts[:m.start()] + replacement + ts[m.end():]
 p.write_text(ts, encoding="utf-8")
 
 replace_once(
