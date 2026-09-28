@@ -187,7 +187,7 @@ jobs:
           done
           printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260928-172-LIB165"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260927-171-LIB' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260928-172-LIB165' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
