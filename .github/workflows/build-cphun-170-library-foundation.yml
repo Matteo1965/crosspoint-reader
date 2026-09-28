@@ -1,8 +1,8 @@
-name: 'CPHUN-171: integrated Library View and preserved Hungarian Edition'
+name: 'CPHUN-172: Library View synced to CrossPoint 1.6.5'
 on:
   push:
     branches:
-      - agent/cphun-170-library-view-foundation
+      - agent/cphun-172-library-release-sync
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -13,6 +13,8 @@ on:
       - '.github/scripts/cphun171_integrate_library_view.sh'
       - '.github/scripts/cphun171_resolve_library_hunks.py'
       - '.github/scripts/cphun171_manual_port.py'
+      - '.github/scripts/cphun172_release_library_sync.sh'
+      - '.github/scripts/cphun172_release_library_sync.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -183,12 +185,14 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260927-171-LIB"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260928-172-LIB165"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
           grep -Fq 'CPHUN-260927-171-LIB' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
+      - name: Sync Library View to final CrossPoint 1.6.5 behavior
+        run: bash .github/scripts/cphun172_release_library_sync.sh
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -221,10 +225,10 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-171 integrated library UI and Hungarian Edition firmware
+      - name: Upload CPHUN-172 release-synced library UI and Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260927-171-LIB-VIEW-X4
+          name: CPHUN-260928-172-LIB-1.6.5-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
