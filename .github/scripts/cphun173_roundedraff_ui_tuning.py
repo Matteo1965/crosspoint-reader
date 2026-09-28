@@ -33,16 +33,20 @@ replace_once(
 p = Path("src/activities/UiTabListActivity.cpp")
 ts = p.read_text(encoding="utf-8")
 pattern = re.compile(
-    r"(?m)^(?P<indent>\s*)const uint16_t rows = fui::listVisibleRows\(screen\.body\(\),\s*rowHeight,\s*[^;]+\);$"
+    r"(?ms)^(?P<indent>[ \t]*)const uint16_t rows\s*=\s*fui::listVisibleRows\((?P<args>.*?)\);"
 )
 m = pattern.search(ts)
 if not m:
-    raise SystemExit("CPHUN-173 row-gap listVisibleRows declaration not found in src/activities/UiTabListActivity.cpp")
+    raise SystemExit("CPHUN-173 listVisibleRows declaration not found in src/activities/UiTabListActivity.cpp")
 indent = m.group("indent")
+args = m.group("args")
+parts = [part.strip() for part in args.split(",")]
+if len(parts) < 3:
+    raise SystemExit(f"CPHUN-173 unexpected listVisibleRows args: {args!r}")
 replacement = (
     f"{indent}const int customRowGap = listRowGapPx();\n"
     f"{indent}const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;\n"
-    f"{indent}const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);"
+    f"{indent}const uint16_t rows = fui::listVisibleRows({parts[0]}, {parts[1]}, rowGap);"
 )
 ts = ts[:m.start()] + replacement + ts[m.end():]
 p.write_text(ts, encoding="utf-8")
