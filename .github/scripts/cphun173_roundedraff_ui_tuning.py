@@ -103,6 +103,12 @@ replace_once(
 )
 
 # Library / RoundedRaff: 41/25/34 tabs with the same 16px/6px geometry.
+p = Path("src/activities/library/LibraryListActivity.h")
+hs = p.read_text(encoding="utf-8")
+if '#include "CrossPointSettings.h"' not in hs:
+    hs = hs.replace('#include "RecentBooksStore.h"\n', '#include "CrossPointSettings.h"\n#include "RecentBooksStore.h"\n', 1)
+p.write_text(hs, encoding="utf-8")
+
 replace_once(
     "src/activities/library/LibraryListActivity.h",
     """  const char* tabLabel(int index) const override;
