@@ -40,7 +40,7 @@ for file in "${paths[@]}"; do
   git diff --binary "$BASE" "$HEAD" -- "$file" >/tmp/library-one.patch
   if test -s /tmp/library-one.patch; then
     if ! git apply --reject --whitespace=nowarn /tmp/library-one.patch; then
-      echo "::warning file=$file::Incompatible upstream hunks; retaining the Hungarian source and collecting rejects"
+      echo "Expected CPHUN merge overlap: $file (collecting rejects for resolver)"
       conflicts=$((conflicts + 1))
     fi
   fi
