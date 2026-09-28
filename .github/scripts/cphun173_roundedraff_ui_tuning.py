@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 
 def replace_once(path, old, new):
     p = Path(path)
@@ -11,8 +10,8 @@ def replace_once(path, old, new):
         raise SystemExit(f"CPHUN-173 anchor not unique in {path}: {old[:80]!r}")
     p.write_text(s.replace(old, new, 1), encoding="utf-8")
 
-# Shared tab screens: allow individual screens to opt into weighted-tab margins,
-# gaps, and a denser row gap without changing the RoundedRaff theme globally.
+# Shared tab screens: allow individual screens to opt into weighted-tab margins
+# and gaps without changing the RoundedRaff theme globally.
 replace_once(
     "src/activities/UiTabListActivity.h",
     """  virtual int tabWidthPercent(int index) const {
@@ -26,30 +25,8 @@ replace_once(
   }
   virtual int tabSideMarginPx() const { return 0; }
   virtual int tabGapPx() const { return 0; }
-  virtual int listRowGapPx() const { return -1; }
 """
 )
-
-p = Path("src/activities/UiTabListActivity.cpp")
-ts = p.read_text(encoding="utf-8")
-pattern = re.compile(
-    r"(?ms)^(?P<indent>[ \t]*)const uint16_t rows\s*=\s*fui::listVisibleRows\((?P<args>.*?)\);"
-)
-m = pattern.search(ts)
-if not m:
-    raise SystemExit("CPHUN-173 listVisibleRows declaration not found in src/activities/UiTabListActivity.cpp")
-indent = m.group("indent")
-args = m.group("args")
-parts = [part.strip() for part in args.split(",")]
-if len(parts) < 3:
-    raise SystemExit(f"CPHUN-173 unexpected listVisibleRows args: {args!r}")
-replacement = (
-    f"{indent}const int customRowGap = listRowGapPx();\n"
-    f"{indent}const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;\n"
-    f"{indent}const uint16_t rows = fui::listVisibleRows({parts[0]}, {parts[1]}, rowGap);"
-)
-ts = ts[:m.start()] + replacement + ts[m.end():]
-p.write_text(ts, encoding="utf-8")
 
 replace_once(
     "src/activities/UiTabListActivity.cpp",
@@ -91,6 +68,15 @@ replace_once(
 # Settings / RoundedRaff: 23/23/24/30 tabs, 16px side margins, 6px gaps,
 # and 5px vertical gaps so Keyboard Layouts remains visible.
 replace_once(
+    "src/activities/settings/SettingsActivity.cpp",
+    """  props.valueInset = 8;               // air between the value and the row edge
+""",
+    """  props.valueInset = 8;               // air between the value and the row edge
+  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF) props.rowGap = 5;
+"""
+)
+
+replace_once(
     "src/activities/settings/SettingsActivity.h",
     """  const char* tabLabel(int index) const override { return I18N.get(categoryNames[index]); }
   void buildScreen(UiScreen& screen) override;
@@ -106,9 +92,6 @@ replace_once(
   }
   int tabGapPx() const override {
     return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 6 : 0;
-  }
-  int listRowGapPx() const override {
-    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 5 : -1;
   }
   void buildScreen(UiScreen& screen) override;
 """
