@@ -199,13 +199,12 @@ jobs:
       - name: Verify CPHUN-173 UI tuning and retained navigation
         run: |
           grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
-          grep -q 'return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 5 : -1' src/activities/settings/SettingsActivity.h
+          grep -q 'props.rowGap = 5' src/activities/settings/SettingsActivity.cpp
           grep -q 'static constexpr int widths\[3\] = {41, 25, 34}' src/activities/library/LibraryListActivity.h
           grep -q 'kHoldHelpWidth = 320' src/activities/library/LibraryListActivity.cpp
           grep -q 'STR_LIBRARY_HOLD_SORT: "Hosszan: Fordított rendezés"' lib/I18n/translations/hungarian.yaml
           grep -q 'tabSideMarginPx' src/activities/UiTabListActivity.cpp
           grep -q 'tabGapPx' src/activities/UiTabListActivity.cpp
-          grep -q 'listRowGapPx' src/activities/UiTabListActivity.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
