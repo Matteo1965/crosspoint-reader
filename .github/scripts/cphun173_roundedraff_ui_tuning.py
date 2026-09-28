@@ -29,15 +29,27 @@ replace_once(
 """
 )
 
-replace_once(
-    "src/activities/UiTabListActivity.cpp",
-    """  const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, screen.theme().listRowGap);
-""",
-    """  const int customRowGap = listRowGapPx();
-  const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;
-  const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);
-"""
+p = Path("src/activities/UiTabListActivity.cpp")
+ts = p.read_text(encoding="utf-8")
+needle = "fui::listVisibleRows(screen.body(), rowHeight, screen.theme().listRowGap)"
+if needle not in ts:
+    raise SystemExit("CPHUN-173 row-gap call anchor missing in src/activities/UiTabListActivity.cpp")
+ts = ts.replace(
+    needle,
+    "fui::listVisibleRows(screen.body(), rowHeight, rowGap)",
+    1,
 )
+line = "const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);"
+if line not in ts:
+    raise SystemExit("CPHUN-173 row-gap declaration anchor missing after replacement")
+ts = ts.replace(
+    line,
+    "const int customRowGap = listRowGapPx();\n"
+    "  const int rowGap = customRowGap >= 0 ? customRowGap : screen.theme().listRowGap;\n"
+    "  const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, rowGap);",
+    1,
+)
+p.write_text(ts, encoding="utf-8")
 
 replace_once(
     "src/activities/UiTabListActivity.cpp",
