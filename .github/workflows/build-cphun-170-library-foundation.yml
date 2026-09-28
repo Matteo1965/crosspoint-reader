@@ -200,7 +200,9 @@ jobs:
           grep -q 'goToLibrary' src/activities/ActivityManager.cpp
           grep -q 'LibraryListActivity' src/activities/ActivityManager.cpp
           grep -q 'STR_LIBRARY' src/activities/home/HomeActivity.cpp
-          grep -q 'RebuildLibraryIndex' src/activities/settings/SettingsActivity.cpp
+          grep -q 'promptRebuildIndex' src/activities/library/LibraryListActivity.cpp
+          grep -q 'isLibraryIndexDirty' src/activities/library/LibraryListActivity.cpp
+          ! grep -q 'RebuildLibraryIndex' src/activities/settings/SettingsActivity.cpp
           grep -q 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
       - name: Configure regression tests
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
