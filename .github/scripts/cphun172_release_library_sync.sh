@@ -26,7 +26,7 @@ apply_commit_paths() {
     git diff --binary "$parent" "$commit" -- "$file" >/tmp/cphun172-one.patch
     if test -s /tmp/cphun172-one.patch; then
       if ! git apply --reject --whitespace=nowarn /tmp/cphun172-one.patch; then
-        echo "::notice file=$file::Release Library hunk needs CPHUN resolver"
+        echo "Expected CPHUN release-sync overlap: $file (resolver will handle it)"
         failed=1
       fi
     fi
