@@ -94,9 +94,12 @@ rep("""  renderer.copyGrayscaleMsbBuffers();
 # Standard/cover/regular BMP sleep image
 rep("""  if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is""",
-"""  if (hasGreyscale) {
-    writeSleepDiagMeta(renderer);
-    dumpSleepDiagPlane("/sleepdiag/cphun169_bitmap_bw.bin", renderer);
+"""  // Always dump the prepared BW framebuffer for regular/cover/custom bitmap sleep screens,
+  // even when the image will not enter the grayscale-plane path.
+  writeSleepDiagMeta(renderer, &bitmap, preserveBackground, hasGreyscale);
+  dumpSleepDiagPlane("/sleepdiag/cphun169_bitmap_bw.bin", renderer);
+
+  if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is""")
 rep("""      renderer.setRenderMode(plane);
       renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
