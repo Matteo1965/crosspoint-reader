@@ -239,7 +239,7 @@ jobs:
           grep -q 'grayPlanePixel' lib/GfxRenderer/BitmapHelpers.h
           grep -q 'grayPlanesAreAbsolute' lib/GfxRenderer/GfxRenderer.h
           grep -q 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 20000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
+          grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 10000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
