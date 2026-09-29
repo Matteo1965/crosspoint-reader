@@ -214,43 +214,38 @@ jobs:
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
       - name: Apply CPHUN-177 sleep framebuffer diagnostics
         run: python3 .github/scripts/cphun177_sleepdiag_patch.py
-      - name: Restore physically-tested CPHUN-157r1 X4 hardware-button sources
+      - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
           git checkout origin/agent/cphun-157r1-recover-hardware-buttons -- \
             lib/hal/HalGPIO.cpp \
             lib/hal/HalGPIO.h \
             src/main.cpp \
-            src/MappedInputManager.cpp \
-            src/MappedInputManager.h \
             src/ReaderButtonGestureDetector.cpp \
             src/ReaderButtonGestureDetector.h \
             src/ReaderButtonProfileStore.cpp \
-            src/ReaderButtonProfileStore.h \
-            src/activities/UiListActivity.cpp \
-            src/activities/UiListActivity.h
-      - name: Verify working-tree X4 hardware-button sources match tested CPHUN-157r1
+            src/ReaderButtonProfileStore.h
+      - name: Verify low-level X4 button sources and retain CPHUN-177 input/UI behavior
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
           for path in \
             lib/hal/HalGPIO.cpp \
             lib/hal/HalGPIO.h \
             src/main.cpp \
-            src/MappedInputManager.cpp \
-            src/MappedInputManager.h \
             src/ReaderButtonGestureDetector.cpp \
             src/ReaderButtonGestureDetector.h \
             src/ReaderButtonProfileStore.cpp \
-            src/ReaderButtonProfileStore.h \
-            src/activities/UiListActivity.cpp \
-            src/activities/UiListActivity.h; do
+            src/ReaderButtonProfileStore.h; do
             if ! git diff --quiet origin/agent/cphun-157r1-recover-hardware-buttons -- "$path"; then
-              echo "::error file=$path::Working-tree button source differs from tested CPHUN-157r1"
+              echo "::error file=$path::Low-level button source differs from tested CPHUN-157r1"
               git diff -- "$path"
               exit 1
             fi
           done
-          echo "Verified working-tree X4 hardware-button sources match tested CPHUN-157r1."
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
+          grep -q 'buttonNavigator' src/activities/UiListActivity.cpp
+          echo "Verified tested low-level X4 buttons while retaining CPHUN-177 input/UI layer."
       - name: Verify CPHUN-177 absolute grayscale integration
         run: |
           grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
