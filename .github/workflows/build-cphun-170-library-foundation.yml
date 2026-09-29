@@ -21,6 +21,7 @@ on:
       - '.github/scripts/cphun176_sleep3541_backport.py'
       - '.github/scripts/cphun177_absolute_grayscale_core.py'
       - '.github/scripts/cphun177_sdk_grayscale_backport.sh'
+      - '.github/scripts/cphun177_sleepdiag_patch.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -211,6 +212,8 @@ jobs:
         run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
       - name: Apply CPHUN-177 application-side absolute grayscale core
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
+      - name: Apply CPHUN-177 sleep framebuffer diagnostics
+        run: python3 .github/scripts/cphun177_sleepdiag_patch.py
       - name: Verify CPHUN-177 absolute grayscale integration
         run: |
           grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
@@ -240,6 +243,10 @@ jobs:
           grep -q 'grayPlanesAreAbsolute' lib/GfxRenderer/GfxRenderer.h
           grep -q 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
           grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 10000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
+          grep -q 'cphun177_bitmap_bw.bin' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'cphun177_bitmap_lsb.bin' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'cphun177_bitmap_msb.bin' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'absolute=' src/activities/boot_sleep/SleepActivity.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -274,10 +281,10 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-177 absolute grayscale Hungarian Edition firmware
+      - name: Upload CPHUN-177 absolute grayscale + sleepdiag Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260929-177-GRAY-X4
+          name: CPHUN-260929-177-GRAY-SLEEPDIAG-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
