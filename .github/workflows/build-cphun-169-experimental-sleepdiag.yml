@@ -1,4 +1,5 @@
 name: 'CPHUN-169 Experimental: sleep grayscale diagnostics'
+# Isolated legacy-reference build; rendering logic is unchanged except raw framebuffer dumps.
 on:
   push:
     branches:
