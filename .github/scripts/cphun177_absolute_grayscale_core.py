@@ -292,7 +292,7 @@ rep("src/activities/boot_sleep/SleepActivity.cpp",
 
   if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-""",1)
+""",1,False)
 
 # Bitmap sleep screen: absolute base and absolute plane buffers.
 old_comment="""// CPHUN-176: upstream #3541's Direct/Absolute grayscale branch depends on
