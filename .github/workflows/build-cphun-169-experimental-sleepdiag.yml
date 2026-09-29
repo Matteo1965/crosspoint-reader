@@ -1,4 +1,4 @@
-name: 'CPHUN-169 Experimental r1: sleepdiag + recovered X4 buttons'
+name: 'CPHUN-169 Experimental r2: unconditional sleepdiag + recovered X4 buttons'
 # Isolated legacy-reference build; rendering logic is unchanged except raw framebuffer dumps.
 on:
   push:
@@ -204,7 +204,7 @@ jobs:
       - name: Upload CPHUN-169 Experimental sleepdiag firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260929-169-EXP-SLEEPDIAG-R1-X4
+          name: CPHUN-260929-169-EXP-SLEEPDIAG-R2-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
