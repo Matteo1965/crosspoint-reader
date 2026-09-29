@@ -1,4 +1,4 @@
-name: 'CPHUN-169 Experimental r2: unconditional sleepdiag + recovered X4 buttons'
+name: 'CPHUN-169 Experimental r2.1: unconditional sleepdiag + recovered X4 buttons'
 # Isolated legacy-reference build; rendering logic is unchanged except raw framebuffer dumps.
 on:
   push:
