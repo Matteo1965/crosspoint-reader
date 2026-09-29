@@ -40,16 +40,23 @@ bool dumpSleepDiagPlane(const char* path, const GfxRenderer& renderer) {
   return ok;
 }
 
-void writeSleepDiagMeta(const GfxRenderer& renderer) {
+void writeSleepDiagMeta(const GfxRenderer& renderer, const Bitmap* bitmap = nullptr,
+                       const bool preserveBackground = false, const bool hasGreyscale = false) {
   if (!Storage.ensureDirectoryExists("/sleepdiag")) return;
   HalFile out;
   if (!Storage.openFileForWrite("SLP", "/sleepdiag/cphun169_info.txt", out)) return;
-  out.print("build=CPHUN-169-EXPERIMENTAL-SLEEPDIAG\\n");
+  out.print("build=CPHUN-169-EXPERIMENTAL-SLEEPDIAG-R2\\n");
   out.print("width="); out.print(renderer.getDisplayWidth()); out.print("\\n");
   out.print("height="); out.print(renderer.getDisplayHeight()); out.print("\\n");
   out.print("width_bytes="); out.print(renderer.getDisplayWidthBytes()); out.print("\\n");
   out.print("buffer_bytes="); out.print(renderer.getBufferSize()); out.print("\\n");
-  out.print("format=raw 1bpp physical framebuffer, three stages: bw/lsb/msb\\n");
+  if (bitmap) {
+    out.print("bpp="); out.print(bitmap->getBpp()); out.print("\\n");
+    out.print("bitmap_hasGreyscale="); out.print(hasGreyscale ? 1 : 0); out.print("\\n");
+    out.print("preserveBackground="); out.print(preserveBackground ? 1 : 0); out.print("\\n");
+    out.print("coverFilter="); out.print(static_cast<int>(SETTINGS.sleepScreenCoverFilter)); out.print("\\n");
+  }
+  out.print("format=raw 1bpp physical framebuffer stages\\n");
   out.close();
 }
 
