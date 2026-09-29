@@ -213,10 +213,10 @@ jobs:
         run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
       - name: Apply CPHUN-177 application-side absolute grayscale core
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
-      - name: Apply CPHUN-177A legacy Overlay sleep isolation probe
-        run: python3 .github/scripts/cphun177a_sleep_overlay_probe.py
       - name: Apply CPHUN-177 sleep framebuffer diagnostics
         run: python3 .github/scripts/cphun177_sleepdiag_patch.py
+      - name: Apply CPHUN-177A legacy Overlay sleep isolation probe
+        run: python3 .github/scripts/cphun177a_sleep_overlay_probe.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
