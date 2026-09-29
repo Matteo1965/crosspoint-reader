@@ -1,4 +1,4 @@
-name: 'CPHUN-169 Experimental: sleep grayscale diagnostics'
+name: 'CPHUN-169 Experimental r1: sleepdiag + recovered X4 buttons'
 # Isolated legacy-reference build; rendering logic is unchanged except raw framebuffer dumps.
 on:
   push:
@@ -36,6 +36,21 @@ jobs:
         run: bash tools/build_cphun152_hyphen_export_exp.sh
       - name: Restore chapter-position repair after legacy patch chain
         run: python3 .github/scripts/cphun157_restore_chapter.py
+      - name: Restore tested CPHUN-157r1 hardware-button handling
+        run: |
+          git fetch origin agent/cphun-157r1-recover-hardware-buttons
+          git checkout origin/agent/cphun-157r1-recover-hardware-buttons -- \
+            lib/hal/HalGPIO.cpp \
+            lib/hal/HalGPIO.h \
+            src/main.cpp \
+            src/MappedInputManager.cpp \
+            src/MappedInputManager.h \
+            src/ReaderButtonGestureDetector.cpp \
+            src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp \
+            src/ReaderButtonProfileStore.h \
+            src/activities/UiListActivity.cpp \
+            src/activities/UiListActivity.h
       - name: Verify CPHUN-159 integration and invalidate stale chapter cache
         run: python3 .github/scripts/cphun159_post_chain.py
       - name: Reapply CPHUN-160 font cache fix after HU patch chain
@@ -152,12 +167,18 @@ jobs:
             echo "::error::Unexpected USB files changed: $usb_diff"
             exit 1
           fi
-          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
-            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
-              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
+          for path in \
+            lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h \
+            src/main.cpp src/MappedInputManager.cpp src/MappedInputManager.h \
+            src/ReaderButtonGestureDetector.cpp src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp src/ReaderButtonProfileStore.h \
+            src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
+            if ! git diff --quiet origin/agent/cphun-157r1-recover-hardware-buttons -- "$path"; then
+              echo "::error file=$path::Working-tree button source differs from tested CPHUN-157r1"
+              git diff -- "$path"
               exit 1
             fi
-            echo "Verified tested button handling unchanged: $path"
+            echo "Verified actual build-tree button source: $path"
           done
           sed -i 's/CPHUN-260925-152-EXP/CPHUN-260929-169-EXP-SLEEPDIAG/g' src/CPHUNBuildId.h
           git diff --check
@@ -183,7 +204,7 @@ jobs:
       - name: Upload CPHUN-169 Experimental sleepdiag firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260929-169-EXP-SLEEPDIAG-X4
+          name: CPHUN-260929-169-EXP-SLEEPDIAG-R1-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
