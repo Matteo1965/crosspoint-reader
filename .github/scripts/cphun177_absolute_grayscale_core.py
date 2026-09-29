@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-def rep(path, old, new, n=1):
+def rep(path, old, new, n=1, require_unique=True):
     p=Path(path); s=p.read_text(encoding="utf-8")
     if old not in s:
         raise SystemExit(f"CPHUN-177 anchor missing: {path}: {old[:100]!r}")
-    if n==1 and s.count(old)!=1:
+    if require_unique and s.count(old)!=1:
         raise SystemExit(f"CPHUN-177 anchor not unique: {path}: {old[:100]!r}")
     p.write_text(s.replace(old,new,n),encoding="utf-8")
 
@@ -281,7 +281,7 @@ rep("src/activities/boot_sleep/SleepActivity.cpp",
 
   if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-""",1)
+""",1,False)
 rep("src/activities/boot_sleep/SleepActivity.cpp",
 """  renderer.copyGrayscaleLsbBuffers();
 
