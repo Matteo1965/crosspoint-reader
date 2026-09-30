@@ -76,7 +76,7 @@ bool Epub::generateCoverBmp(bool cropped) const {''',
 }
 
 bool Epub::generateCoverBmp(bool cropped, bool release165) const {''')
-rep("lib/Epub/Epub.cpp","getCoverBmpPath(cropped)", "getCoverBmpPath(cropped, release165)",6)
+rep("lib/Epub/Epub.cpp","getCoverBmpPath(cropped)", "getCoverBmpPath(cropped, release165)",5)
 rep("lib/Epub/Epub.cpp",
     "JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped)",
     "JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, release165)")
