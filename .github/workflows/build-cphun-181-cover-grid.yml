@@ -43,6 +43,13 @@ jobs:
           test -s /tmp/cphun181.patch
           echo "Saved CPHUN-181 delta: $(wc -l < /tmp/cphun181.patch) lines"
 
+          # Reconstruct from the exact accepted raw CPHUN-180 baseline. The
+          # legacy patch chain relies on anchors that later CPHUN-181 source
+          # edits have already changed (for example CPHUNBuildId.h).
+          git reset --hard origin/agent/cphun-180-default-absolute-cover
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
       - name: Preserve new CPHUN-170 library translations before legacy regeneration
         run: |
           mkdir -p /tmp/cphun170
