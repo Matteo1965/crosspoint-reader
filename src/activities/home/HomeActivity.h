@@ -13,6 +13,8 @@ class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool backPressSeen = false;  // Prevent a stale Back release opening a book on entering Home.
+  bool gridFrameValid = false;  // The renderer's single framebuffer still contains the grid.
+  int previousGridSelection = -1;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
