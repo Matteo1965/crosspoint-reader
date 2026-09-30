@@ -15,5 +15,5 @@ p=Path("src/activities/boot_sleep/SleepActivity.cpp")
 s=p.read_text()
 old='build=CPHUN-260930-177B-ABS-PRECLEAN'
 assert s.count(old)==1
-p.write_text(s.replace(old,'build=CPHUN-260930-177D-ABS-PLANESWAP',1))
+p.write_text(s.replace(old,'build=CPHUN-260930-177E-SWAP-CC',1))
 print("CPHUN-177D: only Absolute plane assignment changed")
