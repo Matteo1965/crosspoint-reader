@@ -1,9 +1,9 @@
-name: 'CPHUN-177D: Absolute grayscale plane assignment isolation'
+name: 'CPHUN-177E: swapped planes with SDK CCh activation'
 on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
-      - agent/cphun-177d-absolute-plane-swap
+      - agent/cphun-177e-swapped-planes-cc
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -196,9 +196,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177D-ABS-PLANESWAP"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177E-SWAP-CC"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260930-177D-ABS-PLANESWAP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-177E-SWAP-CC' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -220,8 +220,6 @@ jobs:
         run: python3 .github/scripts/cphun177_sleepdiag_patch.py
       - name: Apply CPHUN-177B Absolute HALF preclean isolation probe
         run: python3 .github/scripts/cphun177b_absolute_preclean_probe.py
-      - name: Apply CPHUN-177C SSD1677 factory C7 activation probe
-        run: python3 .github/scripts/cphun177c_factory_c7_probe.py
       - name: Apply CPHUN-177D Absolute plane assignment probe
         run: python3 .github/scripts/cphun177d_plane_swap_probe.py
       - name: Restore physically-tested low-level X4 hardware-button sources
@@ -290,7 +288,7 @@ jobs:
           grep -q 'cphun177_bitmap_msb.bin' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'absolute=' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'CPHUN-177B: isolated physical-panel precondition' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'CPHUN-177C: older SDK factory-Absolute activation' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'bus.data(0xCC);  // CLOCK_ON|ANALOG_ON|MODE_SELECT|DISPLAY_START' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
           grep -q '_absoluteInput ? CMD_WRITE_RAM_RED : CMD_WRITE_RAM_BW' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
@@ -329,7 +327,7 @@ jobs:
       - name: Upload CPHUN-177 absolute grayscale + sleepdiag Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260930-177D-ABS-PLANESWAP-X4
+          name: CPHUN-260930-177E-SWAP-CC-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
