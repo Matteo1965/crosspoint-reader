@@ -64,11 +64,7 @@ const char* tabLabelFor(const int tab) {
 }  // namespace
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiTabListActivity("Library", renderer, mappedInput, true) {
-  // Three short tab labels: a full-slot pill would stretch across a third of
-  // the screen, so cap it at the label plus padding (slots stay put).
-  tabPillMaxPad = 16;
-}
+    : UiTabListActivity("Library", renderer, mappedInput) {}
 
 void LibraryListActivity::onEnter() {
   // One lock across the base lifecycle AND the data phase: the base onEnter
@@ -86,7 +82,9 @@ void LibraryListActivity::onEnter() {
 
   // Rebuild when the index is missing, invalid, or was built with the other
   // metadata mode. Otherwise entering the screen stays instant.
-  const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
+  // The Hungarian Edition always indexes EPUB title/author metadata. Keeping
+  // this fixed avoids adding a new user setting or changing existing defaults.
+  constexpr bool readMetadata = true;
   const bool rebuildNeeded = !index.open(library::libraryIndexPath()) || index.header().metadataEnabled != readMetadata;
   if (rebuildNeeded) {
     index.close();
@@ -113,7 +111,7 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const bool ok = library::buildLibraryIndex("/", stats, true);
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;
@@ -397,11 +395,6 @@ int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
 int LibraryListActivity::activeTab() const { return activeTabIndex; }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
-
-fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
-  if (index != activeTab()) return fui::TabIndicator::None;
-  return isDescending(sortOrder) ? fui::TabIndicator::Down : fui::TabIndicator::Up;
-}
 
 int LibraryListActivity::bookRowCount() const {
   if (!query.empty()) return static_cast<int>(filteredCount);

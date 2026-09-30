@@ -15,10 +15,12 @@ struct RecentBook {
 };
 
 class RecentBooksStore : public PersistableStore<RecentBooksStore> {
+ public:
+  // Library View uses the same fixed upper bound for its pinned-recents overlay.
+  static constexpr int MAX_RECENT_BOOKS = 10;
+
  private:
   std::vector<RecentBook> recentBooks;
-
-  static constexpr int MAX_RECENT_BOOKS = 10;
 
   RecentBooksStore() = default;
   ~RecentBooksStore() = default;
