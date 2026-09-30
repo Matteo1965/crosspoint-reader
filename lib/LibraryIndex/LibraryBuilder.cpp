@@ -455,7 +455,11 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     entry.getName(st.nameBuf, NAME_BUF_SIZE);
     const bool isDir = entry.isDirectory();
     const uint32_t size = isDir ? 0 : static_cast<uint32_t>(entry.fileSize());
-    const uint32_t modificationTime = isDir ? 0 : entry.modificationTime();
+    // HalFile in the currently pinned FreeInk SDK does not expose a stable
+    // modification timestamp. Keep this zero: reconciliation still uses path
+    // and size, but metadata is conservatively reparsed instead of reusing a
+    // potentially stale entry.
+    const uint32_t modificationTime = 0;
     entry.close();
 
     if (st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
