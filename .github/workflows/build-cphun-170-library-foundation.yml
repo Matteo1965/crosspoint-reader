@@ -1,9 +1,9 @@
-name: 'CPHUN-178: A/B/C grayscale cover comparison'
+name: 'CPHUN-179: official 1.6.5 B reference A/B/C cover comparison'
 on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
-      - agent/cphun-178-abc-cover-test
+      - agent/cphun-179-release165-reference
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -28,6 +28,7 @@ on:
       - '.github/scripts/cphun177d_plane_swap_probe.py'
       - '.github/scripts/cphun177c_factory_c7_probe.py'
       - '.github/scripts/cphun178_abc_cover_test.py'
+      - '.github/scripts/cphun179_release165_reference.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -198,9 +199,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-178-ABC-COVER"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-179-RELEASE165-B"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260930-178-ABC-COVER' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-179-RELEASE165-B' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -218,12 +219,10 @@ jobs:
         run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
       - name: Apply CPHUN-177 application-side absolute grayscale core
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
-      - name: Apply CPHUN-177C factory C7 activation to B only
-        run: python3 .github/scripts/cphun177c_factory_c7_probe.py
-      - name: Apply CPHUN-177D Absolute plane assignment probe
-        run: python3 .github/scripts/cphun177d_plane_swap_probe.py
       - name: Apply CPHUN-178 A/B/C cover selector and remove sleepdiag
         run: python3 .github/scripts/cphun178_abc_cover_test.py
+      - name: Apply CPHUN-179 official CrossPoint 1.6.5 B reference
+        run: python3 .github/scripts/cphun179_release165_reference.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
@@ -291,8 +290,12 @@ jobs:
           grep -q 'coverTestMode' src/SettingsListBase.h
           grep -q 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'renderer.displayBuffer(HalDisplay::HALF_REFRESH);' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'bus.data(0xC7);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
-          grep -q '_absoluteInput ? CMD_WRITE_RAM_RED : CMD_WRITE_RAM_BW' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'bus.data(0xCC);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_BW, lsb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_RED, msb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'cover_release165' lib/Epub/Epub.cpp
+          grep -q 'originalThresholds' lib/GfxRenderer/BitmapHelpers.h
+          ! grep -q 'bus.data(0xC7);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -330,7 +333,7 @@ jobs:
       - name: Upload CPHUN-178 A/B/C cover test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260930-178-ABC-COVER-X4
+          name: CPHUN-260930-179-RELEASE165-B-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
