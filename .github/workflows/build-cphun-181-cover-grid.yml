@@ -1,4 +1,4 @@
-name: CPHUN-181 Cover Grid X4 + X4 Classic
+name: CPHUN-181 Full Hungarian Chain + Cover Grid
 
 on:
   push:
@@ -12,7 +12,8 @@ permissions:
 jobs:
   build:
     name: Build ${{ matrix.label }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -27,45 +28,371 @@ jobs:
             firmware: firmware-x4c.bin
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
+      - name: Save CPHUN-181 delta from accepted CPHUN-180 baseline
+        run: |
+          set -euo pipefail
+          git fetch origin agent/cphun-180-default-absolute-cover
+          git diff --binary origin/agent/cphun-180-default-absolute-cover...HEAD -- \
+            . ':(exclude).github/workflows/build-cphun-181-cover-grid.yml' \
+            > /tmp/cphun181.patch
+          test -s /tmp/cphun181.patch
+          echo "Saved CPHUN-181 delta: $(wc -l < /tmp/cphun181.patch) lines"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Preserve new CPHUN-170 library translations before legacy regeneration
+        run: |
+          mkdir -p /tmp/cphun170
+          cp lib/I18n/translations/english.yaml /tmp/cphun170/english.yaml
+          cp lib/I18n/translations/hungarian.yaml /tmp/cphun170/hungarian.yaml
+      - name: Restore last tested CPHUN-152 build scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild full tested CPHUN-152 feature chain
+        run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Restore chapter-position repair after legacy patch chain
+        run: python3 .github/scripts/cphun157_restore_chapter.py
+      - name: Verify CPHUN-159 integration and invalidate stale chapter cache
+        run: python3 .github/scripts/cphun159_post_chain.py
+      - name: Reapply CPHUN-160 font cache fix after HU patch chain
+        run: python3 .github/scripts/cphun160_post_chain.py
+      - name: Verify CPHUN-163 dictionary and reader glyph fallback
+        run: python3 .github/scripts/cphun163_post_chain.py
+      - name: Apply CPHUN-164 guarded tracking and baseline optical alignment
+        run: python3 .github/scripts/cphun164_post_chain.py
+      - name: Apply CPHUN-165 render-time optical closure and new section cache
+        run: |
+          python3 .github/scripts/cphun165_layout_patch.py
+          python3 .github/scripts/cphun165_render_patch.py
+      - name: Apply CPHUN-166 optical line diagnostics and numbered screenshot sidecars
+        run: python3 .github/scripts/cphun166_diagnostic_patch.py
+      - name: Apply CPHUN-167 actual full-word ink correction and new cache version
+        run: python3 .github/scripts/cphun167_word_ink_patch.py
+      - name: Apply CPHUN-168 painted-pixel and normal-margin correction
+        run: python3 .github/scripts/cphun168_normal_margin_patch.py
+      - name: Finalize CPHUN-169 eight-pixel production build without TXT sidecars
+        run: python3 .github/scripts/cphun169_production_cleanup.py
+      - name: Restore CPHUN-170 library labels without replacing regenerated Hungarian UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for lang in ('english', 'hungarian'):
+              source = Path('/tmp/cphun170', lang + '.yaml').read_text(encoding='utf-8')
+              target_path = Path('lib/I18n/translations', lang + '.yaml')
+              target = target_path.read_text(encoding='utf-8')
+              additions = []
+              for line in source.splitlines():
+                  if not line.startswith(('STR_LIBRARY', 'STR_HOLD_OPEN_TO_REMOVE:')): continue
+                  key = line.split(':', 1)[0]
+                  if not any(row.startswith(key + ':') for row in target.splitlines()):
+                      additions.append(line)
+              if additions:
+                  target_path.write_text(target.rstrip() + '\n' + '\n'.join(additions) + '\n', encoding='utf-8')
+              print(f'{lang}: {len(additions)} preserved library labels')
+          PY
+      - name: Verify CPHUN-170 library and tested 169 UI are present together
+        run: |
+          grep -Fq 'CLIX_MAX_RECORDS = 4096' lib/LibraryIndex/LibraryFormat.h
+          grep -Fq 'add_subdirectory(library_format)' test/CMakeLists.txt
+          grep -Fq 'add_subdirectory(library_text)' test/CMakeLists.txt
+          for key in STR_LIBRARY STR_LIBRARY_TAB_RECENT STR_LIBRARY_TAB_TITLE STR_LIBRARY_TAB_AUTHOR STR_LIBRARY_REBUILD STR_LIBRARY_NO_RESULTS; do
+            grep -q "^$key:" lib/I18n/translations/english.yaml
+            grep -q "^$key:" lib/I18n/translations/hungarian.yaml
+          done
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'LetterSpacingOptimization' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+      - name: Verify CPHUN-169 production features
+        run: |
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'rightmostPainted' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          ! grep -Fq 'OpticalLineDiagnostics' src/util/ScreenshotUtil.cpp
+          ! grep -Fq 'OpticalLineDiagnostics' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -Fq 'diagnosticPath' src/util/ScreenshotUtil.cpp
+          ! test -f lib/Epub/Epub/OpticalLineDiagnostics.h
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+      - name: Verify CPHUN-168 ordinary letter edge and unchanged hanging hyphens
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'OpticalLineCorrection::countsAsPaintedInk(intensity)' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'rightmostPainted' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -Fq 'dark >= 0 ? dark : any' lib/Epub/Epub/blocks/TextBlock.cpp
+      - name: Verify CPHUN-167 native pair-kerning is retained
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'effectiveFinalInkInset' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+      - name: Confirm CPHUN-166 screenshot sequence is retained
+        run: |
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+          ! grep -Fq 'const unsigned long ts = millis()' src/util/ScreenshotUtil.cpp
+      - name: Verify CPHUN-161 font-cache patch survives legacy regeneration
+        run: |
+          git diff --exit-code HEAD -- \
+            lib/EpdFont/SdCardFont.cpp \
+            lib/EpdFont/SdCardFont.h \
+            lib/GfxRenderer/FontCacheManager.cpp \
+            lib/GfxRenderer/FontCacheManager.h
+          grep -Fq 'makeUniqueNoThrow<CpGlyphMapping[]>' lib/EpdFont/SdCardFont.cpp
+          grep -Fq 'bool accumulate' lib/EpdFont/SdCardFont.h
+          grep -Fq '/*accumulate=*/false' lib/GfxRenderer/FontCacheManager.cpp
+          grep -Fq 'fontCache->releaseSdFontCaches()' lib/Epub/Epub/Section.cpp
+          echo "Verified CPHUN-160 and CPHUN-161 SD-font memory changes."
+      - name: Verify new regression suite is registered
+        run: |
+          grep -Fq 'add_subdirectory(cphun163_glyph_dictionary)' test/CMakeLists.txt
+          grep -Fq 'ReaderGlyphFallback::localSubstitute' lib/GfxRenderer/GfxRenderer.cpp
+          grep -Fq 'DictWordEdges::trim(word)' src/util/Dictionary.cpp
+      - name: Verify CPHUN-164 integration and cache invalidation
+        run: |
+          grep -Fq 'add_subdirectory(cphun164_optical_spacing)' test/CMakeLists.txt
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+          grep -Fq 'OpticalLineCorrection::extraForSlot' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'CPHUN-164: guarded optimization' lib/Epub/Epub/Section.cpp
+      - name: Verify CPHUN-165 render-time source and cache wiring
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'OpticalLineCorrection::missingFinalInkPixels' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'const uint8_t* opticalGapsArr' lib/Epub/Epub/blocks/TextBlock.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+      - name: Verify SPI batching is enabled
+        run: grep -Fq -- '-DUSE_SPI_ARRAY_TRANSFER=1' platformio.ini
+      - name: Verify exact KOReader positions skip hidden EPUB text
+        run: |
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
+      - name: Verify CPHUN-157r1, CPHUN-159 and font-cache integration; tested buttons unchanged
+        run: |
+          for spec in \
+            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
+            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
+            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
+            file="${spec%%|*}"
+            token="${spec#*|}"
+            if ! grep -aFq "$token" "$file"; then
+              echo "::error file=$file::Missing CPHUN-157 source token: $token"
+              exit 1
+            fi
+            echo "Verified $file: $token"
+          done
+          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          if [ -n "$usb_diff" ]; then
+            echo "::error::Unexpected USB files changed: $usb_diff"
+            exit 1
+          fi
+          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
+            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
+              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
+              exit 1
+            fi
+            echo "Verified tested button handling unchanged: $path"
+          done
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-180-DEFAULT-B"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-180-DEFAULT-B' src/CPHUNBuildId.h
+          git diff --check
+      - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
+        run: bash .github/scripts/cphun171_integrate_library_view.sh
+      - name: Sync Library View to final CrossPoint 1.6.5 behavior
+        run: bash .github/scripts/cphun172_release_library_sync.sh
+      - name: Apply CPHUN-173 RoundedRaff Settings and Library UI tuning
+        run: python3 .github/scripts/cphun173_roundedraff_ui_tuning.py
+      - name: Apply CPHUN-174 UI spacing and optical alignment polish
+        run: python3 .github/scripts/cphun174_ui_spacing_polish.py
+      - name: Apply CPHUN-175 upstream #3569 and sleep-timeout relocation
+        run: python3 .github/scripts/cphun175_upstream_small_integrations.py
+      - name: Apply CPHUN-176 sleep-screen #3541 safe backport
+        run: python3 .github/scripts/cphun176_sleep3541_backport.py
+      - name: Apply CPHUN-177 selective FreeInk grayscale SDK backport
+        run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
+      - name: Apply CPHUN-177 application-side absolute grayscale core
+        run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
+      - name: Apply CPHUN-178 A/B/C cover selector and remove sleepdiag
+        run: python3 .github/scripts/cphun178_abc_cover_test.py
+      - name: Apply CPHUN-179 reference and CPHUN-180 B default / menu names
+        run: python3 .github/scripts/cphun179_release165_reference.py
+      - name: Restore physically-tested low-level X4 hardware-button sources
+        run: |
+          git fetch origin agent/cphun-157r1-recover-hardware-buttons
+          git checkout origin/agent/cphun-157r1-recover-hardware-buttons -- \
+            lib/hal/HalGPIO.cpp \
+            lib/hal/HalGPIO.h \
+            src/main.cpp \
+            src/ReaderButtonGestureDetector.cpp \
+            src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp \
+            src/ReaderButtonProfileStore.h
+      - name: Verify low-level X4 button sources and retain CPHUN-177 input/UI behavior
+        run: |
+          git fetch origin agent/cphun-157r1-recover-hardware-buttons
+          for path in \
+            lib/hal/HalGPIO.cpp \
+            lib/hal/HalGPIO.h \
+            src/main.cpp \
+            src/ReaderButtonGestureDetector.cpp \
+            src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp \
+            src/ReaderButtonProfileStore.h; do
+            if ! git diff --quiet origin/agent/cphun-157r1-recover-hardware-buttons -- "$path"; then
+              echo "::error file=$path::Low-level button source differs from tested CPHUN-157r1"
+              git diff -- "$path"
+              exit 1
+            fi
+          done
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
+          grep -q 'buttonNavigator' src/activities/UiListActivity.cpp
+          echo "Verified tested low-level X4 buttons while retaining CPHUN-177 input/UI layer."
+      - name: Verify CPHUN-177 absolute grayscale integration
+        run: |
+          grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
+          grep -q 'props.rowGap = 4' src/activities/settings/SettingsActivity.cpp
+          grep -q 'static constexpr int widths\[3\] = {41, 25, 34}' src/activities/library/LibraryListActivity.h
+          grep -q 'kHoldHelpWidth = 320' src/activities/library/LibraryListActivity.cpp
+          grep -q 'STR_LIBRARY_HOLD_SORT: "Hosszan: Fordított rendezés"' lib/I18n/translations/hungarian.yaml
+          grep -q 'tabSideMarginPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabGapPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabHorizontalInsetPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabBottomSpacingPx' src/activities/UiTabListActivity.cpp
+          grep -q 'valueOffsetX' freeink-sdk/libs/ui/FreeInkUI/include/components/lists/list.h
+          grep -q 'nudgeOffRight ? 4 : 0' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'rowValues_\[i\] == tr(STR_STATE_ON)) ? 2 : 0' src/activities/settings/SettingsActivity.cpp
+          grep -q 'props.rowGap = 4' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'ROUNDEDRAFF ? 8 : -1' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q '"sleepTimeoutMinutes", StrId::STR_CAT_DISPLAY' src/SettingsListBase.h
+          ! grep -q '"sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM' src/SettingsListBase.h
+          grep -q 'erase it below when unavailable' src/SettingsListBase.h
+          grep -q 'releaseSdFontCaches' lib/Epub/Epub/Section.cpp
+          grep -q 'ditheredGray = gray >> 6' lib/Epub/Epub/converters/PngToFramebufferConverter.cpp
+          grep -q 'CPHUN-176 / upstream #3541' lib/GfxRenderer/GfxRenderer.cpp
+          grep -q 'enum class GrayscaleMode' freeink-sdk/libs/display/FreeInkDisplay/include/GrayscaleCapabilities.h
+          grep -q 'absoluteGrayscale: verified X4 factory LUT' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'GrayscaleCapabilities grayscaleCapabilities' lib/hal/HalDisplay.h
+          grep -q 'grayPlanePixel' lib/GfxRenderer/BitmapHelpers.h
+          grep -q 'grayPlanesAreAbsolute' lib/GfxRenderer/GfxRenderer.h
+          grep -q 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 10000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
+          ! grep -q 'dumpSleepDiagPlane177' src/activities/boot_sleep/SleepActivity.cpp
+          ! grep -q '/sleepdiag' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
+          grep -q 'coverTestMode' src/SettingsListBase.h
+          grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
+          grep -q 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'renderer.displayBuffer(HalDisplay::HALF_REFRESH);' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'bus.data(0xCC);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_BW, lsb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_RED, msb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'cover_release165' lib/Epub/Epub.cpp
+          grep -q 'originalThresholds' lib/GfxRenderer/BitmapHelpers.h
+          ! grep -q 'bus.data(0xC7);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+      - name: Verify navigation, rebuild action and CPHUN-169 text settings
+        run: |
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
+          grep -q 'goToLibrary' src/activities/ActivityManager.cpp
+          grep -q 'LibraryListActivity' src/activities/ActivityManager.cpp
+          grep -q 'STR_LIBRARY' src/activities/home/HomeActivity.cpp
+          grep -q 'promptRebuildIndex' src/activities/library/LibraryListActivity.cpp
+          grep -q 'isLibraryIndexDirty' src/activities/library/LibraryListActivity.cpp
+          ! grep -q 'RebuildLibraryIndex' src/activities/settings/SettingsActivity.cpp
+          grep -q 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - name: Confirm Library regression executables
+        run: |
+          test -x build/test/library_format/LibraryFormatTest
+          test -x build/test/library_text/LibraryTextTest
+
+      - name: Freeze reconstructed CPHUN-180 source baseline
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "CI: reconstructed CPHUN-180 source baseline" || true
+
+      - name: Merge CPHUN-181 delta onto reconstructed CPHUN-180
+        run: |
+          set -euo pipefail
+          git apply --3way /tmp/cphun181.patch
+          git diff --check
+
+      - name: Audit restored Hungarian Edition feature chain
+        run: |
+          set -euo pipefail
+
+          # CPHUN-178/180 grayscale cover selection and accepted B default.
+          grep -Fq 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
+          grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
+          grep -Fq '"coverTestMode", StrId::STR_CAT_DISPLAY' src/SettingsListBase.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_A:' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_CPHUN_COVER_TEST_C:' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
+          grep -Fq 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
+
+          # CPHUN-164..169 letter-spacing optimization and optical correction.
+          test -f lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'LetterSpacingOptimization' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'Betűköz optimalizálás' src/activities/settings/TextSettingsActivity.cpp
+
+          # Other accepted late Hungarian Edition features.
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'releaseSdFontCaches' lib/Epub/Epub/Section.cpp
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'promptRebuildIndex' src/activities/library/LibraryListActivity.cpp
+
+          # CPHUN-181 additions must coexist with the restored chain.
+          grep -Fq 'HOME_COVER_GRID' src/CrossPointSettings.h
+          grep -Fq 'featuredProgressPercent' src/activities/home/HomeActivity.cpp
+          grep -Fq 'progressBarHeight' src/activities/home/HomeActivity.cpp
+          grep -Fq 'goToLibrary' src/activities/ActivityManager.cpp
+          grep -Fq 'CPHUN-261001-181-EXP' src/CPHUNBuildId.h
+
+          echo "Feature-chain audit passed for ${{ matrix.label }}."
+
+      - uses: astral-sh/setup-uv@v6
         with:
           version: latest
           enable-cache: false
 
-      - name: Install PlatformIO Core
+      - name: Install PlatformIO
         run: |
-          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
-          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
-            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
-            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
-            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
-
-      - name: Build firmware
+      - name: Build ${{ matrix.label }} Hungarian Edition firmware
         run: |
           set -euo pipefail
-          pio run -e ${{ matrix.env }} | tee pio.log
+          .venv/bin/pio run -e ${{ matrix.env }} | tee pio.log
           cp ".pio/build/${{ matrix.env }}/firmware.bin" "${{ matrix.firmware }}"
           grep -E "RAM:\\s|Flash:\\s" pio.log || true
+          stat -c '${{ matrix.label }} firmware bytes=%s' "${{ matrix.firmware }}"
 
-      - name: Upload firmware
-        uses: actions/upload-artifact@v6
+      - name: Upload ${{ matrix.label }} firmware
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.firmware }}
           if-no-files-found: error
+          retention-days: 90
