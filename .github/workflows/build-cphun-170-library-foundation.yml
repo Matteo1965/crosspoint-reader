@@ -1,9 +1,10 @@
-name: 'CPHUN-179: official 1.6.5 B reference A/B/C cover comparison'
+name: 'CPHUN-180: B default on fresh installs; keep A/B/C cover tests'
 on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
       - agent/cphun-179-release165-reference
+      - agent/cphun-180-default-absolute-cover
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -199,9 +200,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-179-RELEASE165-B"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-180-DEFAULT-B"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260930-179-RELEASE165-B' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-180-DEFAULT-B' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -221,7 +222,7 @@ jobs:
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
       - name: Apply CPHUN-178 A/B/C cover selector and remove sleepdiag
         run: python3 .github/scripts/cphun178_abc_cover_test.py
-      - name: Apply CPHUN-179 official CrossPoint 1.6.5 B reference
+      - name: Apply CPHUN-179 reference and CPHUN-180 B default / menu names
         run: python3 .github/scripts/cphun179_release165_reference.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
@@ -288,6 +289,8 @@ jobs:
           ! grep -q '/sleepdiag' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
           grep -q 'coverTestMode' src/SettingsListBase.h
+          grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
           grep -q 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'renderer.displayBuffer(HalDisplay::HALF_REFRESH);' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'bus.data(0xCC);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
@@ -330,10 +333,10 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-178 A/B/C cover test firmware
+      - name: Upload CPHUN-180 A/B/C cover firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260930-179-RELEASE165-B-X4
+          name: CPHUN-260930-180-DEFAULT-B-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
