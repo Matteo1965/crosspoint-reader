@@ -16,9 +16,14 @@ def rep(path,old,new,expected=1):
 rep("lib/GfxRenderer/BitmapHelpers.h",
     "explicit AtkinsonDitherer(int width) : width(width) {",
     "explicit AtkinsonDitherer(int width, bool originalThresholds = false) : width(width), originalThresholds(originalThresholds) {")
-rep("lib/GfxRenderer/BitmapHelpers.h",
-    "if (false) {  // original thresholds",
-    "if (originalThresholds) {  // CrossPoint 1.6.5 original thresholds",1)
+p=Path("lib/GfxRenderer/BitmapHelpers.h")
+t=p.read_text(encoding="utf-8")
+start=t.index("class AtkinsonDitherer")
+end=t.index("class FloydSteinbergDitherer")
+section=t[start:end]
+old="if (false) {  // original thresholds"
+if section.count(old)!=1:raise SystemExit("179: Atkinson threshold anchor missing")
+p.write_text(t[:start]+section.replace(old,"if (originalThresholds) {  // CrossPoint 1.6.5 original thresholds",1)+t[end:],encoding="utf-8")
 rep("lib/GfxRenderer/BitmapHelpers.h",
     "class AtkinsonDitherer {\n public:",
     "class AtkinsonDitherer {\n  const bool originalThresholds;\n public:")
