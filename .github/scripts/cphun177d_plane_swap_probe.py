@@ -11,9 +11,4 @@ new="writeGrayRam(bus, _absoluteInput ? CMD_WRITE_RAM_BW : CMD_WRITE_RAM_RED, ms
 assert s.count(old)==1
 s=s.replace(old,new,1)
 p.write_text(s)
-p=Path("src/activities/boot_sleep/SleepActivity.cpp")
-s=p.read_text()
-old='build=CPHUN-260930-177B-ABS-PRECLEAN'
-assert s.count(old)==1
-p.write_text(s.replace(old,'build=CPHUN-260930-177E-SWAP-CC',1))
-print("CPHUN-177D: only Absolute plane assignment changed")
+print("CPHUN-178: Absolute plane assignment retained; no sleepdiag writes")
