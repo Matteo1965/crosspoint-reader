@@ -46,7 +46,17 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   const int coverW = (width - left * 2 - gapX * 2) / columns;
   const int coverH = (coverW * 205 + 68) / 136;
-  return {left, coverW, coverH, 54, 276, gapX, columns, 500};
+  return {left, coverW, coverH, 54, 286, gapX, columns, 500};
+}
+
+bool validBmpFile(const std::string& path) {
+  if (path.empty()) return false;
+  HalFile file;
+  if (!Storage.openFileForRead("HOME", path, file)) return false;
+  Bitmap bmp(file);
+  const bool ok = bmp.parseHeaders() == BmpReaderError::Ok && bmp.getWidth() > 0 && bmp.getHeight() > 0;
+  file.close();
+  return ok;
 }
 }  // namespace
 
@@ -149,7 +159,11 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbTemplate);
       }
       const std::string coverPath = epub.getThumbBmpPath(thumbHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      if (Storage.exists(coverPath.c_str()) && !validBmpFile(coverPath)) {
+        LOG_DBG("HOME", "Removing invalid EPUB thumbnail: %s", coverPath.c_str());
+        Storage.remove(coverPath.c_str());
+      }
+      if (!validBmpFile(coverPath)) {
         if (!showingLoading) {
           showingLoading = true;
           popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
@@ -159,7 +173,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         // without CSS so the cover metadata is still available to the thumbnail generator.
         bool loaded = epub.load(false, true);
         if (!loaded) loaded = epub.load(true, true);
-        success = loaded && epub.generateThumbBmp(thumbHeight);
+        success = loaded && epub.generateThumbBmp(thumbHeight) && validBmpFile(coverPath);
       }
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       Xtc xtc(book.path, "/.crosspoint");
@@ -169,13 +183,17 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbTemplate);
       }
       const std::string coverPath = xtc.getThumbBmpPath(thumbHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      if (Storage.exists(coverPath.c_str()) && !validBmpFile(coverPath)) {
+        LOG_DBG("HOME", "Removing invalid XTC thumbnail: %s", coverPath.c_str());
+        Storage.remove(coverPath.c_str());
+      }
+      if (!validBmpFile(coverPath)) {
         if (!showingLoading) {
           showingLoading = true;
           popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
         }
         GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / std::max<size_t>(1, recentBooks.size())));
-        success = xtc.load() && xtc.generateThumbBmp(thumbHeight);
+        success = xtc.load() && xtc.generateThumbBmp(thumbHeight) && validBmpFile(coverPath);
       }
     }
 
@@ -487,9 +505,25 @@ void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 void HomeActivity::paintGridCover(const size_t index, Rect rect) {
   if (index >= recentBooks.size()) return;
   const RecentBook& book = recentBooks[index];
-  const std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, gridCoverHeight(static_cast<int>(index)));
+  const int thumbHeight = gridCoverHeight(static_cast<int>(index));
+  std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
+
+  // Prefer the compact home thumbnail. If it is missing or corrupt, fall back
+  // to the book's cached full cover so a failed thumbnail cannot blank the grid.
+  if (!validBmpFile(path)) {
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      Epub epub(book.path, "/.crosspoint");
+      const std::string fallback = epub.getCoverBmpPath(false);
+      if (validBmpFile(fallback)) path = fallback;
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      Xtc xtc(book.path, "/.crosspoint");
+      const std::string fallback = xtc.getCoverBmpPath();
+      if (validBmpFile(fallback)) path = fallback;
+    }
+  }
+
   bool drawn = false;
-  if (!book.coverBmpPath.empty()) {
+  if (validBmpFile(path)) {
     HalFile file;
     if (Storage.openFileForRead("HOME", path, file)) {
       Bitmap bmp(file);
@@ -503,6 +537,7 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
       file.close();
     }
   }
+
   renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
   if (!drawn) {
     renderer.drawText(SMALL_FONT_ID, rect.x + 8, rect.y + rect.height / 3,
