@@ -122,6 +122,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   CrossPointSettings& s = *this;
   bool needsResave = false;
 
+  // CPHUN-181 migration: the first Cover Grid prototype stored it as UI theme
+  // value 4. It is now an independent home layout. Preserve the tester's choice
+  // while moving styling to RoundedRaff.
+  const bool legacyCoverGridTheme = !doc["uiTheme"].isNull() && (doc["uiTheme"] | (uint8_t)0) == 4;
+
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
 
   for (const auto& info : getSettingsList()) {
@@ -183,6 +188,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       }
       s.*(info.valuePtr) = v;
     }
+  }
+
+  if (legacyCoverGridTheme && doc["homeLayout"].isNull()) {
+    uiTheme = ROUNDEDRAFF;
+    homeLayout = HOME_COVER_GRID;
+    needsResave = true;
   }
 
   if (doc["extraParagraphSpacingEnabled"].isNull()) {
