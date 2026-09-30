@@ -528,14 +528,19 @@ void HomeActivity::loopCoverGrid() {
     }
   };
 
-  buttonNavigator.onNext([this, navCount]() {
+  // Cover Grid handles the four front buttons directly through the logical
+  // mappings. This avoids depending on ButtonNavigator's shared/static state
+  // while still respecting the user's configured hardware mapping.
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, navCount);
     requestUpdate();
-  });
-  buttonNavigator.onPrevious([this, navCount]() {
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, navCount);
     requestUpdate();
-  });
+    return;
+  }
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
