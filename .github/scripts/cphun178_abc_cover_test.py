@@ -13,12 +13,12 @@ def once(path, old, new):
 once("src/CrossPointSettings.h",
      "  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };",
      """  enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
-  // Temporary physical-panel test; A is the quality-proven default.
+  // A/B/C physical-panel test; B (official Atkinson Absolute) is the default.
   enum COVER_TEST_MODE : uint8_t { COVER_TEST_OVERLAY = 0, COVER_TEST_ABSOLUTE = 1,
                                    COVER_TEST_FLOYD_OVERLAY = 2, COVER_TEST_MODE_COUNT };""")
 once("src/CrossPointSettings.h",
      "  uint8_t sleepScreenCoverMode = FIT;",
-     "  uint8_t sleepScreenCoverMode = FIT;\n  uint8_t coverTestMode = COVER_TEST_OVERLAY;")
+     "  uint8_t sleepScreenCoverMode = FIT;\n  uint8_t coverTestMode = COVER_TEST_ABSOLUTE;")
 once("src/SettingsListBase.h",
      """        SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,""",
      """        SettingInfo::Enum(StrId::STR_CPHUN_COVER_TEST_MODE, &CrossPointSettings::coverTestMode,
@@ -29,14 +29,14 @@ once("src/SettingsListBase.h",
 
 for path,labels in [
   ("lib/I18n/translations/hungarian.yaml", """STR_CPHUN_COVER_TEST_MODE: "Borítókép tesztmód"
-STR_CPHUN_COVER_TEST_A: "A – Régi Overlay"
+STR_CPHUN_COVER_TEST_A: "A - Atkinson Overlay"
 STR_CPHUN_COVER_TEST_B: "B – Absolute (177D)"
-STR_CPHUN_COVER_TEST_C: "C – Floyd–Steinberg Overlay"
+STR_CPHUN_COVER_TEST_C: "C - Floyd-Steinberg"
 """),
   ("lib/I18n/translations/english.yaml", """STR_CPHUN_COVER_TEST_MODE: "Cover test mode"
-STR_CPHUN_COVER_TEST_A: "A – Legacy Overlay"
+STR_CPHUN_COVER_TEST_A: "A - Atkinson Overlay"
 STR_CPHUN_COVER_TEST_B: "B – Absolute (177D)"
-STR_CPHUN_COVER_TEST_C: "C – Floyd–Steinberg Overlay"
+STR_CPHUN_COVER_TEST_C: "C - Floyd-Steinberg"
 """),
 ]:
     p=Path(path)
@@ -99,7 +99,7 @@ p.write_text(s,encoding="utf-8")
 # Check the post-core render hooks and default settings wiring.
 settings=Path("src/SettingsListBase.h").read_text(encoding="utf-8")
 assert '"coverTestMode", StrId::STR_CAT_DISPLAY' in settings
-assert "COVER_TEST_OVERLAY = 0" in Path("src/CrossPointSettings.h").read_text(encoding="utf-8")
+assert "coverTestMode = COVER_TEST_ABSOLUTE;" in Path("src/CrossPointSettings.h").read_text(encoding="utf-8")
 assert "getBookCoverViewBmpPath()" in s
 assert "dumpSleepDiagPlane177" not in s
 print("CPHUN-178: A/B/C menu, persistent enum, C Floyd cache, B HALF preclean; no sleepdiag")
