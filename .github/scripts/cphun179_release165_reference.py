@@ -122,13 +122,36 @@ new='''    // CPHUN-179 B: official 1.6.5 Absolute path, no HALF preclean,
 if s.count(old)!=1:raise SystemExit("179: experimental B block missing")
 p.write_text(s.replace(old,new,1),encoding="utf-8")
 
-for lang,label in (("hungarian","B – Release 1.6.5 (Atkinson + Absolute)"),
-                   ("english","B – Release 1.6.5 (Atkinson + Absolute)")):
+for lang,label in (("hungarian","B - Atkinson Absolute"),
+                   ("english","B - Atkinson Absolute")):
     p=Path(f"lib/I18n/translations/{lang}.yaml")
     s=p.read_text(encoding="utf-8")
     old='STR_CPHUN_COVER_TEST_B: "B – Absolute (177D)"'
     if s.count(old)!=1:raise SystemExit("179: B label missing")
     p.write_text(s.replace(old,'STR_CPHUN_COVER_TEST_B: "'+label+'"',1),encoding="utf-8")
+
+# CPHUN-180: migrate the prior default A once, while preserving a chosen C.
+# A future explicit A selection remains persistent after the version marker is saved.
+rep("src/CrossPointSettings.cpp",
+    '  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\\n  doc["frontButtonBack"] = frontButtonBack;',
+    '  // CPHUN-180: default-mode migration marker.\\n  doc["coverTestModeDefaultVersion"] = 1;\\n  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\\n  doc["frontButtonBack"] = frontButtonBack;')
+rep("src/CrossPointSettings.cpp",
+    '  if (doc["extraParagraphSpacingEnabled"].isNull()) {',
+    '''  // CPHUN-180: old firmware saved A=0 even when it was merely the default.
+  // Apply the new B default once. Preserve old C=2 and subsequent explicit A.
+  if (doc["coverTestModeDefaultVersion"].isNull()) {
+    if (coverTestMode == COVER_TEST_OVERLAY) coverTestMode = COVER_TEST_ABSOLUTE;
+    needsResave = true;
+  }
+
+  if (doc["extraParagraphSpacingEnabled"].isNull()) {''')
+assert "coverTestModeDefaultVersion" in Path("src/CrossPointSettings.cpp").read_text(encoding="utf-8")
+assert "coverTestMode = COVER_TEST_ABSOLUTE;" in Path("src/CrossPointSettings.h").read_text(encoding="utf-8")
+for lang in ("hungarian", "english"):
+    labels = Path(f"lib/I18n/translations/{lang}.yaml").read_text(encoding="utf-8")
+    for label in ('A - Atkinson Overlay', 'B - Atkinson Absolute', 'C - Floyd-Steinberg'):
+        assert label in labels
+print("CPHUN-180: B default and one-time migration; A/B/C labels checked")
 
 # The two experimental driver probes are NOT applied by this workflow.
 driver=Path("freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp").read_text(encoding="utf-8")
