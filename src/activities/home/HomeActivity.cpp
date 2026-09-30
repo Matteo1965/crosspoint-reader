@@ -483,16 +483,16 @@ void HomeActivity::loopCoverGrid() {
     return;
   }
 #if defined(BOARD_HAS_PSRAM)
-  const int coverW = 136, coverH = 165, coverTop = 333, rowGap = 24, colGap = 12, left = 24;
+  const int coverW = 136, coverH = 165, coverTop = 333, rowGap = 24, colGap = 12, left = 24, columns = 3;
   const int featuredW = 156, featuredH = 220, featuredTop = 91;
 #else
   const int coverW = (renderer.getScreenWidth() - 72) / 2, coverH = 292;
-  const int coverTop = 392, rowGap = 0, colGap = 24, left = 24;
+  const int coverTop = 392, rowGap = 0, colGap = 24, left = 24, columns = 2;
   const int featuredW = 180, featuredH = 265, featuredTop = 91;
 #endif
   for (int i = 0; i < bookCount; ++i) {
-    const int x = i == 0 ? 24 : left + ((i - 1) % (gridBookLimit() == 7 ? 3 : 2)) * (coverW + colGap);
-    const int y = i == 0 ? featuredTop : coverTop + ((i - 1) / (gridBookLimit() == 7 ? 3 : 2)) * (coverH + rowGap);
+    const int x = i == 0 ? 24 : left + ((i - 1) % columns) * (coverW + colGap);
+    const int y = i == 0 ? featuredTop : coverTop + ((i - 1) / columns) * (coverH + rowGap);
     const int w = i == 0 ? featuredW : coverW;
     const int h = i == 0 ? featuredH : coverH;
     if (mappedInput.wasTapInRect(x, y, w, h)) {
