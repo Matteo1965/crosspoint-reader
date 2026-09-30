@@ -133,8 +133,8 @@ for lang,label in (("hungarian","B - Atkinson Absolute"),
 # CPHUN-180: migrate the prior default A once, while preserving a chosen C.
 # A future explicit A selection remains persistent after the version marker is saved.
 rep("src/CrossPointSettings.cpp",
-    '  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\\n  doc["frontButtonBack"] = frontButtonBack;',
-    '  // CPHUN-180: default-mode migration marker.\\n  doc["coverTestModeDefaultVersion"] = 1;\\n  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\\n  doc["frontButtonBack"] = frontButtonBack;')
+    '  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\n  doc["frontButtonBack"] = frontButtonBack;',
+    '  // CPHUN-180: default-mode migration marker.\n  doc["coverTestModeDefaultVersion"] = 1;\n  // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.\n  doc["frontButtonBack"] = frontButtonBack;')
 rep("src/CrossPointSettings.cpp",
     '  if (doc["extraParagraphSpacingEnabled"].isNull()) {',
     '''  // CPHUN-180: old firmware saved A=0 even when it was merely the default.
