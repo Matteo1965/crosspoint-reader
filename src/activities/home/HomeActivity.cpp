@@ -569,7 +569,7 @@ void HomeActivity::loopCoverGrid() {
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
-    if (menuTouch == MappedInputManager::RowTouch::Up) activate();
+    if (menuTouch == MappedInputManager::RowTouch::Tap) activate();
     else requestUpdate();
     return;
   }
