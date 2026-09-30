@@ -20,6 +20,9 @@ class HomeActivity final : public Activity {
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
   bool coverRendered = false;      // Track if cover has been rendered once
+  int featuredProgressPercent = -1;
+  int featuredCurrentPage = 0;
+  int featuredTotalPages = 0;
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
@@ -56,6 +59,7 @@ class HomeActivity final : public Activity {
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
+  void loadFeaturedProgress();
   void loadRecentCovers(int coverHeight);
 
  public:

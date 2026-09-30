@@ -9,9 +9,11 @@
 #include <HalGPIO.h>
 #include <Utf8.h>
 #include <Xtc.h>
+#include <Epub/Section.h>
 
 #include <algorithm>
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -46,7 +48,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   const int coverW = (width - left * 2 - gapX * 2) / columns;
   const int coverH = (coverW * 205 + 68) / 136;
-  return {left, coverW, coverH, 54, 286, gapX, columns, 500};
+  return {left, coverW, coverH, 54, 286, gapX, columns, 520};
 }
 
 bool validBmpFile(const std::string& path) {
@@ -141,6 +143,56 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
+void HomeActivity::loadFeaturedProgress() {
+  featuredProgressPercent = -1;
+  featuredCurrentPage = 0;
+  featuredTotalPages = 0;
+  if (recentBooks.empty() || !FsHelpers::hasEpubExtension(recentBooks[0].path)) return;
+
+  auto epub = std::make_shared<Epub>(recentBooks[0].path, "/.crosspoint");
+  if (!epub->load(false, true) || epub->getBookSize() == 0) return;
+
+  HalFile f;
+  if (!Storage.openFileForRead("HOME", epub->getCachePath() + "/progress.bin", f)) return;
+  uint8_t data[10] = {};
+  const int dataSize = f.read(data, sizeof(data));
+  f.close();
+  if (dataSize != 4 && dataSize != 6 && dataSize != 10) return;
+
+  const int spineIndex = data[0] + (data[1] << 8);
+  int pageIndex = data[2] + (data[3] << 8);
+  const int chapterPages = dataSize >= 6 ? data[4] + (data[5] << 8) : 0;
+  if (pageIndex == UINT16_MAX) pageIndex = 0;
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return;
+
+  float intra = 0.0f;
+  if (chapterPages > 1) {
+    intra = std::clamp(static_cast<float>(pageIndex) / static_cast<float>(chapterPages - 1), 0.0f, 1.0f);
+  }
+  const float progress = std::clamp(epub->calculateProgress(spineIndex, intra), 0.0f, 1.0f);
+  featuredProgressPercent = static_cast<int>(progress * 100.0f + 0.5f);
+
+  // Book-wide page fraction is shown only when every spine already has a
+  // finalized page count for the current layout. Never force pagination from Home.
+  int pagesBefore = 0;
+  int total = 0;
+  bool complete = true;
+  for (int i = 0; i < epub->getSpineItemsCount(); ++i) {
+    Section section(epub, i, renderer);
+    const auto count = section.getCachedPageCount();
+    if (!count.has_value() || *count <= 0) {
+      complete = false;
+      break;
+    }
+    if (i < spineIndex) pagesBefore += *count;
+    total += *count;
+  }
+  if (complete && total > 0) {
+    featuredCurrentPage = std::min(total, pagesBefore + std::max(0, pageIndex) + 1);
+    featuredTotalPages = total;
+  }
+}
+
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
@@ -204,6 +256,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
+  if (coverGridActive()) loadFeaturedProgress();
   recentsLoaded = true;
   recentsLoading = false;
   if (coverGridActive()) {
@@ -640,7 +693,7 @@ void HomeActivity::renderCoverGrid() {
                        [&icons](int index) { return icons[index]; });
   };
 
-  if (gridFrameValid) {
+  if (gridFrameValid && recentsLoaded) {
     auto outlineBook = [this, &layout](const int selected, const bool black) {
       if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
       const int x = selected == 0 ? layout.left
@@ -678,9 +731,21 @@ void HomeActivity::renderCoverGrid() {
       renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
       titleY += renderer.getLineHeight(UI_12_FONT_ID);
     }
+    int infoY = titleY + 6;
     if (!recentBooks[0].author.empty()) {
       const auto author = renderer.truncatedText(UI_10_FONT_ID, recentBooks[0].author.c_str(), textW);
-      renderer.drawText(UI_10_FONT_ID, textX, titleY + 6, author.c_str());
+      renderer.drawText(UI_10_FONT_ID, textX, infoY, author.c_str());
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 6;
+    }
+    if (featuredProgressPercent >= 0) {
+      char progressText[40];
+      if (featuredTotalPages > 0 && featuredCurrentPage > 0) {
+        snprintf(progressText, sizeof(progressText), "%d%% · %d/%d oldal", featuredProgressPercent,
+                 featuredCurrentPage, featuredTotalPages);
+      } else {
+        snprintf(progressText, sizeof(progressText), "%d%%", featuredProgressPercent);
+      }
+      renderer.drawText(UI_10_FONT_ID, textX, infoY, progressText);
     }
 
     for (size_t i = 1; i < recentBooks.size(); ++i) {

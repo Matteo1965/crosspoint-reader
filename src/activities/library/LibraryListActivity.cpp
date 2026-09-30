@@ -875,7 +875,7 @@ void LibraryListActivity::drawPositionReadout() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
   const int x = renderer.getScreenWidth() - width - SIDE_PADDING;
-  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID);
+  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID) - 4;
   renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
 }
 
@@ -899,8 +899,9 @@ void LibraryListActivity::drawHoldHelp() const {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight;
-  GUI.drawHelpText(renderer, Rect{SIDE_PADDING, y, renderer.getScreenWidth() / 2 - SIDE_PADDING, lineHeight}, help);
+  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight - 4;
+  const int helpWidth = std::min(320, renderer.getScreenWidth() - SIDE_PADDING * 2);
+  GUI.drawHelpText(renderer, Rect{SIDE_PADDING, y, helpWidth, lineHeight}, help);
 }
 
 void LibraryListActivity::drawFooter() {
