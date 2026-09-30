@@ -597,7 +597,7 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
                       renderer.truncatedText(SMALL_FONT_ID, book.title.c_str(), rect.width - 16).c_str());
   }
   if (selectorIndex == static_cast<int>(index))
-    renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, true);
+    renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, true);
 }
 
 void HomeActivity::loopCoverGrid() {
@@ -699,7 +699,7 @@ void HomeActivity::renderCoverGrid() {
       const int x = selected == 0 ? layout.left
                                   : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
       const int y = selected == 0 ? layout.featuredY : layout.gridY;
-      renderer.drawRect(x - 3, y - 3, layout.coverW + 6, layout.coverH + 6, black);
+      renderer.drawRect(x - 3, y - 3, layout.coverW + 6, layout.coverH + 6, 2, black);
     };
 
     if (previousGridSelection != selectorIndex) {
@@ -723,7 +723,7 @@ void HomeActivity::renderCoverGrid() {
   if (!recentBooks.empty()) {
     paintGridCover(0, Rect{layout.left, layout.featuredY, layout.coverW, layout.coverH});
 
-    const int textX = layout.left + layout.coverW + 16;
+    const int textX = layout.left + layout.coverW + 26;
     const int textW = std::max(40, width - textX - 20);
     const auto title = renderer.wrappedText(UI_12_FONT_ID, recentBooks[0].title.c_str(), textW, 4);
     int titleY = layout.featuredY + 38;
@@ -733,9 +733,9 @@ void HomeActivity::renderCoverGrid() {
     }
     int infoY = titleY + 6;
     if (!recentBooks[0].author.empty()) {
-      const auto author = renderer.truncatedText(UI_10_FONT_ID, recentBooks[0].author.c_str(), textW);
-      renderer.drawText(UI_10_FONT_ID, textX, infoY, author.c_str());
-      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 6;
+      const auto author = renderer.truncatedText(UI_12_FONT_ID, recentBooks[0].author.c_str(), textW);
+      renderer.drawText(UI_12_FONT_ID, textX, infoY, author.c_str(), true, EpdFontFamily::REGULAR);
+      infoY += renderer.getLineHeight(UI_12_FONT_ID) + 6;
     }
     if (featuredProgressPercent >= 0) {
       char progressText[40];
@@ -746,6 +746,16 @@ void HomeActivity::renderCoverGrid() {
         snprintf(progressText, sizeof(progressText), "%d%%", featuredProgressPercent);
       }
       renderer.drawText(UI_10_FONT_ID, textX, infoY, progressText);
+
+      constexpr int progressBarHeight = 8;
+      const int progressBarY = infoY + renderer.getLineHeight(UI_10_FONT_ID) + 6;
+      renderer.fillRect(textX, progressBarY, textW, progressBarHeight, false);
+      renderer.drawRect(textX, progressBarY, textW, progressBarHeight, true);
+      const int innerWidth = std::max(0, textW - 2);
+      const int fillWidth = (innerWidth * std::clamp(featuredProgressPercent, 0, 100) + 50) / 100;
+      if (fillWidth > 0) {
+        renderer.fillRectDither(textX + 1, progressBarY + 1, fillWidth, progressBarHeight - 2, Color::DarkGray);
+      }
     }
 
     for (size_t i = 1; i < recentBooks.size(); ++i) {

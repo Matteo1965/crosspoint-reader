@@ -16,6 +16,17 @@ namespace {
 constexpr int PAGE_COUNT = 5;
 constexpr int SIDE_PADDING = 20;
 
+std::string hungarianEditionLabel() {
+  const std::string buildId = CPHUN_BUILD_ID;
+  const size_t firstDash = buildId.find('-');
+  const size_t secondDash = firstDash == std::string::npos ? std::string::npos : buildId.find('-', firstDash + 1);
+  const size_t thirdDash = secondDash == std::string::npos ? std::string::npos : buildId.find('-', secondDash + 1);
+  if (secondDash == std::string::npos || thirdDash == std::string::npos || thirdDash <= secondDash + 1) {
+    return "Hungarian Edition";
+  }
+  return "Hungarian Edition v." + buildId.substr(secondDash + 1, thirdDash - secondDash - 1);
+}
+
 }  // namespace
 
 void CrossPointVersionActivity::onEnter() {
@@ -127,9 +138,10 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     };
 
     drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
-    drawLabelValue(tr(STR_EDITION), "Hungarian Edition");
+    const std::string editionLabel = hungarianEditionLabel();
+    drawLabelValue(tr(STR_EDITION), editionLabel.c_str());
     drawWrapped(UI_12_FONT_ID, CPHUN_BUILD_ID);
-    drawLabelValue(hu ? "Dátum" : "Date", "Sep-8 2026");
+    drawLabelValue(hu ? "Dátum" : "Date", CPHUN_BUILD_DATE);
 
     y += bodyLineHeight;
     drawWrapped(UI_12_FONT_ID, tr(STR_GITHUB_RELEASES), true);
@@ -140,86 +152,69 @@ void CrossPointVersionActivity::render(RenderLock&&) {
 
     drawWrapped(UI_12_FONT_ID, hu ? "A Hungarian Edition fő fejlesztései:" : "Key Hungarian Edition improvements:", true);
     const char* features[] = {
-        hu ? "- Magyar felhasználói felület" : "- Hungarian user interface",
-        hu ? "- Magyar szótár és szótövezés → 2. oldal" : "- Hungarian dictionary and stemming → page 2",
-        hu ? "- Magyar elválasztás → 3. oldal" : "- Hungarian hyphenation → page 3",
-        hu ? "- Sorkizárás és tipográfia → 4. oldal" : "- Justification and typography → page 4",
-        hu ? "- Újdonságok és javítások  5. oldal" : "- New features and fixes  page 5",
+        hu ? "- Magyar felület, billentyűzet és Könyvtár" : "- Hungarian UI, keyboard and Library",
+        hu ? "- Szótár, szótövezés és szerkesztés → 2. oldal" : "- Dictionary, stemming and editing → page 2",
+        hu ? "- Kiterjesztett magyar elválasztás → 3. oldal" : "- Extended Hungarian hyphenation → page 3",
+        hu ? "- Sorkizárás és optikai tipográfia → 4. oldal" : "- Justification and optical typography → page 4",
+        hu ? "- Újdonságok, szinkron és főoldal → 5. oldal" : "- New features, sync and Home screen → page 5",
     };
     for (const char* feature : features) drawWrapped(UI_12_FONT_ID, feature);
   } else if (currentPage == 1) {
-    drawWrapped(UI_12_FONT_ID, hu ? "Magyar szótár és szótövezés" : "Hungarian dictionary and stemming", true);
+    drawWrapped(UI_12_FONT_ID, hu ? "Magyar szótár, szótövezés és szerkesztés"
+                                  : "Hungarian dictionary, stemming and editing", true);
     y += bodyLineHeight;
-    drawSection(hu ? "StarDict szótárak" : "StarDict dictionaries",
-                hu ? "A szótárak külön telepíthetők, és nem részei a firmware-nek."
-                   : "Dictionaries are installed separately and are not part of the firmware.");
-    drawWrapped(UI_12_FONT_ID,
-                hu ? "Támogatott formátum: szabványos StarDict szótárak"
-                   : "Supported format: standard StarDict dictionaries");
-    y += bodyLineHeight;
-    drawSection(hu ? "Javított magyar szótárkezelés" : "Improved Hungarian dictionary handling",
-                hu ? "A továbbfejlesztett szótárkezelés a ragozott és toldalékolt szóalakok esetén is segíti a megfelelő szótári címszó megtalálását."
-                   : "Improved dictionary handling helps find the appropriate headword for inflected and suffixed Hungarian word forms.");
-    drawSection(hu ? "Magyar szótövezés" : "Hungarian stemming",
-                hu ? "Közel 400 egyedi szóalak kezelési kiegészítés és nyelvtani szabály a pontosabb címszókereséshez."
-                   : "357 unique word-form handling additions for more accurate headword lookup.");
+    drawSection(hu ? "StarDict és ragozott szóalakok" : "StarDict and inflected forms",
+                hu ? "Szabványos StarDict szótárak, továbbfejlesztett magyar címszókereséssel és szótövezéssel."
+                   : "Standard StarDict dictionaries with improved Hungarian headword lookup and stemming.");
+    drawSection(hu ? "Kijelölés és szerkesztés" : "Highlight and edit",
+                hu ? "Szavak kijelölése, javítása magyar billentyűzettel, valamint a módok közvetlen váltása."
+                   : "Word highlighting and correction with the Hungarian keyboard, with direct mode switching.");
+    drawSection(hu ? "TSV export" : "TSV export",
+                hu ? "A megjelölt és szerkesztett bejegyzések exportálhatók további EPUB-javításhoz."
+                   : "Highlighted and edited entries can be exported for later EPUB correction.");
   } else if (currentPage == 2) {
     drawWrapped(UI_12_FONT_ID, hu ? "Magyar elválasztás" : "Hungarian hyphenation", true);
     y += bodyLineHeight;
     drawSection(hu ? "Kiterjesztett magyar elválasztás" : "Extended Hungarian hyphenation",
-                hu ? "Nagy Bence Huhyphn elválasztási mintái, saját kiegészítésekkel és továbbfejlesztésekkel. A dupla kettős mássalhangzók helyes magyar elválasztásának támogatása."
-                   : "Bence Nagy's Huhyphn patterns with custom additions and improvements, including correct Hungarian hyphenation of long multigraph consonants.");
-    if (hu) {
-      drawMixedSection("Beágyazott elválasztás", " (Soft hyphen)",
-                       "Az EPUB-ba beágyazott feltételes elválasztások támogatása, opcionálisan aktiválható funkcióként.");
-    } else {
-      drawSection("Embedded hyphenation (Soft hyphen)",
-                  "Support for conditional hyphenation embedded in EPUB files, as an optional feature.");
-    }
-    drawSection(hu ? "Elválasztási nyelvek" : "Hyphenation languages",
-                hu ? "Angol és magyar elválasztás támogatása. Más nyelvekhez a firmware nem tartalmaz elválasztási mintákat."
-                   : "English and Hungarian hyphenation are supported. The firmware contains no hyphenation patterns for other languages.");
+                hu ? "Huhyphn minták saját kiegészítésekkel, a hosszú többjegyű mássalhangzók és magyar kivételek kezelésével."
+                   : "Huhyphn patterns with custom extensions for long multigraph consonants and Hungarian exceptions.");
+    drawSection(hu ? "Elválasztási küszöb" : "Hyphenation threshold",
+                hu ? "A szó elején és végén megtartandó minimum 1-1, 1-2, 2-2, 2-3 vagy 3-3 értékre állítható."
+                   : "Minimum prefix/suffix can be set to 1-1, 1-2, 2-2, 2-3 or 3-3.");
+    drawSection(hu ? "Soft hyphen és rövid elválasztójel" : "Soft hyphen and short hyphen",
+                hu ? "Beágyazott feltételes elválasztás és opcionális rövid elválasztójel SD-kártyás fontokhoz is."
+                   : "Embedded conditional hyphenation and optional short hyphen, including SD-card fonts.");
   } else if (currentPage == 3) {
     drawWrapped(UI_12_FONT_ID, hu ? "Sorkizárás és tipográfia" : "Justification and typography", true);
     y += bodyLineHeight;
-    drawSection(hu ? "Javított sorkizárt szedés" : "Improved justified text",
-                hu ? "Egyenletesebb szövegkép a túl nagy szóközök csökkentésével."
-                   : "More even text by reducing excessively large word spaces.");
-    drawSection(hu ? "Betűköz-korrekció" : "Letter-spacing correction",
-                hu ? "A túl nagy szóközök mérséklése a betűköz finom növelésével."
-                   : "Reduces excessive word spacing by subtly increasing letter spacing.");
-    drawSection(hu ? "Szó- és párbeszédközök" : "Word and dialogue spacing",
-                hu ? "A minimális szóköz 50–100% között állítható, a hibás párbeszédközök automatikusan javíthatók."
-                   : "Minimum word spacing is adjustable between 50–100%, and incorrect dialogue spacing can be corrected automatically.");
-    drawSection(hu ? "Extra bekezdésköz" : "Extra paragraph spacing",
-                hu ? "A bekezdések közötti térköz növelése."
-                   : "Increases spacing between paragraphs.");
-    if (hu) {
-      drawMixedSection("Optikai margó", " (Hanging punctuation)",
-                       "Az írásjelek margóba helyezésével egyenletesebb szövegszélek.");
-    } else {
-      drawSection("Hanging punctuation",
-                  "Places punctuation into the margin for a more even text edge.");
-    }
+    drawSection(hu ? "Betűköz-korrekció és optimalizálás" : "Letter-spacing correction and optimization",
+                hu ? "Több fokozatban csökkenti a túl nagy szóközöket; betűpár- és ABA/AA-védelemmel."
+                   : "Multi-level reduction of excessive word spacing with pair and ABA/AA protection.");
+    drawSection(hu ? "Optikai margó és sorvég-korrekció" : "Optical margin and line-end correction",
+                hu ? "Írásjelek optikai kilógatása és a sorvég látható tintaszélének finom, legfeljebb 8 px-es korrekciója."
+                   : "Hanging punctuation and fine visible-ink line-end correction up to 8 px.");
+    drawSection(hu ? "Szóköz, párbeszéd és bekezdés" : "Spacing, dialogue and paragraphs",
+                hu ? "Állítható minimális szóköz, párbeszédköz-javítás és extra bekezdésköz."
+                   : "Adjustable minimum word spacing, dialogue-spacing repair and extra paragraph spacing.");
   } else {
     drawWrapped(UI_12_FONT_ID, hu ? "Újdonságok és javítások" : "New features and fixes", true);
     y += bodyLineHeight;
     const char* updates[] = {
-        hu ? "- Magyar billentyűzet" : "- Hungarian keyboard",
-        hu ? "- Opcionális rövid / hosszú elválasztójel" : "- Optional short / long hyphen",
-        hu ? "- Alsó gombok beállítása: 1×, 2× és Hosszú nyomás" : "- Bottom button setup: 1×, 2× and Long press",
-        hu ? "- Sorköz 6 fokozatban állítható" : "- Line spacing adjustable in 6 steps",
-        hu ? "- Automatikus Fejezet generálás" : "- Automatic Chapter generation",
+        hu ? "- Könyvtár nézet és Borítórács főoldal" : "- Library view and Cover Grid home",
+        hu ? "- KOReader szinkron és rejtett EPUB-elemek" : "- KOReader sync and hidden EPUB elements",
+        hu ? "- Továbbfejlesztett lábjegyzet-kezelés" : "- Improved footnote handling",
+        hu ? "- Fejezet újraindexelése és beállításmentés" : "- Chapter reindexing and settings persistence",
+        hu ? "- SD-font memória- és gyorsítótár-javítások" : "- SD-font memory and cache improvements",
+        hu ? "- X4 és X4 Classic kompatibilitás" : "- X4 and X4 Classic compatibility",
     };
     for (const char* update : updates) drawWrapped(UI_12_FONT_ID, update);
 
     y += bodyLineHeight;
-    drawWrapped(UI_12_FONT_ID, "CrossPoint 1.6.0:", true);
+    drawWrapped(UI_12_FONT_ID, "CrossPoint 1.6.5:", true);
     const char* releaseUpdates[] = {
-        hu ? "- Éjszakai mód" : "- Night Mode",
-        hu ? "- Átlátszó alvóképernyők" : "- Transparent sleep screens",
-        hu ? "- Továbbfejlesztett StarDict szótárkezelés" : "- Improved StarDict dictionary handling",
-        hu ? "- Stabilitási és hibajavítások" : "- Stability and bug fixes",
+        hu ? "- Rövid gombnyomás és lista-újrarajzolás javítások" : "- Short-press and list-redraw fixes",
+        hu ? "- Alvóképernyő átlátszóság és fejezetpozíció" : "- Sleep-screen transparency and chapter position",
+        hu ? "- Stabilitási és kompatibilitási javítások" : "- Stability and compatibility fixes",
     };
     for (const char* update : releaseUpdates) drawWrapped(UI_12_FONT_ID, update);
   }
