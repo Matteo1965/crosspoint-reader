@@ -54,6 +54,9 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // Lightweight OPF-only metadata read for library indexing. Does not build
+  // spine/TOC/CSS/cover caches and is safe for unopened books.
+  bool loadMetadata(std::string& title, std::string& author);
   bool clearCache() const;
   bool clearCachePreservingProgress();
   bool cacheReadyForCleanRebuild() const;
