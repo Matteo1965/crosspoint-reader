@@ -304,15 +304,19 @@ void HomeActivity::loop() {
     }
   };
 
-  buttonNavigator.onNext([this, menuCount] {
+  // Home navigation uses the logical mapped hardware buttons directly.
+  // Keep the same mapping/orientation semantics as ButtonNavigator without
+  // depending on its shared static input pointer/state.
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
     requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this, menuCount] {
+    return;
+  }
+  if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
     requestUpdate();
-  });
+    return;
+  }
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
