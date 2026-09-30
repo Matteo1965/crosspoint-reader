@@ -483,6 +483,14 @@ bool Epub::writeSourceFingerprint() const {
   return written == sizeof(fp);
 }
 
+bool Epub::loadMetadata(std::string& title, std::string& author) {
+  BookMetadataCache::BookMetadata metadata;
+  if (!parseContentOpf(metadata, /*writeSpineEntries=*/false)) return false;
+  title = std::move(metadata.title);
+  author = std::move(metadata.author);
+  return true;
+}
+
 // load in the meta data for the epub file
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
