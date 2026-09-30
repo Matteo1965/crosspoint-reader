@@ -135,7 +135,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   recentsLoaded = true;
   recentsLoading = false;
-  if (coverGridActive()) requestUpdate();
+  if (coverGridActive()) {
+    gridFrameValid = false;  // Loading popups and new BMPs invalidate the old pixels.
+    requestUpdate();
+  }
 }
 
 void HomeActivity::onEnter() {
@@ -146,6 +149,8 @@ void HomeActivity::onEnter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(coverGridActive() ? gridBookLimit() : metrics.homeRecentBooksCount);
   backPressSeen = false;
+  gridFrameValid = false;
+  previousGridSelection = -1;
   firstRenderDone = false;
   recentsLoaded = false;
   recentsLoading = false;
@@ -511,6 +516,44 @@ void HomeActivity::loopCoverGrid() {
 void HomeActivity::renderCoverGrid() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getScreenWidth();
+  // The framebuffer persists while Home is active. Only repaint the old and
+  // new one-pixel selection outlines when navigating; leave the BMPs intact.
+  // onEnter() and thumbnail generation always invalidate this fast path.
+  if (gridFrameValid) {
+#if defined(BOARD_HAS_PSRAM)
+    const int coverW = 136, coverH = 165, coverTop = 333, rowGap = 24, colGap = 12, columns = 3;
+    const int featuredW = 156, featuredH = 220;
+#else
+    const int coverW = (width - 72) / 2, coverH = 292, coverTop = 392, rowGap = 0, colGap = 24, columns = 2;
+    const int featuredW = 180, featuredH = 265;
+#endif
+    const int menuEntries = 4 + (hasOpdsServers ? 1 : 0);
+    const int menuWidth = width / menuEntries;
+    auto outline = [this, coverW, coverH, coverTop, rowGap, colGap, columns,
+                    featuredW, featuredH, menuWidth](const int selected, const bool black) {
+      if (selected < 0) return;
+      if (selected < static_cast<int>(recentBooks.size())) {
+        if (selected == 0) {
+          renderer.drawRect(21, 88, featuredW + 6, featuredH + 6, black);
+        } else {
+          const int i = selected - 1;
+          const int x = 24 + (i % columns) * (coverW + colGap);
+          const int y = coverTop + (i / columns) * (coverH + rowGap);
+          renderer.drawRect(x - 3, y - 3, coverW + 6, coverH + 6, black);
+        }
+      } else {
+        const int i = selected - static_cast<int>(recentBooks.size());
+        renderer.drawRect(i * menuWidth + 8, 703, menuWidth - 16, 49, black);
+      }
+    };
+    if (previousGridSelection != selectorIndex) {
+      outline(previousGridSelection, false);
+      outline(selectorIndex, true);
+    }
+    previousGridSelection = selectorIndex;
+    renderer.displayBuffer();
+    return;
+  }
   renderer.clearScreen();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, metrics.homeTopPadding - metrics.topPadding}, nullptr);
   renderer.drawText(UI_12_FONT_ID, 24, 59, tr(STR_CONTINUE_READING), true, EpdFontFamily::BOLD);
@@ -568,6 +611,8 @@ void HomeActivity::renderCoverGrid() {
                                             tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
+  gridFrameValid = true;
+  previousGridSelection = selectorIndex;
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
