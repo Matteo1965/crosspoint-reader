@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
+      - agent/cphun-177b-absolute-half-preclean
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
