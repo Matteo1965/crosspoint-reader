@@ -12,6 +12,7 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  bool backPressSeen = false;  // Prevent a stale Back release opening a book on entering Home.
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
@@ -63,6 +64,12 @@ class HomeActivity final : public Activity {
   void onOpdsBrowserOpen();
 
   int getMenuItemCount() const;
+  bool coverGridActive() const;
+  int gridBookLimit() const;
+  int gridCoverHeight(int index) const;
+  void loopCoverGrid();
+  void renderCoverGrid();
+  void paintGridCover(size_t index, Rect rect);
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
