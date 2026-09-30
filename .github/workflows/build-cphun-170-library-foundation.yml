@@ -1,4 +1,4 @@
-name: 'CPHUN-177: X4 absolute grayscale integration'
+name: 'CPHUN-177B: X4 Absolute HALF-preclean isolation'
 on:
   push:
     branches:
@@ -22,7 +22,7 @@ on:
       - '.github/scripts/cphun177_absolute_grayscale_core.py'
       - '.github/scripts/cphun177_sdk_grayscale_backport.sh'
       - '.github/scripts/cphun177_sleepdiag_patch.py'
-      - '.github/scripts/cphun177a_sleep_overlay_probe.py'
+      - '.github/scripts/cphun177b_absolute_preclean_probe.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -193,9 +193,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260929-177-GRAY"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177B-ABS-PRECLEAN"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260929-177-GRAY' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-177B-ABS-PRECLEAN' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -215,8 +215,8 @@ jobs:
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
       - name: Apply CPHUN-177 sleep framebuffer diagnostics
         run: python3 .github/scripts/cphun177_sleepdiag_patch.py
-      - name: Apply CPHUN-177A legacy Overlay sleep isolation probe
-        run: python3 .github/scripts/cphun177a_sleep_overlay_probe.py
+      - name: Apply CPHUN-177B Absolute HALF preclean isolation probe
+        run: python3 .github/scripts/cphun177b_absolute_preclean_probe.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
@@ -282,7 +282,7 @@ jobs:
           grep -q 'cphun177_bitmap_lsb.bin' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'cphun177_bitmap_msb.bin' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'absolute=' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'CPHUN-177A isolation probe' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'CPHUN-177B: isolated physical-panel precondition' src/activities/boot_sleep/SleepActivity.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -320,7 +320,7 @@ jobs:
       - name: Upload CPHUN-177 absolute grayscale + sleepdiag Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260929-177A-OVERLAY-PROBE-X4
+          name: CPHUN-260930-177B-ABS-PRECLEAN-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
