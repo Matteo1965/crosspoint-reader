@@ -1,9 +1,9 @@
-name: 'CPHUN-177C: SSD1677 factory Absolute C7 isolation'
+name: 'CPHUN-177D: Absolute grayscale plane assignment isolation'
 on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
-      - agent/cphun-177c-absolute-c7-probe
+      - agent/cphun-177d-absolute-plane-swap
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -25,6 +25,7 @@ on:
       - '.github/scripts/cphun177_sleepdiag_patch.py'
       - '.github/scripts/cphun177b_absolute_preclean_probe.py'
       - '.github/scripts/cphun177c_factory_c7_probe.py'
+      - '.github/scripts/cphun177d_plane_swap_probe.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -195,9 +196,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177C-ABS-C7"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177D-ABS-PLANESWAP"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260930-177C-ABS-C7' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-177D-ABS-PLANESWAP' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -221,6 +222,8 @@ jobs:
         run: python3 .github/scripts/cphun177b_absolute_preclean_probe.py
       - name: Apply CPHUN-177C SSD1677 factory C7 activation probe
         run: python3 .github/scripts/cphun177c_factory_c7_probe.py
+      - name: Apply CPHUN-177D Absolute plane assignment probe
+        run: python3 .github/scripts/cphun177d_plane_swap_probe.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
@@ -288,6 +291,7 @@ jobs:
           grep -q 'absolute=' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'CPHUN-177B: isolated physical-panel precondition' src/activities/boot_sleep/SleepActivity.cpp
           grep -q 'CPHUN-177C: older SDK factory-Absolute activation' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q '_absoluteInput ? CMD_WRITE_RAM_RED : CMD_WRITE_RAM_BW' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
           grep -q 'wasLongPressed' src/MappedInputManager.cpp
@@ -325,7 +329,7 @@ jobs:
       - name: Upload CPHUN-177 absolute grayscale + sleepdiag Hungarian Edition firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260930-177C-ABS-C7-X4
+          name: CPHUN-260930-177D-ABS-PLANESWAP-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
