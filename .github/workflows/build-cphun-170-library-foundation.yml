@@ -1,9 +1,9 @@
-name: 'CPHUN-177E: swapped planes with SDK CCh activation'
+name: 'CPHUN-178: A/B/C grayscale cover comparison'
 on:
   push:
     branches:
       - agent/cphun-172-library-release-sync
-      - agent/cphun-177e-swapped-planes-cc
+      - agent/cphun-178-abc-cover-test
     paths:
       - '.github/workflows/build-cphun-170-library-foundation.yml'
       - 'lib/LibraryIndex/**'
@@ -26,6 +26,8 @@ on:
       - '.github/scripts/cphun177b_absolute_preclean_probe.py'
       - '.github/scripts/cphun177c_factory_c7_probe.py'
       - '.github/scripts/cphun177d_plane_swap_probe.py'
+      - '.github/scripts/cphun177c_factory_c7_probe.py'
+      - '.github/scripts/cphun178_abc_cover_test.py'
       - 'src/activities/library/**'
       - 'src/MappedInputManager.h'
       - 'src/MappedInputManager.cpp'
@@ -196,9 +198,9 @@ jobs:
             fi
             echo "Verified tested button handling unchanged: $path"
           done
-          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-177E-SWAP-CC"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-178-ABC-COVER"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
           grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
-          grep -Fq 'CPHUN-260930-177E-SWAP-CC' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-178-ABC-COVER' src/CPHUNBuildId.h
           git diff --check
       - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
         run: bash .github/scripts/cphun171_integrate_library_view.sh
@@ -216,12 +218,12 @@ jobs:
         run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
       - name: Apply CPHUN-177 application-side absolute grayscale core
         run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
-      - name: Apply CPHUN-177 sleep framebuffer diagnostics
-        run: python3 .github/scripts/cphun177_sleepdiag_patch.py
-      - name: Apply CPHUN-177B Absolute HALF preclean isolation probe
-        run: python3 .github/scripts/cphun177b_absolute_preclean_probe.py
+      - name: Apply CPHUN-177C factory C7 activation to B only
+        run: python3 .github/scripts/cphun177c_factory_c7_probe.py
       - name: Apply CPHUN-177D Absolute plane assignment probe
         run: python3 .github/scripts/cphun177d_plane_swap_probe.py
+      - name: Apply CPHUN-178 A/B/C cover selector and remove sleepdiag
+        run: python3 .github/scripts/cphun178_abc_cover_test.py
       - name: Restore physically-tested low-level X4 hardware-button sources
         run: |
           git fetch origin agent/cphun-157r1-recover-hardware-buttons
@@ -283,12 +285,13 @@ jobs:
           grep -q 'grayPlanesAreAbsolute' lib/GfxRenderer/GfxRenderer.h
           grep -q 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
           grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 10000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
-          grep -q 'cphun177_bitmap_bw.bin' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'cphun177_bitmap_lsb.bin' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'cphun177_bitmap_msb.bin' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'absolute=' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'CPHUN-177B: isolated physical-panel precondition' src/activities/boot_sleep/SleepActivity.cpp
-          grep -q 'bus.data(0xCC);  // CLOCK_ON|ANALOG_ON|MODE_SELECT|DISPLAY_START' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          ! grep -q 'dumpSleepDiagPlane177' src/activities/boot_sleep/SleepActivity.cpp
+          ! grep -q '/sleepdiag' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
+          grep -q 'coverTestMode' src/SettingsListBase.h
+          grep -q 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'renderer.displayBuffer(HalDisplay::HALF_REFRESH);' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'bus.data(0xC7);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
           grep -q '_absoluteInput ? CMD_WRITE_RAM_RED : CMD_WRITE_RAM_BW' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
       - name: Verify navigation, rebuild action and CPHUN-169 text settings
         run: |
@@ -324,10 +327,10 @@ jobs:
         run: .venv/bin/pio run -e gh_release
       - name: Report firmware size
         run: stat -c 'firmware.bin bytes=%s' .pio/build/gh_release/firmware.bin
-      - name: Upload CPHUN-177 absolute grayscale + sleepdiag Hungarian Edition firmware
+      - name: Upload CPHUN-178 A/B/C cover test firmware
         uses: actions/upload-artifact@v4
         with:
-          name: CPHUN-260930-177E-SWAP-CC-X4
+          name: CPHUN-260930-178-ABC-COVER-X4
           path: .pio/build/gh_release/firmware.bin
           if-no-files-found: error
           retention-days: 90
