@@ -48,7 +48,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   const int coverW = (width - left * 2 - gapX * 2) / columns;
   const int coverH = (coverW * 205 + 68) / 136;
-  return {left, coverW, coverH, 54, 286, gapX, columns, 530};
+  return {left, coverW, coverH, 54, 286, gapX, columns, 520};
 }
 
 bool validBmpFile(const std::string& path) {
