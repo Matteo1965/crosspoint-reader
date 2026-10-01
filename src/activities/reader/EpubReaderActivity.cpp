@@ -1900,6 +1900,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
+  const auto absoluteCaps = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute);
+  // CPHUN-182: X4/SSD1677 image pages use the factory-quality Absolute path.
+  // Absolute supplies both complete gray planes and activates the panel only
+  // once, after every image/text/status-bar pixel has been staged.
+  const bool absoluteImagePage = pageHasImages && absoluteCaps.supported() && absoluteCaps.stripUploads;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Paper Mono only (no other panel combines): defer the B/W base activation so
   // the gray planes join it in a single waveform. Displaying the base
@@ -1915,7 +1920,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
   };
 
-  if (pageHasImagesNeedingDecode) {
+  if (pageHasImagesNeedingDecode && !absoluteImagePage) {
+    // Legacy fallback only. CPHUN-182 Absolute pages decode/cache off-screen
+    // and never expose the placeholder as an intermediate panel refresh.
     page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     renderStatusBar();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -1926,10 +1933,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   renderStatusBar();
   const auto tBwRender = millis();
 
-  if (pageHasImages) {
-    // Image pages use one base refresh before the grayscale pass. FAST leaves
-    // the panel receptive to the gray waveform; pending cleanup still honors
-    // the scheduled/manual HALF refresh.
+  if (absoluteImagePage) {
+    // CPHUN-182 intentionally does NOT refresh the B/W base here. The complete
+    // page is already in the framebuffer; Absolute staging below starts from
+    // that crisp B/W page, overlays image grays (and text AA when enabled),
+    // then performs one factory Atkinson activation.
+  } else if (pageHasImages) {
+    // Legacy fallback for panels without Absolute grayscale.
     renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
     pagesUntilFullRefresh = 1;
   } else if (combinedGrayscaleBase) {
@@ -1940,6 +1950,74 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, overlapRefresh);
   }
   const auto tDisplay = millis();
+
+  if (absoluteImagePage) {
+    constexpr int STRIP_ROWS = 80;
+    const int gh = renderer.getDisplayHeight();
+    const int gwBytes = renderer.getDisplayWidthBytes();
+    auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(gwBytes) * STRIP_ROWS);
+
+    if (!scratch) {
+      // Keep a visible page even under severe heap pressure. This is the only
+      // CPHUN-182 fallback that can still show the legacy two-stage behavior.
+      LOG_ERR("ERS", "CPHUN-182 OOM: Absolute strip scratch (%d bytes); using legacy image grayscale",
+              gwBytes * STRIP_ROWS);
+      renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+      pagesUntilFullRefresh = 1;
+    } else if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute,
+                                               cleanImageBasePending ? HalDisplay::HALF_REFRESH
+                                                                     : HalDisplay::FAST_REFRESH)) {
+      LOG_ERR("ERS", "CPHUN-182: Absolute grayscale start failed; using legacy image grayscale");
+      renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+      pagesUntilFullRefresh = 1;
+    } else {
+      const uint8_t* bwBase = renderer.getFrameBuffer();
+
+      auto stagePlane = [&](const bool lsbPlane) {
+        renderer.setRenderMode(lsbPlane ? GfxRenderer::GRAYSCALE_LSB : GfxRenderer::GRAYSCALE_MSB);
+        for (int y = 0; y < gh; y += STRIP_ROWS) {
+          const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
+          // Public Absolute encoding uses the same 1-bit values for pure B/W
+          // (black=00, white=11), so the finished B/W page is the correct seed
+          // for both planes. Images then overwrite every pixel in their rect.
+          memcpy(scratch.get(), bwBase + static_cast<size_t>(y) * gwBytes,
+                 static_cast<size_t>(rows) * gwBytes);
+          renderer.beginStripTarget(scratch.get(), y, rows);
+          if (needsTextGrayscale) {
+            page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+            renderStatusBar();
+          } else {
+            page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+          }
+          renderer.endStripTarget();
+          renderer.writeGrayscalePlaneStrip(lsbPlane, scratch.get(), y, rows);
+        }
+      };
+
+      const auto tAbsStart = millis();
+      stagePlane(true);
+      const auto tAbsLsb = millis();
+      stagePlane(false);
+      const auto tAbsMsb = millis();
+
+      // Do not switch back to BW before displayGrayBuffer(): CPHUN-177 uses
+      // that transition as an abort/cleanup guard for an unfinished Absolute
+      // pass. The final factory waveform is the page's sole visible refresh.
+      renderer.displayGrayBuffer();
+      const auto tAbsDisplay = millis();
+      renderer.setRenderMode(GfxRenderer::BW);
+      renderer.cleanupGrayscaleWithFrameBuffer();
+      pagesUntilFullRefresh = 1;
+      const auto tAbsEnd = millis();
+
+      LOG_DBG("ERS",
+              "CPHUN-182 Absolute image page: prewarm=%lums bw_render=%lums stage_lsb=%lums "
+              "stage_msb=%lums display=%lums cleanup=%lums total=%lums",
+              tPrewarm - t0, tBwRender - tPrewarm, tAbsLsb - tAbsStart, tAbsMsb - tAbsLsb,
+              tAbsDisplay - tAbsMsb, tAbsEnd - tAbsDisplay, tAbsEnd - t0);
+      return;
+    }
+  }
 
   if (tiledGrayscale) {
     constexpr int STRIP_ROWS = 80;
