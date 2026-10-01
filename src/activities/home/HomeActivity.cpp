@@ -48,7 +48,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   const int coverW = (width - left * 2 - gapX * 2) / columns;
   const int coverH = (coverW * 205 + 68) / 136;
-  return {left, coverW, coverH, 54, 286, gapX, columns, 520};
+  return {left, coverW, coverH, 54, 286, gapX, columns, 530};
 }
 
 bool validBmpFile(const std::string& path) {
@@ -484,11 +484,11 @@ void HomeActivity::render(RenderLock&&) {
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
   coverRectX = 0;
-  coverRectY = metrics.homeTopPadding + 4;
+  coverRectY = metrics.homeTopPadding + 24;
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding + 4, pageWidth, metrics.homeCoverTileHeight},
+  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding + 24, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
@@ -515,8 +515,8 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + 4 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
+      Rect{0, metrics.homeTopPadding + 24 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing + 20 +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()),
       includeContinueReading ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size()),
