@@ -369,6 +369,44 @@ jobs:
             python3 - <<'PY'
           from pathlib import Path
 
+          # The reconstructed CPHUN-180 chain already contains the same
+          # lightweight metadata implementation that the raw CPHUN-181 delta
+          # adds cleanly. Remove any duplicate implementation deterministically
+          # while keeping the first generated copy.
+          p=Path("lib/Epub/Epub.cpp")
+          s=p.read_text(encoding="utf-8")
+          signature="bool Epub::loadMetadata(std::string& title, std::string& author) {"
+          starts=[]
+          pos=0
+          while True:
+              i=s.find(signature,pos)
+              if i<0: break
+              starts.append(i)
+              pos=i+len(signature)
+          if len(starts)>1:
+              removals=[]
+              for st in starts[1:]:
+                  brace=s.find("{",st)
+                  depth=0
+                  end=None
+                  for j in range(brace,len(s)):
+                      if s[j]=="{": depth+=1
+                      elif s[j]=="}":
+                          depth-=1
+                          if depth==0:
+                              end=j+1
+                              break
+                  if end is None:
+                      raise SystemExit("Could not parse duplicate Epub::loadMetadata body")
+                  while end < len(s) and s[end] in "\r\n":
+                      end+=1
+                  removals.append((st,end))
+              for st,end in reversed(removals):
+                  s=s[:st]+s[end:]
+              p.write_text(s,encoding="utf-8")
+          elif len(starts)!=1:
+              raise SystemExit(f"Unexpected Epub::loadMetadata count: {len(starts)}")
+
           # CPHUN-181 Library indexing needs the lightweight metadata API
           # declaration; its implementation was a clean non-conflicting hunk.
           p=Path("lib/Epub/Epub.h")
