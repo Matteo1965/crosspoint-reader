@@ -332,7 +332,9 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
   spec.minimumSpacePercent = minimumSpacePercent;
   spec.embeddedStyle = embeddedStyle != 0;
-  spec.imageRendering = imageRendering;
+  // Updated and Standard differ only in the panel refresh pipeline. Both use
+  // the normal embedded-image layout/cache representation.
+  spec.imageRendering = imageRendering == IMAGES_STANDARD ? IMAGES_DISPLAY : imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
   return spec;
 }

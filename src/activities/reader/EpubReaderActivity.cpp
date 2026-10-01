@@ -1904,7 +1904,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // CPHUN-182: X4/SSD1677 image pages use the factory-quality Absolute path.
   // Absolute supplies both complete gray planes and activates the panel only
   // once, after every image/text/status-bar pixel has been staged.
-  const bool absoluteImagePage = pageHasImages && absoluteCaps.supported() && absoluteCaps.stripUploads;
+  const bool absoluteImagePage =
+      pageHasImages && SETTINGS.imageRendering == CrossPointSettings::IMAGES_DISPLAY &&
+      absoluteCaps.supported() && absoluteCaps.stripUploads;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Paper Mono only (no other panel combines): defer the B/W base activation so
   // the gray planes join it in a single waveform. Displaying the base

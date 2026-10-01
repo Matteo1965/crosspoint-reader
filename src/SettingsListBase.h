@@ -295,9 +295,29 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
-        SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
-                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
-                          "imageRendering", StrId::STR_CAT_READER),
+        SettingInfo::DynamicEnum(
+            StrId::STR_IMAGES,
+            {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_STANDARD, StrId::STR_IMAGES_PLACEHOLDER,
+             StrId::STR_IMAGES_SUPPRESS},
+            []() -> uint8_t {
+              switch (SETTINGS.imageRendering) {
+                case CrossPointSettings::IMAGES_STANDARD: return 1;
+                case CrossPointSettings::IMAGES_PLACEHOLDER: return 2;
+                case CrossPointSettings::IMAGES_SUPPRESS: return 3;
+                case CrossPointSettings::IMAGES_DISPLAY:
+                default: return 0;
+              }
+            },
+            [](uint8_t v) {
+              switch (v) {
+                case 1: SETTINGS.imageRendering = CrossPointSettings::IMAGES_STANDARD; break;
+                case 2: SETTINGS.imageRendering = CrossPointSettings::IMAGES_PLACEHOLDER; break;
+                case 3: SETTINGS.imageRendering = CrossPointSettings::IMAGES_SUPPRESS; break;
+                case 0:
+                default: SETTINGS.imageRendering = CrossPointSettings::IMAGES_DISPLAY; break;
+              }
+            },
+            "imageRendering", StrId::STR_CAT_READER),
         // Night mode = inverted output polarity on the reading surfaces only
         // (EPUB/TXT/XTC; ActivityManager resolves the polarity per render).
         // Reader category, since it does not affect the rest of the UI.

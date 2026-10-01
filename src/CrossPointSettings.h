@@ -169,7 +169,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum HOME_LAYOUT { HOME_ORIGINAL = 0, HOME_COVER_GRID = 1, HOME_LAYOUT_COUNT };
 
   // Image rendering in EPUB reader
-  enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
+  enum IMAGE_RENDERING {
+    IMAGES_DISPLAY = 0,      // CPHUN-182 updated one-shot Absolute display
+    IMAGES_PLACEHOLDER = 1,  // preserve legacy persisted value
+    IMAGES_SUPPRESS = 2,     // preserve legacy persisted value
+    IMAGES_STANDARD = 3,     // legacy CrossPoint B/W + grayscale display path
+    IMAGE_RENDERING_COUNT
+  };
 
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 

@@ -595,6 +595,16 @@ jobs:
           grep -Fq 'HalDisplay::GrayscaleMode::Absolute' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'CPHUN-182 Absolute image page' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'pageHasImagesNeedingDecode && !absoluteImagePage' src/activities/reader/EpubReaderActivity.cpp
+          # Four-state Reader > Images A/B selector. Existing persisted 0/1/2
+          # meanings stay intact; Standard is the new value 3.
+          grep -Fq 'IMAGES_STANDARD = 3' src/CrossPointSettings.h
+          grep -Fq 'imageRendering == IMAGES_STANDARD ? IMAGES_DISPLAY : imageRendering' src/CrossPointSettings.cpp
+          grep -Fq 'STR_IMAGES_STANDARD' src/SettingsListBase.h
+          grep -Fq 'STR_IMAGES_DISPLAY: "Frissített megjelenítés"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_STANDARD: "Standard megjelenítés"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_PLACEHOLDER: "Képkeret"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_SUPPRESS: "Képek nélkül"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'SETTINGS.imageRendering == CrossPointSettings::IMAGES_DISPLAY' src/activities/reader/EpubReaderActivity.cpp
           python3 - <<'PY'
           from pathlib import Path
           import re
