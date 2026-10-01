@@ -438,8 +438,22 @@ jobs:
           # the enum member and wrapper declaration required by the 181 Home.
           p=Path("src/activities/ActivityManager.h")
           s=p.read_text(encoding="utf-8")
-          if "HomeMenuItem { NONE, LIBRARY," not in s:
-              s=s.replace("HomeMenuItem { NONE,", "HomeMenuItem { NONE, LIBRARY,", 1)
+          import re
+          m=re.search(r'enum class HomeMenuItem \{([^}]*)\};', s)
+          if not m:
+              raise SystemExit("HomeMenuItem enum anchor missing")
+          items=[x.strip() for x in m.group(1).split(",") if x.strip()]
+          # Keep enum order stable while removing any duplicate values created
+          # by combining generated CPHUN-180 Library routing with CPHUN-181.
+          unique=[]
+          for item in items:
+              if item not in unique:
+                  unique.append(item)
+          if "LIBRARY" not in unique:
+              insert_at=1 if unique and unique[0]=="NONE" else 0
+              unique.insert(insert_at,"LIBRARY")
+          enum_text="enum class HomeMenuItem { " + ", ".join(unique) + " };"
+          s=s[:m.start()]+enum_text+s[m.end():]
           if "void goToLibrary();" not in s:
               s=s.replace("  void goToSettings();\n", "  void goToSettings();\n  void goToLibrary();\n", 1)
           p.write_text(s,encoding="utf-8")
@@ -524,6 +538,19 @@ jobs:
           grep -Fq 'progressBarHeight' src/activities/home/HomeActivity.cpp
           grep -Fq 'goToLibrary' src/activities/ActivityManager.cpp
           grep -Fq 'CPHUN-261001-181-EXP' src/CPHUNBuildId.h
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path("src/activities/ActivityManager.h").read_text(encoding="utf-8")
+          m=re.search(r'enum class HomeMenuItem \{([^}]*)\};', s)
+          if not m:
+              raise SystemExit("HomeMenuItem enum missing")
+          items=[x.strip() for x in m.group(1).split(",") if x.strip()]
+          if items.count("LIBRARY") != 1:
+              raise SystemExit(f"HomeMenuItem LIBRARY count is {items.count('LIBRARY')}, expected 1")
+          if len(items) != len(set(items)):
+              raise SystemExit("Duplicate HomeMenuItem enum value detected")
+          PY
 
           echo "Feature-chain audit passed for ${{ matrix.label }}."
 
