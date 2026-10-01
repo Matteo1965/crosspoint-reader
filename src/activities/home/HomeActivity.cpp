@@ -42,13 +42,13 @@ struct CoverGridLayout {
 };
 
 CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
-  const int width = renderer.getScreenWidth();
-  constexpr int left = 24;
-  constexpr int gapX = 12;
+  (void)renderer;
+  constexpr int left = 28;
+  constexpr int gapX = 14;
   constexpr int columns = 3;
-  const int coverW = (width - left * 2 - gapX * 2) / columns;
-  const int coverH = (coverW * 205 + 68) / 136;
-  return {left, coverW, coverH, 54, 286, gapX, columns, 520};
+  constexpr int coverW = 132;
+  constexpr int coverH = 220;
+  return {left, coverW, coverH, 34, 266, gapX, columns, 500};
 }
 
 bool validBmpFile(const std::string& path) {
@@ -730,14 +730,14 @@ void HomeActivity::renderCoverGrid() {
   }
 
   renderer.clearScreen();
-  // Compact 48 px header zone. Styling stays owned by the selected UI theme.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, std::max(0, 48 - metrics.topPadding)}, nullptr);
+  // Compact 28 px header zone for the 132x220 Cover Grid geometry.
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, std::max(0, 28 - metrics.topPadding)}, nullptr);
 
   if (!recentBooks.empty()) {
     paintGridCover(0, Rect{layout.left, layout.featuredY, layout.coverW, layout.coverH});
 
-    const int textX = layout.left + layout.coverW + 26;
-    const int textW = std::max(40, width - textX - 20);
+    const int textX = layout.left + layout.coverW + 24;  // 184 px on 480-wide X4
+    const int textW = std::max(40, width - textX - 34);   // 262 px on 480-wide X4
     const auto title = renderer.wrappedText(UI_12_FONT_ID, recentBooks[0].title.c_str(), textW, 4);
     int titleY = layout.featuredY + 38;
     for (const auto& line : title) {
