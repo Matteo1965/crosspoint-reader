@@ -452,10 +452,25 @@ jobs:
           if "LIBRARY" not in unique:
               insert_at=1 if unique and unique[0]=="NONE" else 0
               unique.insert(insert_at,"LIBRARY")
+          # CPHUN-181 still retains the legacy RecentBooks path for themes that
+          # have not migrated to the four-item Library home menu. Keep RECENTS
+          # as a compatibility enum value even though RoundedRaff/Cover Grid
+          # do not expose it.
+          if "RECENTS" not in unique:
+              try:
+                  insert_at=unique.index("FILE_BROWSER")+1
+              except ValueError:
+                  insert_at=len(unique)
+              unique.insert(insert_at,"RECENTS")
           enum_text="enum class HomeMenuItem { " + ", ".join(unique) + " };"
           s=s[:m.start()]+enum_text+s[m.end():]
           if "void goToLibrary();" not in s:
               s=s.replace("  void goToSettings();\n", "  void goToSettings();\n  void goToLibrary();\n", 1)
+          if "void goToRecentBooks();" not in s:
+              anchor="  void goToFileBrowser(std::string path = {});\n"
+              if anchor not in s:
+                  raise SystemExit("ActivityManager header file-browser anchor missing")
+              s=s.replace(anchor, anchor+"  void goToRecentBooks();\n",1)
           p.write_text(s,encoding="utf-8")
 
           p=Path("src/activities/ActivityManager.cpp")
@@ -471,6 +486,20 @@ jobs:
                   "\nvoid ActivityManager::goToLibrary() {\n"
                   "  replaceActivity(std::make_unique<LibraryListActivity>(renderer, mappedInput));\n"
                   "}\n",1)
+          # Preserve the legacy RecentBooks compatibility route used by Home
+          # outside RoundedRaff/Cover Grid.
+          if "void ActivityManager::goToRecentBooks()" not in s:
+              anchor="void ActivityManager::goToFileBrowser(std::string path) {\n"
+              idx=s.find(anchor)
+              if idx < 0:
+                  raise SystemExit("ActivityManager file-browser wrapper anchor missing")
+              # Insert immediately before goToFileBrowser().
+              compat=(
+                  "void ActivityManager::goToRecentBooks() {\n"
+                  "  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));\n"
+                  "}\n\n"
+              )
+              s=s[:idx]+compat+s[idx:]
           p.write_text(s,encoding="utf-8")
 
           # Preserve the full generated 1.6.5 Library behavior and apply only
@@ -548,8 +577,14 @@ jobs:
           items=[x.strip() for x in m.group(1).split(",") if x.strip()]
           if items.count("LIBRARY") != 1:
               raise SystemExit(f"HomeMenuItem LIBRARY count is {items.count('LIBRARY')}, expected 1")
+          if items.count("RECENTS") != 1:
+              raise SystemExit(f"HomeMenuItem RECENTS count is {items.count('RECENTS')}, expected 1")
           if len(items) != len(set(items)):
               raise SystemExit("Duplicate HomeMenuItem enum value detected")
+          cpp=Path("src/activities/ActivityManager.cpp").read_text(encoding="utf-8")
+          hdr=Path("src/activities/ActivityManager.h").read_text(encoding="utf-8")
+          if "void ActivityManager::goToRecentBooks()" not in cpp or "void goToRecentBooks();" not in hdr:
+              raise SystemExit("RecentBooks compatibility route missing")
           PY
 
           echo "Feature-chain audit passed for ${{ matrix.label }}."
