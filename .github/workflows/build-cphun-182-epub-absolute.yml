@@ -605,6 +605,11 @@ jobs:
           grep -Fq 'STR_IMAGES_PLACEHOLDER: "Képkeret"' lib/I18n/translations/hungarian.yaml
           grep -Fq 'STR_IMAGES_SUPPRESS: "Képek nélkül"' lib/I18n/translations/hungarian.yaml
           grep -Fq 'SETTINGS.imageRendering == CrossPointSettings::IMAGES_DISPLAY' src/activities/reader/EpubReaderActivity.cpp
+          # User-facing version strings stay short even in branch/SHA test builds.
+          grep -Fq 'drawCenteredText(SMALL_FONT_ID, pageHeight - 72, "1.6.5")' src/activities/boot_sleep/BootActivity.cpp
+          grep -Fq 'drawLabelValue(tr(STR_CROSSPOINT_VERSION), "1.6.5")' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq '"- Szótár és szerkesztés → 2. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq '"- Magyar elválasztás → 3. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
           python3 - <<'PY'
           from pathlib import Path
           import re

@@ -137,7 +137,10 @@ void CrossPointVersionActivity::render(RenderLock&&) {
       drawWrapped(UI_12_FONT_ID, line.c_str());
     };
 
-    drawLabelValue(tr(STR_CROSSPOINT_VERSION), CROSSPOINT_VERSION);
+    // Keep the user-facing upstream version concise. Development builds
+    // inject branch + short SHA into CROSSPOINT_VERSION; that identifier is
+    // useful for logs but too long for this information page.
+    drawLabelValue(tr(STR_CROSSPOINT_VERSION), "1.6.5");
     const std::string editionLabel = hungarianEditionLabel();
     drawLabelValue(tr(STR_EDITION), editionLabel.c_str());
     drawWrapped(UI_12_FONT_ID, CPHUN_BUILD_ID);
@@ -152,11 +155,11 @@ void CrossPointVersionActivity::render(RenderLock&&) {
 
     drawWrapped(UI_12_FONT_ID, hu ? "A Hungarian Edition fő fejlesztései:" : "Key Hungarian Edition improvements:", true);
     const char* features[] = {
-        hu ? "- Magyar felület, billentyűzet és Könyvtár" : "- Hungarian UI, keyboard and Library",
-        hu ? "- Szótár, szótövezés és szerkesztés → 2. oldal" : "- Dictionary, stemming and editing → page 2",
-        hu ? "- Kiterjesztett magyar elválasztás → 3. oldal" : "- Extended Hungarian hyphenation → page 3",
-        hu ? "- Sorkizárás és optikai tipográfia → 4. oldal" : "- Justification and optical typography → page 4",
-        hu ? "- Újdonságok, szinkron és főoldal → 5. oldal" : "- New features, sync and Home screen → page 5",
+        hu ? "- Magyar felület és Könyvtár" : "- Hungarian UI and Library",
+        hu ? "- Szótár és szerkesztés → 2. oldal" : "- Dictionary and editing → page 2",
+        hu ? "- Magyar elválasztás → 3. oldal" : "- Hungarian hyphenation → page 3",
+        hu ? "- Sorkizárás és tipográfia → 4. oldal" : "- Justification and typography → page 4",
+        hu ? "- Újdonságok és főoldal → 5. oldal" : "- New features and Home screen → page 5",
     };
     for (const char* feature : features) drawWrapped(UI_12_FONT_ID, feature);
   } else if (currentPage == 1) {

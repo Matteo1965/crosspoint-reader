@@ -16,7 +16,9 @@ void BootActivity::onEnter() {
   renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
   renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::BOLD);
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_BOOTING));
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 72, CROSSPOINT_VERSION);
+  // Hungarian Edition shows the stable upstream base version here instead
+  // of the development branch + SHA string used by PlatformIO test builds.
+  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 72, "1.6.5");
   renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 48, "Hungarian Edition");
   renderer.displayBuffer();
 }
