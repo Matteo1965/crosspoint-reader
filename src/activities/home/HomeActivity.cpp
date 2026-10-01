@@ -74,9 +74,14 @@ bool HomeActivity::useLibraryHomeMenu() const {
 
 int HomeActivity::gridBookLimit() const { return 4; }
 
-int HomeActivity::gridCoverHeight(int index) const {
+int HomeActivity::gridThumbHeight(int index) const {
   (void)index;
-  return coverGridLayout(renderer).coverH;
+  const auto layout = coverGridLayout(renderer);
+  // The legacy thumbnail generator uses width = height * 0.6. Generate the
+  // Cover Grid thumbnail tall enough that its width reaches the grid cell,
+  // then center-crop the excess height at render time. This keeps the normal
+  // RoundedRaff thumbnail cache untouched while guaranteeing full cell fill.
+  return (layout.coverW * 10 + 5) / 6;
 }
 
 int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
@@ -200,7 +205,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   int progress = 0;
   for (RecentBook& book : recentBooks) {
-    const int thumbHeight = coverGridActive() ? gridCoverHeight(progress) : coverHeight;
+    const int thumbHeight = coverGridActive() ? gridThumbHeight(progress) : coverHeight;
     bool success = true;
 
     if (FsHelpers::hasEpubExtension(book.path)) {
@@ -558,7 +563,7 @@ void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 void HomeActivity::paintGridCover(const size_t index, Rect rect) {
   if (index >= recentBooks.size()) return;
   const RecentBook& book = recentBooks[index];
-  const int thumbHeight = gridCoverHeight(static_cast<int>(index));
+  const int thumbHeight = gridThumbHeight(static_cast<int>(index));
   std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
 
   // Prefer the compact home thumbnail. If it is missing or corrupt, fall back
@@ -583,8 +588,16 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
       if (bmp.parseHeaders() == BmpReaderError::Ok && bmp.getWidth() > 0 && bmp.getHeight() > 0) {
         const float imageRatio = static_cast<float>(bmp.getWidth()) / bmp.getHeight();
         const float targetRatio = static_cast<float>(rect.width) / rect.height;
-        const float cropX = std::max(0.0f, 1.0f - targetRatio / imageRatio);
-        renderer.drawBitmap(bmp, rect.x, rect.y, rect.width, rect.height, cropX);
+        float cropX = 0.0f;
+        float cropY = 0.0f;
+        if (imageRatio > targetRatio) {
+          // Wider than the grid cell: crop equally from left and right.
+          cropX = std::max(0.0f, 1.0f - targetRatio / imageRatio);
+        } else if (imageRatio < targetRatio) {
+          // Taller/narrower than the grid cell: crop equally from top and bottom.
+          cropY = std::max(0.0f, 1.0f - imageRatio / targetRatio);
+        }
+        renderer.drawBitmap(bmp, rect.x, rect.y, rect.width, rect.height, cropX, cropY);
         drawn = true;
       }
       file.close();

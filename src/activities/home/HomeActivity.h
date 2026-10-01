@@ -51,7 +51,7 @@ class HomeActivity final : public Activity {
   int getMenuItemCount() const;
   bool coverGridActive() const;
   int gridBookLimit() const;
-  int gridCoverHeight(int index) const;
+  int gridThumbHeight(int index) const;
   void loopCoverGrid();
   void renderCoverGrid();
   void paintGridCover(size_t index, Rect rect);
