@@ -475,9 +475,16 @@ jobs:
 
           p=Path("src/activities/ActivityManager.cpp")
           s=p.read_text(encoding="utf-8")
+          if '#include "home/RecentBooksActivity.h"' not in s:
+              anchor='#include "home/HomeActivity.h"\n'
+              if anchor not in s:
+                  raise SystemExit("ActivityManager HomeActivity include anchor missing")
+              s=s.replace(anchor, anchor+'#include "home/RecentBooksActivity.h"\n',1)
           if '#include "library/LibraryListActivity.h"' not in s:
-              s=s.replace('#include "home/RecentBooksActivity.h"\n',
-                          '#include "home/RecentBooksActivity.h"\n#include "library/LibraryListActivity.h"\n',1)
+              anchor='#include "home/RecentBooksActivity.h"\n'
+              if anchor not in s:
+                  raise SystemExit("ActivityManager RecentBooks include anchor missing")
+              s=s.replace(anchor, anchor+'#include "library/LibraryListActivity.h"\n',1)
           if "void ActivityManager::goToLibrary()" not in s:
               anchor="void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }\n"
               if anchor not in s:
@@ -585,6 +592,8 @@ jobs:
           hdr=Path("src/activities/ActivityManager.h").read_text(encoding="utf-8")
           if "void ActivityManager::goToRecentBooks()" not in cpp or "void goToRecentBooks();" not in hdr:
               raise SystemExit("RecentBooks compatibility route missing")
+          if '#include "home/RecentBooksActivity.h"' not in cpp:
+              raise SystemExit("RecentBooksActivity include missing")
           PY
 
           echo "Feature-chain audit passed for ${{ matrix.label }}."
