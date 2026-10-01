@@ -509,6 +509,18 @@ jobs:
               s=s[:idx]+compat+s[idx:]
           p.write_text(s,encoding="utf-8")
 
+          # CPHUN-181 display wording: shorten the generated CPHUN-178
+          # label on the Display tab without changing the A/B/C mode values.
+          p=Path("lib/I18n/translations/hungarian.yaml")
+          s=p.read_text(encoding="utf-8")
+          old='STR_CPHUN_COVER_TEST_MODE: "Borítókép tesztmód"'
+          new='STR_CPHUN_COVER_TEST_MODE: "Borító mód"'
+          if old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit("CPHUN cover-mode Hungarian label missing")
+          p.write_text(s,encoding="utf-8")
+
           # Preserve the full generated 1.6.5 Library behavior and apply only
           # the accepted footer polish from CPHUN-181: 4 px above button hints.
           p=Path("src/activities/library/LibraryListActivity.cpp")
@@ -522,6 +534,7 @@ jobs:
 
             git add \
               lib/Epub/Epub.h \
+              lib/I18n/translations/hungarian.yaml \
               src/CPHUNBuildId.h \
               src/RecentBooksStore.h \
               src/activities/ActivityManager.cpp \
@@ -548,6 +561,7 @@ jobs:
           grep -Fq 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
           grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
           grep -Fq '"coverTestMode", StrId::STR_CAT_DISPLAY' src/SettingsListBase.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_MODE: "Borító mód"' lib/I18n/translations/hungarian.yaml
           grep -Fq 'STR_CPHUN_COVER_TEST_A:' lib/I18n/translations/hungarian.yaml
           grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
           grep -Fq 'STR_CPHUN_COVER_TEST_C:' lib/I18n/translations/hungarian.yaml

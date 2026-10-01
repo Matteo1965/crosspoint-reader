@@ -28,7 +28,7 @@ once("src/SettingsListBase.h",
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,""")
 
 for path,labels in [
-  ("lib/I18n/translations/hungarian.yaml", """STR_CPHUN_COVER_TEST_MODE: "Borítókép tesztmód"
+  ("lib/I18n/translations/hungarian.yaml", """STR_CPHUN_COVER_TEST_MODE: "Borító mód"
 STR_CPHUN_COVER_TEST_A: "A - Atkinson Overlay"
 STR_CPHUN_COVER_TEST_B: "B – Absolute (177D)"
 STR_CPHUN_COVER_TEST_C: "C - Floyd-Steinberg"
