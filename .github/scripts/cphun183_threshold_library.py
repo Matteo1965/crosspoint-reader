@@ -22,14 +22,17 @@ def replace_once(path, old, new, label):
 # ---------------------------------------------------------------------------
 p = "src/CrossPointSettings.cpp"
 s = read(p)
-old_load = """  letterSpacingOptimizationThreshold =
-      doc["letterSpacingOptimizationThreshold"] | (uint8_t)60;
-  if (letterSpacingOptimizationThreshold < 50 || letterSpacingOptimizationThreshold > 75 ||
-      letterSpacingOptimizationThreshold % 5 != 0) {
-    letterSpacingOptimizationThreshold = 60;
-    needsResave = true;
-  }
-"""
+
+# The reconstructed CPHUN chain has used a few whitespace/layout variants for
+# this block. Match semantics, not formatting.
+load_re = re.compile(
+    r'  letterSpacingOptimizationThreshold\s*=\s*'
+    r'doc\["letterSpacingOptimizationThreshold"\]\s*\|\s*\(uint8_t\)60;\s*'
+    r'if\s*\([^\{]+\)\s*\{\s*'
+    r'letterSpacingOptimizationThreshold\s*=\s*60;\s*'
+    r'needsResave\s*=\s*true;\s*\}',
+    re.S,
+)
 new_load = """  letterSpacingOptimizationThreshold =
       doc["letterSpacingOptimizationThreshold"] | (uint8_t)60;
   if (letterSpacingOptimizationThreshold != 0 &&
@@ -38,26 +41,33 @@ new_load = """  letterSpacingOptimizationThreshold =
       letterSpacingOptimizationThreshold != 70) {
     letterSpacingOptimizationThreshold = 60;
     needsResave = true;
-  }
-"""
-if old_load not in s:
-    raise SystemExit("CPHUN-183 threshold load validator anchor missing")
-s = s.replace(old_load, new_load, 1)
+  }"""
+s, count = load_re.subn(new_load, s, count=1)
+if count != 1:
+    # Diagnostic excerpt makes future generated-chain changes obvious in CI.
+    pos = s.find('letterSpacingOptimizationThreshold')
+    excerpt = s[max(0, pos-300):pos+900] if pos >= 0 else '<token absent>'
+    raise SystemExit("CPHUN-183 threshold load validator not found. Excerpt:\n" + excerpt)
 
-old_encode = """  const uint8_t optimizationThresholdCode =
-      letterSpacingLimitPercent > 0 && letterSpacingOptimization &&
-              (isBitterExperimentalSize || isNotoSerif16)
-          ? static_cast<uint8_t>((letterSpacingOptimizationThreshold - 45u) / 5u)
-          : 0;"""
+encode_re = re.compile(
+    r'  const uint8_t optimizationThresholdCode\s*=\s*'
+    r'letterSpacingLimitPercent\s*>\s*0\s*&&\s*letterSpacingOptimization\s*&&\s*'
+    r'\(isBitterExperimentalSize\s*\|\|\s*isNotoSerif16\)\s*'
+    r'\?\s*static_cast<uint8_t>\(\(letterSpacingOptimizationThreshold\s*-\s*45u\)\s*/\s*5u\)\s*'
+    r':\s*0;',
+    re.S,
+)
 new_encode = """  const uint8_t optimizationThresholdCode =
       letterSpacingLimitPercent > 0 && letterSpacingOptimization &&
               letterSpacingOptimizationThreshold >= 50 &&
               (isBitterExperimentalSize || isNotoSerif16)
           ? static_cast<uint8_t>((letterSpacingOptimizationThreshold - 45u) / 5u)
           : 0;"""
-if old_encode not in s:
-    raise SystemExit("CPHUN-183 threshold encode anchor missing")
-s = s.replace(old_encode, new_encode, 1)
+s, count = encode_re.subn(new_encode, s, count=1)
+if count != 1:
+    pos = s.find('optimizationThresholdCode')
+    excerpt = s[max(0, pos-300):pos+900] if pos >= 0 else '<token absent>'
+    raise SystemExit("CPHUN-183 threshold encode block not found. Excerpt:\n" + excerpt)
 write(p, s)
 
 # Stable display literals used by the CPHUN-182 English Layout crash fix.
