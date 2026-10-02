@@ -163,7 +163,21 @@ void HomeActivity::loadFeaturedProgress() {
   Epub::BookInfo info;
   if (epub->readBookInfo(info) && !info.series.empty()) {
     featuredSeries = info.series;
-    if (!info.seriesIndex.empty()) featuredSeries += " #" + info.seriesIndex;
+    if (!info.seriesIndex.empty()) {
+      std::string seriesIndex = info.seriesIndex;
+      const size_t decimalPos = seriesIndex.find_first_of(".,");
+      if (decimalPos != std::string::npos && decimalPos + 1 < seriesIndex.size()) {
+        bool fractionalPartIsZero = true;
+        for (size_t i = decimalPos + 1; i < seriesIndex.size(); ++i) {
+          if (seriesIndex[i] != '0') {
+            fractionalPartIsZero = false;
+            break;
+          }
+        }
+        if (fractionalPartIsZero) seriesIndex.erase(decimalPos);
+      }
+      featuredSeries += " #" + seriesIndex;
+    }
   }
 
   HalFile f;
@@ -190,6 +204,15 @@ void HomeActivity::loadFeaturedProgress() {
   const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
   if (tocIndex >= 0 && tocIndex < epub->getTocItemsCount()) {
     featuredChapterTitle = epub->getTocItem(tocIndex).title;
+    std::string foldedChapter = featuredChapterTitle;
+    for (char& c : foldedChapter) {
+      if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    }
+    // Calibre/splitter-generated navigation labels such as "index split 000"
+    // are implementation details, not useful chapter names on the Home screen.
+    if (foldedChapter.rfind("index split", 0) == 0 || foldedChapter.rfind("index_split", 0) == 0) {
+      featuredChapterTitle.clear();
+    }
   }
 
   // Book-wide page fraction is shown only when every spine already has a
@@ -754,7 +777,7 @@ void HomeActivity::renderCoverGrid() {
     const int textX = layout.left + layout.coverW + 22;  // 182 px on 480-wide X4
     const int textW = std::max(40, width - textX - 34);   // 264 px on 480-wide X4
     const auto title = renderer.wrappedText(UI_12_FONT_ID, recentBooks[0].title.c_str(), textW, 4);
-    int titleY = layout.featuredY + 38;
+    int titleY = layout.featuredY + 24;
     for (const auto& line : title) {
       renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
       titleY += renderer.getLineHeight(UI_12_FONT_ID);
@@ -777,9 +800,7 @@ void HomeActivity::renderCoverGrid() {
     if (!featuredSeries.empty()) {
       const auto series = renderer.truncatedText(UI_10_FONT_ID, featuredSeries.c_str(), textW);
       renderer.drawText(UI_10_FONT_ID, textX, infoY, series.c_str());
-      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 10;
-    } else {
-      infoY += 6;
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 4;
     }
     if (!featuredChapterTitle.empty()) {
       std::string chapter = featuredChapterTitle;
