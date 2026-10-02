@@ -567,7 +567,7 @@ jobs:
 
       - name: Audit restored Hungarian Edition feature chain
         run: |
-          set -euo pipefail
+          set -euxo pipefail
 
           # CPHUN-178/180 grayscale cover selection and accepted B default.
           grep -Fq 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
