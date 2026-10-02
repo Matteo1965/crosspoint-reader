@@ -684,7 +684,18 @@ jobs:
           grep -Fq '{MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"}' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -Fq 'action == MenuAction::DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -Fq 'menuRowItems[i].value = SETTINGS.dictionaryName' src/activities/reader/EpubReaderMenuActivity.cpp
-          ! grep -Fq 'action == MenuAction::DICTIONARY) {' src/activities/reader/EpubReaderMenuActivity.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("src/activities/reader/EpubReaderMenuActivity.cpp").read_text(encoding="utf-8")
+          status='action == MenuAction::DICTIONARY_STATUS'
+          value='menuRowItems[i].value = SETTINGS.dictionaryName'
+          if status not in s or value not in s:
+              raise SystemExit("Dictionary status/value binding missing")
+          pos=s.find(value)
+          window=s[max(0,pos-350):pos]
+          if status not in window:
+              raise SystemExit("dictionaryName value is not bound to DICTIONARY_STATUS")
+          PY
           grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
 
       - name: Verify CPHUN-189 title cleanup, preview and Count Pages scaling
