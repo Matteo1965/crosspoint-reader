@@ -12,6 +12,7 @@
 #include <Epub/Section.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -78,6 +79,30 @@ std::string cleanDisplayedBookTitle(std::string title) {
     break;
   }
   return title;
+}
+
+int scaledCalibrePageCount(const int referencePages, const GfxRenderer& renderer) {
+  if (referencePages <= 0) return 0;
+
+  // Count Pages reference calibration: Bitter 16 pt, NORMAL line spacing,
+  // 10 px screen margin, 500 characters/page.
+  constexpr float REFERENCE_FONT_PT = 16.0f;
+  constexpr int REFERENCE_MARGIN_PX = 10;
+  const float fontScale = static_cast<float>(SETTINGS.fontPointSize) / REFERENCE_FONT_PT;
+  const float lineScale = SETTINGS.getReaderLineCompression();  // NORMAL == 1.0
+
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const int statusBar = UITheme::getStatusBarHeight();
+  const int margin = SETTINGS.screenMargin;
+  const float refW = static_cast<float>(std::max(1, screenW - 2 * REFERENCE_MARGIN_PX));
+  const float curW = static_cast<float>(std::max(1, screenW - 2 * margin));
+  const float refH = static_cast<float>(std::max(1, screenH - statusBar - 2 * REFERENCE_MARGIN_PX));
+  const float curH = static_cast<float>(std::max(1, screenH - statusBar - 2 * margin));
+  const float areaScale = (refW * refH) / (curW * curH);
+
+  const float scale = fontScale * fontScale * lineScale * areaScale;
+  return std::max(1, static_cast<int>(std::lround(static_cast<float>(referencePages) * scale)));
 }
 
 bool isTechnicalPartTitle(const std::string& lower) {
@@ -218,9 +243,12 @@ void HomeActivity::loadFeaturedProgress() {
   if (!epub->load(false, true) || epub->getBookSize() == 0) return;
 
   Epub::BookInfo info;
-  if (epub->readBookInfo(info) && !info.series.empty()) {
-    featuredSeries = info.series;
-    if (!info.seriesIndex.empty()) {
+  int calibrePageCount = 0;
+  if (epub->readBookInfo(info)) {
+    calibrePageCount = info.calibrePageCount;
+    if (!info.series.empty()) {
+      featuredSeries = info.series;
+      if (!info.seriesIndex.empty()) {
       std::string seriesIndex = info.seriesIndex;
       const size_t decimalPos = seriesIndex.find_first_of(".,");
       if (decimalPos != std::string::npos && decimalPos + 1 < seriesIndex.size()) {
@@ -233,7 +261,8 @@ void HomeActivity::loadFeaturedProgress() {
         }
         if (fractionalPartIsZero) seriesIndex.erase(decimalPos);
       }
-      featuredSeries += " #" + seriesIndex;
+        featuredSeries += " #" + seriesIndex;
+      }
     }
   }
 
@@ -281,7 +310,20 @@ void HomeActivity::loadFeaturedProgress() {
     }
   }
 
-  // Book-wide page fraction is shown only when every spine already has a
+  // Prefer Calibre Count Pages metadata when present. The stored #pages
+  // value is calibrated at 500 chars/page = Bitter 16 pt / NORMAL / 10 px.
+  // Scale it locally to the active CrossPoint reading geometry.
+  if (calibrePageCount > 0) {
+    featuredTotalPages = scaledCalibrePageCount(calibrePageCount, renderer);
+    if (featuredTotalPages > 0) {
+      featuredCurrentPage = std::clamp(
+          1 + static_cast<int>(std::lround(progress * static_cast<float>(featuredTotalPages - 1))),
+          1, featuredTotalPages);
+    }
+    return;
+  }
+
+  // Fallback: book-wide page fraction is shown only when every spine already has a
   // finalized page count for the current layout. Never force pagination from Home.
   int pagesBefore = 0;
   int total = 0;
@@ -381,6 +423,7 @@ void HomeActivity::onEnter() {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(coverGridActive() ? gridBookLimit() : metrics.homeRecentBooksCount);
+  originalResumePath = recentBooks.empty() ? std::string{} : recentBooks[0].path;
   backPressSeen = false;
   gridFrameValid = false;
   previousGridSelection = -1;
@@ -717,6 +760,30 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
     renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, true);
 }
 
+void HomeActivity::previewGridBook(const int index) {
+  if (index <= 0 || index >= static_cast<int>(recentBooks.size())) return;
+  std::swap(recentBooks[0], recentBooks[index]);
+  selectorIndex = 0;
+  loadFeaturedProgress();
+  gridFrameValid = false;
+  previousGridSelection = -1;
+  requestUpdate();
+}
+
+void HomeActivity::restoreOriginalGridBook() {
+  if (originalResumePath.empty() || recentBooks.empty()) return;
+  for (size_t i = 0; i < recentBooks.size(); ++i) {
+    if (recentBooks[i].path == originalResumePath) {
+      if (i != 0) std::swap(recentBooks[0], recentBooks[i]);
+      selectorIndex = 0;
+      loadFeaturedProgress();
+      gridFrameValid = false;
+      previousGridSelection = -1;
+      return;
+    }
+  }
+}
+
 void HomeActivity::loopCoverGrid() {
   const auto layout = coverGridLayout(renderer);
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -725,7 +792,8 @@ void HomeActivity::loopCoverGrid() {
 
   auto activate = [this, bookCount]() {
     if (selectorIndex < bookCount) {
-      onSelectBook(recentBooks[selectorIndex].path);
+      if (selectorIndex == 0) onSelectBook(recentBooks[0].path);
+      else previewGridBook(selectorIndex);
       return;
     }
     switch (indexToMenuItem(selectorIndex - bookCount)) {
@@ -762,7 +830,9 @@ void HomeActivity::loopCoverGrid() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && bookCount > 0) {
-    onSelectBook(recentBooks[0].path);
+    restoreOriginalGridBook();
+    if (!originalResumePath.empty()) onSelectBook(originalResumePath);
+    else onSelectBook(recentBooks[0].path);
     return;
   }
 
