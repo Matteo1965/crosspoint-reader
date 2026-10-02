@@ -554,6 +554,9 @@ jobs:
           fi
           git diff --check
 
+      - name: Apply CPHUN-182 UI stability fixes
+        run: python3 .github/scripts/cphun182_ui_stability.py
+
       - name: Audit restored Hungarian Edition feature chain
         run: |
           set -euo pipefail
@@ -610,6 +613,18 @@ jobs:
           grep -Fq 'drawLabelValue(tr(STR_CROSSPOINT_VERSION), "1.6.5")' src/activities/settings/CrossPointVersionActivity.cpp
           grep -Fq '"- Szótár és szerkesztés → 2. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
           grep -Fq '"- Magyar elválasztás → 3. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
+          # CPHUN-182 UI stability: constrained language set, HU default,
+          # stable English Layout threshold value, and exact RoundedRaff cover cache.
+          grep -Fq 'constexpr static uint8_t totalItems = 12;' src/activities/settings/LanguageSelectActivity.h
+          grep -Fq 'Language::HU, Language::EN, Language::DE, Language::ES' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'Language::IT, Language::FR, Language::P2, Language::PL' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'Language::FI, Language::RU, Language::SV, Language::UK' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'I18n() : _language(Language::HU)' lib/I18n/I18n.h
+          grep -Fq 'language = static_cast<uint8_t>(Language::HU);' src/CrossPointSettings.h
+          grep -Fq 'letterSpacingThresholdLabel' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'LayoutRow::LetterSpacingPairThreshold' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq '(roundedRaffHome ? 14 : 0)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'roundedRaffHome ? metrics.homeCoverHeight : metrics.homeCoverTileHeight' src/activities/home/HomeActivity.cpp
           python3 - <<'PY'
           from pathlib import Path
           import re
