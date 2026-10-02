@@ -37,6 +37,7 @@ class HomeActivity final : public Activity {
   int coverRectW = 0;
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
+  std::string originalResumePath;
   const HomeMenuItem initialMenuItem;
 
   bool useLibraryHomeMenu() const;
@@ -63,6 +64,8 @@ class HomeActivity final : public Activity {
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
   void loadFeaturedProgress();
+  void previewGridBook(int index);
+  void restoreOriginalGridBook();
   void loadRecentCovers(int coverHeight);
 
  public:
