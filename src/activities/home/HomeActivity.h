@@ -21,8 +21,11 @@ class HomeActivity final : public Activity {
   bool hasOpdsServers = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   int featuredProgressPercent = -1;
+  int featuredProgressTenths = -1;
   int featuredCurrentPage = 0;
   int featuredTotalPages = 0;
+  std::string featuredSeries;
+  std::string featuredChapterTitle;
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
   size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
