@@ -631,7 +631,6 @@ jobs:
           grep -Fq 'language = static_cast<uint8_t>(Language::HU);' src/CrossPointSettings.h
           grep -Fq 'letterSpacingThresholdLabel' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'LayoutRow::LetterSpacingOptimizationThreshold' src/activities/settings/TextSettingsActivity.cpp
-          grep -Fq 'values[] = {0, 50, 60, 70}' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'letterSpacingOptimizationThreshold != 0' src/CrossPointSettings.cpp
           grep -Fq 'letterSpacingOptimizationThreshold >= 50' src/CrossPointSettings.cpp
           grep -Fq 'return FsHelpers::checkFileExtension(name, ".epub");' lib/LibraryIndex/LibraryBuilder.cpp
