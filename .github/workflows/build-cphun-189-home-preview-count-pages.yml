@@ -371,6 +371,7 @@ jobs:
             # These files are CPHUN-182-owned presentation/state changes and
             # intentionally replace their older generated counterparts.
             git checkout --theirs -- \
+              lib/Epub/Epub/parsers/ContentOpfParser.cpp \
               src/CPHUNBuildId.h \
               src/activities/home/HomeActivity.cpp \
               src/activities/home/HomeActivity.h \
@@ -544,6 +545,7 @@ jobs:
 
             git add \
               lib/Epub/Epub.h \
+              lib/Epub/Epub/parsers/ContentOpfParser.cpp \
               lib/I18n/translations/hungarian.yaml \
               src/CPHUNBuildId.h \
               src/RecentBooksStore.h \
