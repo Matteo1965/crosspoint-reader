@@ -29,6 +29,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
     DELETE_CACHE,
     DICTIONARY,
     MANUAL_DICTIONARY_SEARCH,
+    DICTIONARY_STATUS,
     BOOK_DESCRIPTION,
     BOOK_METADATA,
     BOOK_COVER
