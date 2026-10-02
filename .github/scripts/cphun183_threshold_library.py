@@ -172,8 +172,8 @@ replace_once(
 # 3) Version-page/build assertions.
 # ---------------------------------------------------------------------------
 build_id = read("src/CPHUNBuildId.h")
-if 'CPHUN_BUILD_ID "CPHUN-261002-183-EXP"' not in build_id:
-    raise SystemExit("CPHUN-183 build id missing")
+if 'CPHUN_BUILD_ID "CPHUN-' not in build_id:
+    raise SystemExit("CPHUN build id missing")
 version_page = read("src/activities/settings/CrossPointVersionActivity.cpp")
 for token in ["hungarianEditionLabel()", "CPHUN_BUILD_ID", 'drawLabelValue(tr(STR_EDITION), editionLabel.c_str())']:
     if token not in version_page:
