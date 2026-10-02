@@ -150,12 +150,21 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
 void HomeActivity::loadFeaturedProgress() {
   featuredProgressPercent = -1;
+  featuredProgressTenths = -1;
   featuredCurrentPage = 0;
   featuredTotalPages = 0;
+  featuredSeries.clear();
+  featuredChapterTitle.clear();
   if (recentBooks.empty() || !FsHelpers::hasEpubExtension(recentBooks[0].path)) return;
 
   auto epub = std::make_shared<Epub>(recentBooks[0].path, "/.crosspoint");
   if (!epub->load(false, true) || epub->getBookSize() == 0) return;
+
+  Epub::BookInfo info;
+  if (epub->readBookInfo(info) && !info.series.empty()) {
+    featuredSeries = info.series;
+    if (!info.seriesIndex.empty()) featuredSeries += " #" + info.seriesIndex;
+  }
 
   HalFile f;
   if (!Storage.openFileForRead("HOME", epub->getCachePath() + "/progress.bin", f)) return;
@@ -175,7 +184,13 @@ void HomeActivity::loadFeaturedProgress() {
     intra = std::clamp(static_cast<float>(pageIndex) / static_cast<float>(chapterPages - 1), 0.0f, 1.0f);
   }
   const float progress = std::clamp(epub->calculateProgress(spineIndex, intra), 0.0f, 1.0f);
+  featuredProgressTenths = static_cast<int>(progress * 1000.0f + 0.5f);
   featuredProgressPercent = static_cast<int>(progress * 100.0f + 0.5f);
+
+  const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  if (tocIndex >= 0 && tocIndex < epub->getTocItemsCount()) {
+    featuredChapterTitle = epub->getTocItem(tocIndex).title;
+  }
 
   // Book-wide page fraction is shown only when every spine already has a
   // finalized page count for the current layout. Never force pagination from Home.
@@ -746,17 +761,51 @@ void HomeActivity::renderCoverGrid() {
     }
     int infoY = titleY + 6;
     if (!recentBooks[0].author.empty()) {
-      const auto author = renderer.truncatedText(UI_12_FONT_ID, recentBooks[0].author.c_str(), textW);
+      std::string author = recentBooks[0].author;
+      if (I18N.getLanguage() == Language::HU) {
+        const size_t comma = author.find(',');
+        if (comma != std::string::npos) {
+          author.erase(comma, 1);
+          while (comma < author.size() && author[comma] == ' ') author.erase(comma, 1);
+          author.insert(comma, " ");
+        }
+      }
+      author = renderer.truncatedText(UI_12_FONT_ID, author.c_str(), textW);
       renderer.drawText(UI_12_FONT_ID, textX, infoY, author.c_str(), true, EpdFontFamily::REGULAR);
-      infoY += renderer.getLineHeight(UI_12_FONT_ID) + 6;
+      infoY += renderer.getLineHeight(UI_12_FONT_ID) + 4;
     }
-    if (featuredProgressPercent >= 0) {
-      char progressText[40];
+    if (!featuredSeries.empty()) {
+      const auto series = renderer.truncatedText(UI_10_FONT_ID, featuredSeries.c_str(), textW);
+      renderer.drawText(UI_10_FONT_ID, textX, infoY, series.c_str());
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 10;
+    } else {
+      infoY += 6;
+    }
+    if (!featuredChapterTitle.empty()) {
+      std::string chapter = featuredChapterTitle;
+      std::string folded = chapter;
+      for (char& c : folded) {
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+      }
+      const bool hu = I18N.getLanguage() == Language::HU;
+      const char* suffix = hu ? " fejezet" : " chapter";
+      const char* needle = hu ? "fejezet" : "chapter";
+      if (folded.find(needle) == std::string::npos) chapter += suffix;
+      chapter = renderer.truncatedText(UI_10_FONT_ID, chapter.c_str(), textW);
+      renderer.drawText(UI_10_FONT_ID, textX, infoY, chapter.c_str());
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+    }
+    if (featuredProgressTenths >= 0) {
+      char progressText[48];
+      const int whole = featuredProgressTenths / 10;
+      const int decimal = featuredProgressTenths % 10;
+      const char decimalSep = I18N.getLanguage() == Language::HU ? ',' : '.';
       if (featuredTotalPages > 0 && featuredCurrentPage > 0) {
-        snprintf(progressText, sizeof(progressText), "%d%% · %d/%d oldal", featuredProgressPercent,
-                 featuredCurrentPage, featuredTotalPages);
+        snprintf(progressText, sizeof(progressText), "%d%c%d%% · %d / %d %s", whole, decimalSep, decimal,
+                 featuredCurrentPage, featuredTotalPages,
+                 I18N.getLanguage() == Language::HU ? "oldal" : "pages");
       } else {
-        snprintf(progressText, sizeof(progressText), "%d%%", featuredProgressPercent);
+        snprintf(progressText, sizeof(progressText), "%d%c%d%%", whole, decimalSep, decimal);
       }
       renderer.drawText(UI_10_FONT_ID, textX, infoY, progressText);
 
@@ -765,7 +814,7 @@ void HomeActivity::renderCoverGrid() {
       renderer.fillRect(textX, progressBarY, textW, progressBarHeight, false);
       renderer.drawRect(textX, progressBarY, textW, progressBarHeight, true);
       const int innerWidth = std::max(0, textW - 2);
-      const int fillWidth = (innerWidth * std::clamp(featuredProgressPercent, 0, 100) + 50) / 100;
+      const int fillWidth = (innerWidth * std::clamp(featuredProgressTenths, 0, 1000) + 500) / 1000;
       if (fillWidth > 0) {
         renderer.fillRectDither(textX + 1, progressBarY + 1, fillWidth, progressBarHeight - 2, Color::DarkGray);
       }
