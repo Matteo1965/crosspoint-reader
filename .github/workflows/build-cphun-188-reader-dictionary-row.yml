@@ -371,6 +371,8 @@ jobs:
               src/CPHUNBuildId.h \
               src/activities/home/HomeActivity.cpp \
               src/activities/home/HomeActivity.h \
+              src/activities/reader/EpubReaderMenuActivity.cpp \
+              src/activities/reader/EpubReaderMenuActivity.h \
               src/activities/settings/CrossPointVersionActivity.cpp
 
             python3 - <<'PY'
@@ -548,6 +550,8 @@ jobs:
               src/activities/ActivityManager.h \
               src/activities/home/HomeActivity.cpp \
               src/activities/home/HomeActivity.h \
+              src/activities/reader/EpubReaderMenuActivity.cpp \
+              src/activities/reader/EpubReaderMenuActivity.h \
               src/activities/library/LibraryListActivity.cpp \
               src/activities/library/LibraryListActivity.h \
               src/activities/settings/CrossPointVersionActivity.cpp
