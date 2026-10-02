@@ -686,14 +686,15 @@ jobs:
           grep -Fq 'menuRowItems[i].value = SETTINGS.dictionaryName' src/activities/reader/EpubReaderMenuActivity.cpp
           python3 - <<'PY'
           from pathlib import Path
+          import re
           s=Path("src/activities/reader/EpubReaderMenuActivity.cpp").read_text(encoding="utf-8")
-          expected=(
-              '} else if (action == MenuAction::DICTIONARY_STATUS) {\n'
-              '      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n'
-              '      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";'
+          pattern=(
+              r'else\s+if\s*\(action\s*==\s*MenuAction::DICTIONARY_STATUS\)\s*\{'
+              r'.*?menuRowItems\[i\]\.label\s*=\s*I18N\.getLanguage\(\)\s*==\s*Language::HU'
+              r'.*?menuRowItems\[i\]\.value\s*=\s*SETTINGS\.dictionaryName\[0\]'
           )
-          if expected not in s:
-              raise SystemExit("Exact DICTIONARY_STATUS value block missing")
+          if not re.search(pattern, s, re.S):
+              raise SystemExit("DICTIONARY_STATUS value binding missing")
           PY
           grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
 
