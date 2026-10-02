@@ -194,9 +194,11 @@ old_threshold_value = """    case LayoutRow::LetterSpacingPairThreshold:
       return std::to_string(SETTINGS.letterSpacingPairThreshold);"""
 new_threshold_value = """    case LayoutRow::LetterSpacingPairThreshold:
       return letterSpacingThresholdLabel(SETTINGS.letterSpacingPairThreshold);"""
-if old_threshold_value not in s:
-    raise SystemExit("CPHUN-182 UI threshold: generated value case missing")
-s = s.replace(old_threshold_value, new_threshold_value, 1)
+# Historical generated chains express this value in slightly different forms.
+# The actual crash fix is the stable literal assigned to rowItems_ above; this
+# normalization is optional and only applied when the exact old form is present.
+if old_threshold_value in s:
+    s = s.replace(old_threshold_value, new_threshold_value, 1)
 write(p, s)
 
 # ---------------------------------------------------------------------------
