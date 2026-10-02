@@ -612,7 +612,7 @@ jobs:
           grep -Fq 'featuredProgressPercent' src/activities/home/HomeActivity.cpp
           grep -Fq 'progressBarHeight' src/activities/home/HomeActivity.cpp
           grep -Fq 'goToLibrary' src/activities/ActivityManager.cpp
-          grep -Fq 'CPHUN-261002-184-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261002-185-EXP' src/CPHUNBuildId.h
           # CPHUN-182: image pages stage complete Absolute planes and expose
           # only the final factory-quality activation to the panel.
           grep -Fq 'absoluteImagePage' src/activities/reader/EpubReaderActivity.cpp
