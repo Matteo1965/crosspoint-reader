@@ -93,13 +93,29 @@ if count != 1:
 s = s[:fn_start] + section2 + s[fn_end:]
 
 # Make the row value use the same semantic labels as the popup.
-# Use the exact generated block; do not depend on neighboring case order.
-old_value_block = """    case LayoutRow::LetterSpacingCorrection: {
-      const uint16_t v = SETTINGS.letterSpacingLimitPercent;
-      if (v == 0) return tr(STR_STATE_OFF);
-      const int displayPercent = (260 - std::clamp<int>(v, 120, 240)) / 2;
-      return std::to_string(displayPercent) + "%";
-    }"""
+# Find the LetterSpacingCorrection case specifically inside layoutValueText()
+# and replace that balanced braced case body. This survives generated-source
+# variations and inserted neighboring cases.
+value_fn_start = s.find("std::string TextSettingsActivity::layoutValueText(int row) const")
+value_fn_end = s.find("void TextSettingsActivity::confirmStyleRow", value_fn_start)
+if value_fn_start < 0 or value_fn_end < 0:
+    raise SystemExit("CPHUN-184 layoutValueText boundaries missing")
+case_start = s.find("    case LayoutRow::LetterSpacingCorrection: {", value_fn_start, value_fn_end)
+if case_start < 0:
+    raise SystemExit("CPHUN-184 layoutValueText LetterSpacingCorrection case missing")
+brace_start = s.find("{", case_start)
+depth = 0
+case_end = None
+for i in range(brace_start, value_fn_end):
+    if s[i] == "{":
+        depth += 1
+    elif s[i] == "}":
+        depth -= 1
+        if depth == 0:
+            case_end = i + 1
+            break
+if case_end is None:
+    raise SystemExit("CPHUN-184 layoutValueText LetterSpacingCorrection brace parse failed")
 new_value_block = """    case LayoutRow::LetterSpacingCorrection: {
       const bool hu = I18N.getLanguage() == Language::HU;
       switch (SETTINGS.letterSpacingLimitPercent) {
@@ -110,11 +126,7 @@ new_value_block = """    case LayoutRow::LetterSpacingCorrection: {
         default: return hu ? "KI" : "OFF";
       }
     }"""
-if old_value_block not in s:
-    pos = s.find("case LayoutRow::LetterSpacingCorrection")
-    excerpt = s[max(0, pos-200):pos+900] if pos >= 0 else "<token absent>"
-    raise SystemExit("CPHUN-184 exact letter-spacing value block missing. Excerpt:\n" + excerpt)
-s = s.replace(old_value_block, new_value_block, 1)
+s = s[:case_start] + new_value_block + s[case_end:]
 write(p, s)
 
 # --- Library Recent overlay -------------------------------------------------
