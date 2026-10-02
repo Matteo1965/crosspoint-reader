@@ -6,6 +6,7 @@
 #include <XmlParserUtils.h>
 
 #include <cctype>
+#include <cstdlib>
 
 #include "Epub/BookMetadataCache.h"
 
@@ -196,6 +197,23 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (metaName == "cover") self->coverItemId = content;
     else if (metaName == "calibre:series") self->series = content;
     else if (metaName == "calibre:series_index") self->seriesIndex = content;
+    else if (metaName == "calibre:user_metadata:#pages") {
+      // Count Pages custom-column metadata is stored as a JSON-like object in
+      // the OPF content attribute. Extract the numeric #value# without pulling
+      // in a full JSON parser on the reader.
+      const std::string key = "\"#value#\"";
+      const size_t keyPos = content.find(key);
+      if (keyPos != std::string::npos) {
+        const size_t colon = content.find(':', keyPos + key.size());
+        if (colon != std::string::npos) {
+          const char* begin = content.c_str() + colon + 1;
+          while (*begin && std::isspace(static_cast<unsigned char>(*begin))) ++begin;
+          char* end = nullptr;
+          const long pages = std::strtol(begin, &end, 10);
+          if (end != begin && pages > 0 && pages <= 60000) self->calibrePageCount = static_cast<int>(pages);
+        }
+      }
+    }
     return;
   }
 
