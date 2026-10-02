@@ -208,6 +208,9 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
       menuRowItems[i].value = I18N.get(SETTINGS.screenInverted ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
     } else if (action == MenuAction::FRONTLIGHT) {
       menuRowItems[i].value = I18N.get(Frontlight.isOn() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    } else if (action == MenuAction::DICTIONARY) {
+      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";
+      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";
     }
   }
 
