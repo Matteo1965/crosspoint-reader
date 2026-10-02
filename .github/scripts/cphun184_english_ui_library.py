@@ -92,10 +92,16 @@ if count != 1:
     raise SystemExit(f"CPHUN-184 letter-spacing picker matches={count}")
 s = s[:fn_start] + section2 + s[fn_end:]
 
-# Make the row value use the same semantic labels as the popup.
+# Make the row value use the same semantic labels as the popup. Scope the
+# replacement to layoutValueText(): CPHUN-183 inserts OptimizationThreshold
+# between LetterSpacingCorrection and ScreenMargin in the generated source.
+value_fn_start = s.find("std::string TextSettingsActivity::layoutValueText(int row) const")
+value_fn_end = s.find("void TextSettingsActivity::confirmStyleRow", value_fn_start)
+if value_fn_start < 0 or value_fn_end < 0:
+    raise SystemExit("CPHUN-184 layoutValueText boundaries missing")
+value_section = s[value_fn_start:value_fn_end]
 value_pattern = re.compile(
-    r'    case LayoutRow::LetterSpacingCorrection: \{.*?'
-    r'\n    \}\n    case LayoutRow::ScreenMargin:',
+    r'    case LayoutRow::LetterSpacingCorrection: \\{.*?\\n    \\}',
     re.S,
 )
 value_replacement = """    case LayoutRow::LetterSpacingCorrection: {
@@ -107,11 +113,11 @@ value_replacement = """    case LayoutRow::LetterSpacingCorrection: {
         case 70: return hu ? "Erős" : "Strong";
         default: return hu ? "KI" : "OFF";
       }
-    }
-    case LayoutRow::ScreenMargin:"""
-s, count = value_pattern.subn(value_replacement, s, count=1)
+    }"""
+value_section2, count = value_pattern.subn(value_replacement, value_section, count=1)
 if count != 1:
     raise SystemExit(f"CPHUN-184 letter-spacing value matches={count}")
+s = s[:value_fn_start] + value_section2 + s[value_fn_end:]
 write(p, s)
 
 # --- Library Recent overlay -------------------------------------------------
