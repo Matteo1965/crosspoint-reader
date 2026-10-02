@@ -204,19 +204,21 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     y += bodyLineHeight;
     const char* updates[] = {
         hu ? "- Könyvtár nézet és Borítórács főoldal" : "- Library view and Cover Grid home",
-        hu ? "- KOReader szinkron és rejtett EPUB-elemek" : "- KOReader sync and hidden EPUB elements",
+        hu ? "- KOReader szinkron és rejtett elemek" : "- KOReader sync and hidden elements",
         hu ? "- Továbbfejlesztett lábjegyzet-kezelés" : "- Improved footnote handling",
-        hu ? "- Fejezet újraindexelése és beállításmentés" : "- Chapter reindexing and settings persistence",
-        hu ? "- SD-font memória- és gyorsítótár-javítások" : "- SD-font memory and cache improvements",
+        hu ? "- Fejezet újraindexelés és beállítások" : "- Chapter reindexing and settings",
+        hu ? "- SD Font memória javítások" : "- SD font memory improvements",
         hu ? "- X4 és X4 Classic kompatibilitás" : "- X4 and X4 Classic compatibility",
+        hu ? "- Javított árnyalatú képmegjelenítés" : "- Improved image tonality",
     };
     for (const char* update : updates) drawWrapped(UI_12_FONT_ID, update);
 
     y += bodyLineHeight;
     drawWrapped(UI_12_FONT_ID, "CrossPoint 1.6.5:", true);
     const char* releaseUpdates[] = {
-        hu ? "- Rövid gombnyomás és lista-újrarajzolás javítások" : "- Short-press and list-redraw fixes",
-        hu ? "- Alvóképernyő átlátszóság és fejezetpozíció" : "- Sleep-screen transparency and chapter position",
+        hu ? "- Rövid gombnyomás és lista kirajzolás" : "- Short press and list redraw",
+        hu ? "- Alvóképernyő átlátszóság" : "- Sleep-screen transparency",
+        hu ? "- Pontosabb fejezet pozíciók" : "- More accurate chapter positions",
         hu ? "- Stabilitási és kompatibilitási javítások" : "- Stability and compatibility fixes",
     };
     for (const char* update : releaseUpdates) drawWrapped(UI_12_FONT_ID, update);
