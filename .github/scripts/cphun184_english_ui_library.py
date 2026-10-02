@@ -53,11 +53,23 @@ if fn_start < 0 or fn_end < 0:
     raise SystemExit("CPHUN-184 confirmLayoutRow boundaries missing")
 
 section = s[fn_start:fn_end]
-pattern = re.compile(
-    r'    case LayoutRow::LetterSpacingCorrection: \{.*?'
-    r'\n    \}\n    case LayoutRow::ShortHyphen:',
-    re.S,
-)
+case_start = section.find("    case LayoutRow::LetterSpacingCorrection: {")
+if case_start < 0:
+    raise SystemExit("CPHUN-184 confirmLayoutRow LetterSpacingCorrection case missing")
+brace_start = section.find("{", case_start)
+depth = 0
+case_end = None
+for i in range(brace_start, len(section)):
+    if section[i] == "{":
+        depth += 1
+    elif section[i] == "}":
+        depth -= 1
+        if depth == 0:
+            case_end = i + 1
+            break
+if case_end is None:
+    raise SystemExit("CPHUN-184 confirmLayoutRow LetterSpacingCorrection brace parse failed")
+
 replacement = """    case LayoutRow::LetterSpacingCorrection: {
       const bool hu = I18N.getLanguage() == Language::HU;
       const char* options[] = {
@@ -85,12 +97,18 @@ replacement = """    case LayoutRow::LetterSpacingCorrection: {
           });
       requestUpdate();
       break;
-    }
-    case LayoutRow::ShortHyphen:"""
-section2, count = pattern.subn(replacement, section, count=1)
-if count != 1:
-    raise SystemExit(f"CPHUN-184 letter-spacing picker matches={count}")
-s = s[:fn_start] + section2 + s[fn_end:]
+    }"""
+section = section[:case_start] + replacement + section[case_end:]
+s = s[:fn_start] + section + s[fn_end:]
+
+# Guard against swallowing the adjacent CPHUN-128 controls.
+confirm_section = s[fn_start:fn_end]
+for token in (
+    "case LayoutRow::LetterSpacingOptimization:",
+    "case LayoutRow::LetterSpacingOptimizationThreshold:",
+):
+    if token not in confirm_section:
+        raise SystemExit("CPHUN-184 adjacent layout action missing after correction patch: " + token)
 
 # Make the row value use the same semantic labels as the popup.
 # Find the LetterSpacingCorrection case specifically inside layoutValueText()
