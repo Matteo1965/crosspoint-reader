@@ -612,12 +612,16 @@ jobs:
                   "    return;\n"
                   "  }\n", 1)
 
-          old='    } else if (action == MenuAction::DICTIONARY) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
-          new='    } else if (action == MenuAction::DICTIONARY_STATUS) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
-          if old in cs:
-              cs=cs.replace(old,new,1)
-          elif new not in cs:
-              raise SystemExit("Dictionary value block anchor missing")
+          status_value='    } else if (action == MenuAction::DICTIONARY_STATUS) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
+          if status_value not in cs:
+              old='    } else if (action == MenuAction::DICTIONARY) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
+              if old in cs:
+                  cs=cs.replace(old,status_value,1)
+              else:
+                  anchor='    } else if (action == MenuAction::FRONTLIGHT) {\n      menuRowItems[i].value = I18N.get(Frontlight.isOn() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);\n'
+                  if anchor not in cs:
+                      raise SystemExit("Frontlight render-value anchor missing")
+                  cs=cs.replace(anchor, anchor+status_value, 1)
           cp.write_text(cs,encoding="utf-8")
 
           # Epub.h is intentionally kept from the generated chain during merge;
