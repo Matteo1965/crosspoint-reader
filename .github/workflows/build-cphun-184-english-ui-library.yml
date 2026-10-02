@@ -638,6 +638,8 @@ jobs:
           grep -Fq 'hungarianEditionLabel()' src/activities/settings/CrossPointVersionActivity.cpp
           grep -Fq 'static constexpr uint16_t values[] = {0, 10, 40, 70};' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'hu ? "Gyenge" : "Weak"' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case LayoutRow::LetterSpacingOptimization:' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case LayoutRow::LetterSpacingOptimizationThreshold:' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'case 50: return hu ? "Gyenge" : "Weak";' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'case 60: return hu ? "Közepes" : "Medium";' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq 'case 70: return hu ? "Erős" : "Strong";' src/activities/settings/TextSettingsActivity.cpp
