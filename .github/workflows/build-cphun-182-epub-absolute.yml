@@ -622,7 +622,7 @@ jobs:
           grep -Fq 'I18n() : _language(Language::HU)' lib/I18n/I18n.h
           grep -Fq 'language = static_cast<uint8_t>(Language::HU);' src/CrossPointSettings.h
           grep -Fq 'letterSpacingThresholdLabel' src/activities/settings/TextSettingsActivity.cpp
-          grep -Fq 'LayoutRow::LetterSpacingPairThreshold' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'LayoutRow::LetterSpacingOptimizationThreshold' src/activities/settings/TextSettingsActivity.cpp
           grep -Fq '(roundedRaffHome ? 14 : 0)' src/activities/home/HomeActivity.cpp
           grep -Fq 'roundedRaffHome ? metrics.homeCoverHeight : metrics.homeCoverTileHeight' src/activities/home/HomeActivity.cpp
           python3 - <<'PY'
