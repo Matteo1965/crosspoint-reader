@@ -687,14 +687,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path("src/activities/reader/EpubReaderMenuActivity.cpp").read_text(encoding="utf-8")
-          status='action == MenuAction::DICTIONARY_STATUS'
-          value='menuRowItems[i].value = SETTINGS.dictionaryName'
-          if status not in s or value not in s:
-              raise SystemExit("Dictionary status/value binding missing")
-          pos=s.find(value)
-          window=s[max(0,pos-350):pos]
-          if status not in window:
-              raise SystemExit("dictionaryName value is not bound to DICTIONARY_STATUS")
+          expected=(
+              '} else if (action == MenuAction::DICTIONARY_STATUS) {\n'
+              '      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n'
+              '      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";'
+          )
+          if expected not in s:
+              raise SystemExit("Exact DICTIONARY_STATUS value block missing")
           PY
           grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
 
