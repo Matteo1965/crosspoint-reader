@@ -177,10 +177,10 @@ const char* letterSpacingThresholdLabel(const uint8_t value) {
 s = s[:end+2] + "\n" + threshold_helper + s[end+2:]
 
 old_value_assign = """    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();"""
-new_value_assign = """    if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::LetterSpacingPairThreshold)) {
+new_value_assign = """    if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::LetterSpacingOptimizationThreshold)) {
       // Stable literal: avoids the English Layout crash seen when the longer
       // label caused the UI to consume a stale mutable-string value pointer.
-      rowItems_[i].value = letterSpacingThresholdLabel(SETTINGS.letterSpacingPairThreshold);
+      rowItems_[i].value = letterSpacingThresholdLabel(SETTINGS.letterSpacingOptimizationThreshold);
     } else {
       rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     }"""
@@ -190,10 +190,10 @@ s = s.replace(old_value_assign, new_value_assign, 1)
 
 # Keep layoutValueText deterministic too; no temporary numeric conversion for
 # the threshold row anywhere in the render path.
-old_threshold_value = """    case LayoutRow::LetterSpacingPairThreshold:
-      return std::to_string(SETTINGS.letterSpacingPairThreshold);"""
-new_threshold_value = """    case LayoutRow::LetterSpacingPairThreshold:
-      return letterSpacingThresholdLabel(SETTINGS.letterSpacingPairThreshold);"""
+old_threshold_value = """    case LayoutRow::LetterSpacingOptimizationThreshold:
+      return std::to_string(SETTINGS.letterSpacingOptimizationThreshold);"""
+new_threshold_value = """    case LayoutRow::LetterSpacingOptimizationThreshold:
+      return letterSpacingThresholdLabel(SETTINGS.letterSpacingOptimizationThreshold);"""
 # Historical generated chains express this value in slightly different forms.
 # The actual crash fix is the stable literal assigned to rowItems_ above; this
 # normalization is optional and only applied when the exact old form is present.
