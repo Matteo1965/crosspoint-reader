@@ -1,0 +1,840 @@
+name: CPHUN-189 Home Preview Count Pages
+
+on:
+  push:
+    branches:
+      - agent/cphun-189-home-title-cleanup
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: default
+            label: X4
+            artifact: CPHUN-189-X4
+            firmware: firmware.bin
+          - env: x4c
+            label: X4 Classic
+            artifact: CPHUN-189-X4-Classic
+            firmware: firmware-x4c.bin
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Save CPHUN-182 delta from accepted CPHUN-180 baseline
+        run: |
+          set -euo pipefail
+          git fetch origin agent/cphun-180-default-absolute-cover
+          git diff --binary origin/agent/cphun-180-default-absolute-cover...HEAD -- \
+            . ':(exclude).github/workflows/build-cphun-181-cover-grid.yml' \
+              ':(exclude).github/workflows/build-cphun-182-epub-absolute.yml' \
+              ':(exclude).github/workflows/build-cphun-183-threshold-library.yml' \
+              ':(exclude).github/workflows/build-cphun-184-english-ui-library.yml' \
+              ':(exclude).github/workflows/build-cphun-185-home-book-info.yml' \
+              ':(exclude).github/workflows/build-cphun-186-home-layout-polish.yml' \
+              ':(exclude).github/workflows/build-cphun-187-home-metadata-filtering.yml' \
+              ':(exclude).github/workflows/build-cphun-188-reader-dictionary-row.yml' \
+              ':(exclude).github/workflows/build-cphun-189-home-preview-count-pages.yml' \
+            > /tmp/cphun182.patch
+          test -s /tmp/cphun182.patch
+          echo "Saved CPHUN-182 delta: $(wc -l < /tmp/cphun182.patch) lines"
+
+          # Reconstruct from the exact accepted raw CPHUN-180 baseline. The
+          # legacy patch chain relies on anchors that later CPHUN-182 source
+          # edits have already changed (for example CPHUNBuildId.h).
+          git reset --hard origin/agent/cphun-180-default-absolute-cover
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Preserve new CPHUN-170 library translations before legacy regeneration
+        run: |
+          mkdir -p /tmp/cphun170
+          cp lib/I18n/translations/english.yaml /tmp/cphun170/english.yaml
+          cp lib/I18n/translations/hungarian.yaml /tmp/cphun170/hungarian.yaml
+      - name: Restore last tested CPHUN-152 build scripts
+        run: |
+          git fetch origin agent/cphun-152-hyphen-export
+          git checkout origin/agent/cphun-152-hyphen-export -- tools/
+      - name: Rebuild full tested CPHUN-152 feature chain
+        run: bash tools/build_cphun152_hyphen_export_exp.sh
+      - name: Restore chapter-position repair after legacy patch chain
+        run: python3 .github/scripts/cphun157_restore_chapter.py
+      - name: Verify CPHUN-159 integration and invalidate stale chapter cache
+        run: python3 .github/scripts/cphun159_post_chain.py
+      - name: Reapply CPHUN-160 font cache fix after HU patch chain
+        run: python3 .github/scripts/cphun160_post_chain.py
+      - name: Verify CPHUN-163 dictionary and reader glyph fallback
+        run: python3 .github/scripts/cphun163_post_chain.py
+      - name: Apply CPHUN-164 guarded tracking and baseline optical alignment
+        run: python3 .github/scripts/cphun164_post_chain.py
+      - name: Apply CPHUN-165 render-time optical closure and new section cache
+        run: |
+          python3 .github/scripts/cphun165_layout_patch.py
+          python3 .github/scripts/cphun165_render_patch.py
+      - name: Apply CPHUN-166 optical line diagnostics and numbered screenshot sidecars
+        run: python3 .github/scripts/cphun166_diagnostic_patch.py
+      - name: Apply CPHUN-167 actual full-word ink correction and new cache version
+        run: python3 .github/scripts/cphun167_word_ink_patch.py
+      - name: Apply CPHUN-168 painted-pixel and normal-margin correction
+        run: python3 .github/scripts/cphun168_normal_margin_patch.py
+      - name: Finalize CPHUN-169 eight-pixel production build without TXT sidecars
+        run: python3 .github/scripts/cphun169_production_cleanup.py
+      - name: Restore CPHUN-170 library labels without replacing regenerated Hungarian UI
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for lang in ('english', 'hungarian'):
+              source = Path('/tmp/cphun170', lang + '.yaml').read_text(encoding='utf-8')
+              target_path = Path('lib/I18n/translations', lang + '.yaml')
+              target = target_path.read_text(encoding='utf-8')
+              additions = []
+              for line in source.splitlines():
+                  if not line.startswith(('STR_LIBRARY', 'STR_HOLD_OPEN_TO_REMOVE:')): continue
+                  key = line.split(':', 1)[0]
+                  if not any(row.startswith(key + ':') for row in target.splitlines()):
+                      additions.append(line)
+              if additions:
+                  target_path.write_text(target.rstrip() + '\n' + '\n'.join(additions) + '\n', encoding='utf-8')
+              print(f'{lang}: {len(additions)} preserved library labels')
+          PY
+      - name: Verify CPHUN-170 library and tested 169 UI are present together
+        run: |
+          grep -Fq 'CLIX_MAX_RECORDS = 4096' lib/LibraryIndex/LibraryFormat.h
+          grep -Fq 'add_subdirectory(library_format)' test/CMakeLists.txt
+          grep -Fq 'add_subdirectory(library_text)' test/CMakeLists.txt
+          for key in STR_LIBRARY STR_LIBRARY_TAB_RECENT STR_LIBRARY_TAB_TITLE STR_LIBRARY_TAB_AUTHOR STR_LIBRARY_REBUILD STR_LIBRARY_NO_RESULTS; do
+            grep -q "^$key:" lib/I18n/translations/english.yaml
+            grep -q "^$key:" lib/I18n/translations/hungarian.yaml
+          done
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'LetterSpacingOptimization' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+      - name: Verify CPHUN-169 production features
+        run: |
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'rightmostPainted' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          ! grep -Fq 'OpticalLineDiagnostics' src/util/ScreenshotUtil.cpp
+          ! grep -Fq 'OpticalLineDiagnostics' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -Fq 'diagnosticPath' src/util/ScreenshotUtil.cpp
+          ! test -f lib/Epub/Epub/OpticalLineDiagnostics.h
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+      - name: Verify CPHUN-168 ordinary letter edge and unchanged hanging hyphens
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'OpticalLineCorrection::countsAsPaintedInk(intensity)' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'rightmostPainted' lib/Epub/Epub/blocks/TextBlock.cpp
+          ! grep -Fq 'dark >= 0 ? dark : any' lib/Epub/Epub/blocks/TextBlock.cpp
+      - name: Verify CPHUN-167 native pair-kerning is retained
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'effectiveFinalInkInset' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+      - name: Confirm CPHUN-166 screenshot sequence is retained
+        run: |
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'add_subdirectory(cphun166_screenshot_sequence)' test/CMakeLists.txt
+          ! grep -Fq 'const unsigned long ts = millis()' src/util/ScreenshotUtil.cpp
+      - name: Verify CPHUN-161 font-cache patch survives legacy regeneration
+        run: |
+          git diff --exit-code HEAD -- \
+            lib/EpdFont/SdCardFont.cpp \
+            lib/EpdFont/SdCardFont.h \
+            lib/GfxRenderer/FontCacheManager.cpp \
+            lib/GfxRenderer/FontCacheManager.h
+          grep -Fq 'makeUniqueNoThrow<CpGlyphMapping[]>' lib/EpdFont/SdCardFont.cpp
+          grep -Fq 'bool accumulate' lib/EpdFont/SdCardFont.h
+          grep -Fq '/*accumulate=*/false' lib/GfxRenderer/FontCacheManager.cpp
+          grep -Fq 'fontCache->releaseSdFontCaches()' lib/Epub/Epub/Section.cpp
+          echo "Verified CPHUN-160 and CPHUN-161 SD-font memory changes."
+      - name: Verify new regression suite is registered
+        run: |
+          grep -Fq 'add_subdirectory(cphun163_glyph_dictionary)' test/CMakeLists.txt
+          grep -Fq 'ReaderGlyphFallback::localSubstitute' lib/GfxRenderer/GfxRenderer.cpp
+          grep -Fq 'DictWordEdges::trim(word)' src/util/Dictionary.cpp
+      - name: Verify CPHUN-164 integration and cache invalidation
+        run: |
+          grep -Fq 'add_subdirectory(cphun164_optical_spacing)' test/CMakeLists.txt
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+          grep -Fq 'OpticalLineCorrection::extraForSlot' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'CPHUN-164: guarded optimization' lib/Epub/Epub/Section.cpp
+      - name: Verify CPHUN-165 render-time source and cache wiring
+        run: |
+          grep -Fq 'SECTION_FILE_VERSION = 69' lib/Epub/Epub/Section.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'OpticalLineCorrection::missingFinalInkPixels' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'const uint8_t* opticalGapsArr' lib/Epub/Epub/blocks/TextBlock.h
+          grep -Fq 'opticalTargetRightX' lib/Epub/Epub/ParsedText.cpp
+      - name: Verify SPI batching is enabled
+        run: grep -Fq -- '-DUSE_SPI_ARRAY_TRANSFER=1' platformio.ini
+      - name: Verify exact KOReader positions skip hidden EPUB text
+        run: |
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'IgnoresHtmlHiddenAttributeInOffsetMapping' test/koreader_xpath_resolver/KOReaderXPathResolverTest.cpp
+      - name: Verify CPHUN-157r1, CPHUN-159 and font-cache integration; tested buttons unchanged
+        run: |
+          for spec in \
+            'src/activities/reader/EpubReaderActivity.cpp|ChapterPosition EpubReaderActivity::chapterPosition' \
+            'src/activities/reader/EndOfBookOptions.h|std::atomic<int> selector' \
+            'src/activities/boot_sleep/SleepActivity.cpp|Incomplete sleep-screen BMP'; do
+            file="${spec%%|*}"
+            token="${spec#*|}"
+            if ! grep -aFq "$token" "$file"; then
+              echo "::error file=$file::Missing CPHUN-157 source token: $token"
+              exit 1
+            fi
+            echo "Verified $file: $token"
+          done
+          usb_diff="$(git diff --name-only origin/agent/cphun-152-hyphen-export HEAD -- lib/hal/HalStorage.cpp src/activities/network/UsbDriveActivity.cpp src/activities/network/UsbDriveActivity.h)"
+          if [ -n "$usb_diff" ]; then
+            echo "::error::Unexpected USB files changed: $usb_diff"
+            exit 1
+          fi
+          for path in lib/hal/HalGPIO.cpp lib/hal/HalGPIO.h src/main.cpp src/activities/UiListActivity.cpp src/activities/UiListActivity.h; do
+            if ! git diff --quiet origin/agent/cphun-152-hyphen-export HEAD -- "$path"; then
+              echo "::error file=$path::Hardware button regression: differs from last tested CPHUN-152"
+              exit 1
+            fi
+            echo "Verified tested button handling unchanged: $path"
+          done
+          printf '#pragma once\n\n#define CPHUN_BUILD_ID "CPHUN-260930-180-DEFAULT-B"\n#define CPHUN_BUILD_DATE "%s"\n' "$(date -u +%Y-%m-%d)" > src/CPHUNBuildId.h
+          grep -Fq '#define CPHUN_BUILD_DATE' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-260930-180-DEFAULT-B' src/CPHUNBuildId.h
+          git diff --check
+      - name: Integrate full Library View UI after the tested CPHUN-169 feature chain
+        run: bash .github/scripts/cphun171_integrate_library_view.sh
+      - name: Sync Library View to final CrossPoint 1.6.5 behavior
+        run: bash .github/scripts/cphun172_release_library_sync.sh
+      - name: Apply CPHUN-173 RoundedRaff Settings and Library UI tuning
+        run: python3 .github/scripts/cphun173_roundedraff_ui_tuning.py
+      - name: Apply CPHUN-174 UI spacing and optical alignment polish
+        run: python3 .github/scripts/cphun174_ui_spacing_polish.py
+      - name: Apply CPHUN-175 upstream #3569 and sleep-timeout relocation
+        run: python3 .github/scripts/cphun175_upstream_small_integrations.py
+      - name: Apply CPHUN-176 sleep-screen #3541 safe backport
+        run: python3 .github/scripts/cphun176_sleep3541_backport.py
+      - name: Apply CPHUN-177 selective FreeInk grayscale SDK backport
+        run: bash .github/scripts/cphun177_sdk_grayscale_backport.sh
+      - name: Apply CPHUN-177 application-side absolute grayscale core
+        run: python3 .github/scripts/cphun177_absolute_grayscale_core.py
+      - name: Apply CPHUN-178 A/B/C cover selector and remove sleepdiag
+        run: python3 .github/scripts/cphun178_abc_cover_test.py
+      - name: Apply CPHUN-179 reference and CPHUN-180 B default / menu names
+        run: python3 .github/scripts/cphun179_release165_reference.py
+      - name: Restore physically-tested low-level X4 hardware-button sources
+        run: |
+          git fetch origin agent/cphun-157r1-recover-hardware-buttons
+          git checkout origin/agent/cphun-157r1-recover-hardware-buttons -- \
+            lib/hal/HalGPIO.cpp \
+            lib/hal/HalGPIO.h \
+            src/main.cpp \
+            src/ReaderButtonGestureDetector.cpp \
+            src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp \
+            src/ReaderButtonProfileStore.h
+      - name: Verify low-level X4 button sources and retain CPHUN-177 input/UI behavior
+        run: |
+          git fetch origin agent/cphun-157r1-recover-hardware-buttons
+          for path in \
+            lib/hal/HalGPIO.cpp \
+            lib/hal/HalGPIO.h \
+            src/main.cpp \
+            src/ReaderButtonGestureDetector.cpp \
+            src/ReaderButtonGestureDetector.h \
+            src/ReaderButtonProfileStore.cpp \
+            src/ReaderButtonProfileStore.h; do
+            if ! git diff --quiet origin/agent/cphun-157r1-recover-hardware-buttons -- "$path"; then
+              echo "::error file=$path::Low-level button source differs from tested CPHUN-157r1"
+              git diff -- "$path"
+              exit 1
+            fi
+          done
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
+          grep -q 'buttonNavigator' src/activities/UiListActivity.cpp
+          echo "Verified tested low-level X4 buttons while retaining CPHUN-177 input/UI layer."
+      - name: Verify CPHUN-177 absolute grayscale integration
+        run: |
+          grep -q 'static constexpr int widths\[categoryCount\] = {23, 23, 24, 30}' src/activities/settings/SettingsActivity.h
+          grep -q 'props.rowGap = 4' src/activities/settings/SettingsActivity.cpp
+          grep -q 'static constexpr int widths\[3\] = {41, 25, 34}' src/activities/library/LibraryListActivity.h
+          grep -q 'kHoldHelpWidth = 320' src/activities/library/LibraryListActivity.cpp
+          grep -q 'STR_LIBRARY_HOLD_SORT: "Hosszan: Fordított rendezés"' lib/I18n/translations/hungarian.yaml
+          grep -q 'tabSideMarginPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabGapPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabHorizontalInsetPx' src/activities/UiTabListActivity.cpp
+          grep -q 'tabBottomSpacingPx' src/activities/UiTabListActivity.cpp
+          grep -q 'valueOffsetX' freeink-sdk/libs/ui/FreeInkUI/include/components/lists/list.h
+          grep -q 'nudgeOffRight ? 4 : 0' src/activities/settings/TextSettingsActivity.cpp
+          grep -q 'rowValues_\[i\] == tr(STR_STATE_ON)) ? 2 : 0' src/activities/settings/SettingsActivity.cpp
+          grep -q 'props.rowGap = 4' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -q 'ROUNDEDRAFF ? 8 : -1' src/activities/reader/EpubReaderMenuActivity.h
+          grep -q '"sleepTimeoutMinutes", StrId::STR_CAT_DISPLAY' src/SettingsListBase.h
+          ! grep -q '"sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM' src/SettingsListBase.h
+          grep -q 'erase it below when unavailable' src/SettingsListBase.h
+          grep -q 'releaseSdFontCaches' lib/Epub/Epub/Section.cpp
+          grep -q 'ditheredGray = gray >> 6' lib/Epub/Epub/converters/PngToFramebufferConverter.cpp
+          grep -q 'CPHUN-176 / upstream #3541' lib/GfxRenderer/GfxRenderer.cpp
+          grep -q 'enum class GrayscaleMode' freeink-sdk/libs/display/FreeInkDisplay/include/GrayscaleCapabilities.h
+          grep -q 'absoluteGrayscale: verified X4 factory LUT' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'GrayscaleCapabilities grayscaleCapabilities' lib/hal/HalDisplay.h
+          grep -q 'grayPlanePixel' lib/GfxRenderer/BitmapHelpers.h
+          grep -q 'grayPlanesAreAbsolute' lib/GfxRenderer/GfxRenderer.h
+          grep -q 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q '#define FREEINK_X4_DISPLAY_SPI_HZ 10000000u' freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
+          ! grep -q 'dumpSleepDiagPlane177' src/activities/boot_sleep/SleepActivity.cpp
+          ! grep -q '/sleepdiag' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
+          grep -q 'coverTestMode' src/SettingsListBase.h
+          grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
+          grep -q 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'renderer.displayBuffer(HalDisplay::HALF_REFRESH);' src/activities/boot_sleep/SleepActivity.cpp
+          grep -q 'bus.data(0xCC);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_BW, lsb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'writeGrayRam(bus, CMD_WRITE_RAM_RED, msb, _bufferSize);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+          grep -q 'cover_release165' lib/Epub/Epub.cpp
+          grep -q 'originalThresholds' lib/GfxRenderer/BitmapHelpers.h
+          ! grep -q 'bus.data(0xC7);' freeink-sdk/libs/display/FreeInkDisplay/src/driver/Ssd1677Driver.cpp
+      - name: Verify navigation, rebuild action and CPHUN-169 text settings
+        run: |
+          grep -q 'wasLongPressed' src/MappedInputManager.cpp
+          grep -q 'suppressConfirmRelease' src/MappedInputManager.cpp
+          grep -q 'goToLibrary' src/activities/ActivityManager.cpp
+          grep -q 'LibraryListActivity' src/activities/ActivityManager.cpp
+          grep -q 'STR_LIBRARY' src/activities/home/HomeActivity.cpp
+          grep -q 'promptRebuildIndex' src/activities/library/LibraryListActivity.cpp
+          grep -q 'isLibraryIndexDirty' src/activities/library/LibraryListActivity.cpp
+          ! grep -q 'RebuildLibraryIndex' src/activities/settings/SettingsActivity.cpp
+          grep -q 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+      - name: Confirm Library regression executables
+        run: |
+          test -x build/test/library_format/LibraryFormatTest
+          test -x build/test/library_text/LibraryTextTest
+
+      - name: Freeze reconstructed CPHUN-180 source baseline
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "CI: reconstructed CPHUN-180 source baseline" || true
+
+      - name: Merge CPHUN-182 delta onto reconstructed CPHUN-180
+        run: |
+          set -euo pipefail
+
+          # First apply all non-overlapping CPHUN-181 hunks. A non-zero exit is
+          # expected for the small set of files edited by both generated
+          # CPHUN-180 and CPHUN-181.
+          set +e
+          git apply --3way /tmp/cphun182.patch
+          apply_rc=$?
+          set -e
+          if (( apply_rc != 0 )); then
+            echo "Resolving expected CPHUN-180/181 overlaps..."
+
+            # Keep generated CPHUN-180 versions where they contain late
+            # Library/reader integrations; add the small 181 deltas below.
+            git checkout --ours -- \
+              lib/Epub/Epub.h \
+              src/RecentBooksStore.h \
+              src/activities/ActivityManager.cpp \
+              src/activities/ActivityManager.h \
+              src/activities/library/LibraryListActivity.cpp \
+              src/activities/library/LibraryListActivity.h \
+              src/activities/reader/EpubReaderMenuActivity.cpp \
+              src/activities/reader/EpubReaderMenuActivity.h
+
+            # These files are CPHUN-182-owned presentation/state changes and
+            # intentionally replace their older generated counterparts.
+            git checkout --theirs -- \
+              src/CPHUNBuildId.h \
+              src/activities/home/HomeActivity.cpp \
+              src/activities/home/HomeActivity.h \
+              src/activities/settings/CrossPointVersionActivity.cpp
+
+            python3 - <<'PY'
+          from pathlib import Path
+
+          # The reconstructed CPHUN-180 chain already contains the same
+          # lightweight metadata implementation that the raw CPHUN-182 delta
+          # adds cleanly. Remove any duplicate implementation deterministically
+          # while keeping the first generated copy.
+          p=Path("lib/Epub/Epub.cpp")
+          s=p.read_text(encoding="utf-8")
+          signature="bool Epub::loadMetadata(std::string& title, std::string& author) {"
+          starts=[]
+          pos=0
+          while True:
+              i=s.find(signature,pos)
+              if i<0: break
+              starts.append(i)
+              pos=i+len(signature)
+          if len(starts)>1:
+              removals=[]
+              for st in starts[1:]:
+                  brace=s.find("{",st)
+                  depth=0
+                  end=None
+                  for j in range(brace,len(s)):
+                      if s[j]=="{": depth+=1
+                      elif s[j]=="}":
+                          depth-=1
+                          if depth==0:
+                              end=j+1
+                              break
+                  if end is None:
+                      raise SystemExit("Could not parse duplicate Epub::loadMetadata body")
+                  while end < len(s) and s[end] in "\r\n":
+                      end+=1
+                  removals.append((st,end))
+              for st,end in reversed(removals):
+                  s=s[:st]+s[end:]
+              p.write_text(s,encoding="utf-8")
+          elif len(starts)!=1:
+              raise SystemExit(f"Unexpected Epub::loadMetadata count: {len(starts)}")
+
+          # CPHUN-181 Library indexing needs the lightweight metadata API
+          # declaration; its implementation was a clean non-conflicting hunk.
+          p=Path("lib/Epub/Epub.h")
+          s=p.read_text(encoding="utf-8")
+          decl="  bool loadMetadata(std::string& title, std::string& author);\n"
+          if decl not in s:
+              anchor="  bool load(bool buildIfMissing = true, bool skipLoadingCss = false);\n"
+              if anchor not in s:
+                  raise SystemExit("Epub::load declaration anchor missing")
+              s=s.replace(anchor, anchor+
+                  "  // Lightweight OPF-only metadata read for library indexing.\n"+
+                  decl, 1)
+          p.write_text(s,encoding="utf-8")
+
+          # The 181 compatibility layer exposes the recent-book bound to the
+          # Library overlay. Move the existing constant to public if necessary.
+          p=Path("src/RecentBooksStore.h")
+          s=p.read_text(encoding="utf-8")
+          if "static constexpr int MAX_RECENT_BOOKS = 10;" in s:
+              s=s.replace("  static constexpr int MAX_RECENT_BOOKS = 10;\n", "", 1)
+              cls="class RecentBooksStore : public PersistableStore<RecentBooksStore> {\n"
+              if cls not in s:
+                  raise SystemExit("RecentBooksStore class anchor missing")
+              s=s.replace(cls, cls+
+                  " public:\n  static constexpr int MAX_RECENT_BOOKS = 10;\n\n", 1)
+          p.write_text(s,encoding="utf-8")
+
+          # Generated CPHUN-180 already contains Library routing. Only ensure
+          # the enum member and wrapper declaration required by the 181 Home.
+          p=Path("src/activities/ActivityManager.h")
+          s=p.read_text(encoding="utf-8")
+          import re
+          m=re.search(r'enum class HomeMenuItem \{([^}]*)\};', s)
+          if not m:
+              raise SystemExit("HomeMenuItem enum anchor missing")
+          items=[x.strip() for x in m.group(1).split(",") if x.strip()]
+          # Keep enum order stable while removing any duplicate values created
+          # by combining generated CPHUN-180 Library routing with CPHUN-181.
+          unique=[]
+          for item in items:
+              if item not in unique:
+                  unique.append(item)
+          if "LIBRARY" not in unique:
+              insert_at=1 if unique and unique[0]=="NONE" else 0
+              unique.insert(insert_at,"LIBRARY")
+          # CPHUN-181 still retains the legacy RecentBooks path for themes that
+          # have not migrated to the four-item Library home menu. Keep RECENTS
+          # as a compatibility enum value even though RoundedRaff/Cover Grid
+          # do not expose it.
+          if "RECENTS" not in unique:
+              try:
+                  insert_at=unique.index("FILE_BROWSER")+1
+              except ValueError:
+                  insert_at=len(unique)
+              unique.insert(insert_at,"RECENTS")
+          enum_text="enum class HomeMenuItem { " + ", ".join(unique) + " };"
+          s=s[:m.start()]+enum_text+s[m.end():]
+          if "void goToLibrary();" not in s:
+              s=s.replace("  void goToSettings();\n", "  void goToSettings();\n  void goToLibrary();\n", 1)
+          if "void goToRecentBooks();" not in s:
+              anchor="  void goToFileBrowser(std::string path = {});\n"
+              if anchor not in s:
+                  raise SystemExit("ActivityManager header file-browser anchor missing")
+              s=s.replace(anchor, anchor+"  void goToRecentBooks();\n",1)
+          p.write_text(s,encoding="utf-8")
+
+          p=Path("src/activities/ActivityManager.cpp")
+          s=p.read_text(encoding="utf-8")
+          if '#include "home/RecentBooksActivity.h"' not in s:
+              anchor='#include "home/HomeActivity.h"\n'
+              if anchor not in s:
+                  raise SystemExit("ActivityManager HomeActivity include anchor missing")
+              s=s.replace(anchor, anchor+'#include "home/RecentBooksActivity.h"\n',1)
+          if '#include "library/LibraryListActivity.h"' not in s:
+              anchor='#include "home/RecentBooksActivity.h"\n'
+              if anchor not in s:
+                  raise SystemExit("ActivityManager RecentBooks include anchor missing")
+              s=s.replace(anchor, anchor+'#include "library/LibraryListActivity.h"\n',1)
+          if "void ActivityManager::goToLibrary()" not in s:
+              anchor="void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }\n"
+              if anchor not in s:
+                  raise SystemExit("ActivityManager settings wrapper anchor missing")
+              s=s.replace(anchor, anchor+
+                  "\nvoid ActivityManager::goToLibrary() {\n"
+                  "  replaceActivity(std::make_unique<LibraryListActivity>(renderer, mappedInput));\n"
+                  "}\n",1)
+          # Preserve the legacy RecentBooks compatibility route used by Home
+          # outside RoundedRaff/Cover Grid.
+          if "void ActivityManager::goToRecentBooks()" not in s:
+              anchor="void ActivityManager::goToFileBrowser(std::string path) {\n"
+              idx=s.find(anchor)
+              if idx < 0:
+                  raise SystemExit("ActivityManager file-browser wrapper anchor missing")
+              # Insert immediately before goToFileBrowser().
+              compat=(
+                  "void ActivityManager::goToRecentBooks() {\n"
+                  "  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));\n"
+                  "}\n\n"
+              )
+              s=s[:idx]+compat+s[idx:]
+          p.write_text(s,encoding="utf-8")
+
+          # CPHUN-181 display wording: shorten the generated CPHUN-178
+          # label on the Display tab without changing the A/B/C mode values.
+          p=Path("lib/I18n/translations/hungarian.yaml")
+          s=p.read_text(encoding="utf-8")
+          old='STR_CPHUN_COVER_TEST_MODE: "Borítókép tesztmód"'
+          new='STR_CPHUN_COVER_TEST_MODE: "Borító mód"'
+          if old in s:
+              s=s.replace(old,new,1)
+          elif new not in s:
+              raise SystemExit("CPHUN cover-mode Hungarian label missing")
+          p.write_text(s,encoding="utf-8")
+
+          # Preserve the full generated 1.6.5 Library behavior and apply only
+          # the accepted footer polish from CPHUN-181: 4 px above button hints.
+          p=Path("src/activities/library/LibraryListActivity.cpp")
+          s=p.read_text(encoding="utf-8")
+          s=s.replace("renderer.getLineHeight(SMALL_FONT_ID) - 2;",
+                      "renderer.getLineHeight(SMALL_FONT_ID) - 4;")
+          s=s.replace("buttonHintsHeight - lineHeight - 2;",
+                      "buttonHintsHeight - lineHeight - 4;")
+          p.write_text(s,encoding="utf-8")
+          PY
+
+            git add \
+              lib/Epub/Epub.h \
+              lib/I18n/translations/hungarian.yaml \
+              src/CPHUNBuildId.h \
+              src/RecentBooksStore.h \
+              src/activities/ActivityManager.cpp \
+              src/activities/ActivityManager.h \
+              src/activities/home/HomeActivity.cpp \
+              src/activities/home/HomeActivity.h \
+              src/activities/reader/EpubReaderMenuActivity.cpp \
+              src/activities/reader/EpubReaderMenuActivity.h \
+              src/activities/library/LibraryListActivity.cpp \
+              src/activities/library/LibraryListActivity.h \
+              src/activities/settings/CrossPointVersionActivity.cpp
+          fi
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "::error::Unresolved CPHUN-180/181 merge conflicts:"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+          git diff --check
+
+      - name: Apply CPHUN-182 UI stability fixes
+        run: python3 .github/scripts/cphun182_ui_stability.py
+
+      - name: Apply CPHUN-183 threshold persistence and EPUB-only Library
+        run: python3 .github/scripts/cphun183_threshold_library.py
+
+      - name: Apply CPHUN-184 English UI and EPUB-only Recent overlay
+        run: python3 .github/scripts/cphun184_english_ui_library.py
+
+      - name: Apply CPHUN-188 reader dictionary rows without replacing generated menu
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          hp=Path("src/activities/reader/EpubReaderMenuActivity.h")
+          hs=hp.read_text(encoding="utf-8")
+          if "DICTIONARY_STATUS" not in hs:
+              anchor="    MANUAL_DICTIONARY_SEARCH,\n"
+              if anchor not in hs:
+                  raise SystemExit("MANUAL_DICTIONARY_SEARCH enum anchor missing")
+              hs=hs.replace(anchor, anchor+"    DICTIONARY_STATUS,\n", 1)
+          hs=re.sub(r"static constexpr size_t MAX_MENU_ITEMS = \\d+;",
+                    "static constexpr size_t MAX_MENU_ITEMS = 16;", hs, count=1)
+          hp.write_text(hs,encoding="utf-8")
+
+          cp=Path("src/activities/reader/EpubReaderMenuActivity.cpp")
+          cs=cp.read_text(encoding="utf-8")
+          status_row='  items.push_back({MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"});\n'
+          if status_row not in cs:
+              anchor='  items.push_back({MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP, "Kézi keresés"});\n'
+              if anchor not in cs:
+                  raise SystemExit("Manual dictionary row anchor missing")
+              cs=cs.replace(anchor, anchor+status_row, 1)
+
+          if "selectedAction == MenuAction::DICTIONARY_STATUS" not in cs:
+              anchor="  const auto selectedAction = items[index].action;\n"
+              if anchor not in cs:
+                  raise SystemExit("selectedAction anchor missing")
+              cs=cs.replace(anchor, anchor+
+                  "  if (selectedAction == MenuAction::DICTIONARY_STATUS) {\n"
+                  "    requestUpdate();\n"
+                  "    return;\n"
+                  "  }\n", 1)
+
+          old='    } else if (action == MenuAction::DICTIONARY) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
+          new='    } else if (action == MenuAction::DICTIONARY_STATUS) {\n      menuRowItems[i].label = I18N.getLanguage() == Language::HU ? "Szótár:" : "Dictionary:";\n      menuRowItems[i].value = SETTINGS.dictionaryName[0] ? SETTINGS.dictionaryName : "-";\n'
+          if old in cs:
+              cs=cs.replace(old,new,1)
+          elif new not in cs:
+              raise SystemExit("Dictionary value block anchor missing")
+          cp.write_text(cs,encoding="utf-8")
+
+          # Epub.h is intentionally kept from the generated chain during merge;
+          # add the CPHUN-189 Count Pages field back without replacing that header.
+          ep=Path("lib/Epub/Epub.h")
+          es=ep.read_text(encoding="utf-8")
+          if "int calibrePageCount = 0;" not in es:
+              anchor="    std::string seriesIndex;\n"
+              if anchor not in es:
+                  raise SystemExit("BookInfo seriesIndex anchor missing")
+              es=es.replace(anchor, anchor+"    int calibrePageCount = 0;\n",1)
+          ep.write_text(es,encoding="utf-8")
+          PY
+
+      - name: Verify CPHUN-185 home info and UI polish
+        run: |
+          set -euo pipefail
+          grep -Fq 'featuredProgressTenths' src/activities/home/HomeActivity.cpp
+          grep -Fq 'featuredSeries' src/activities/home/HomeActivity.cpp
+          grep -Fq 'featuredChapterTitle' src/activities/home/HomeActivity.cpp
+          grep -Fq '" fejezet"' src/activities/home/HomeActivity.cpp
+          grep -Fq 'decimalSep' src/activities/home/HomeActivity.cpp
+          grep -Fq 'menuRowItems[i].value = SETTINGS.dictionaryName' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq 'Javított árnyalatú képmegjelenítés' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+
+      - name: Verify CPHUN-186 Home layout polish
+        run: |
+          set -euo pipefail
+          grep -Fq 'int titleY = layout.featuredY + 12;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'isTechnicalPartTitle(foldedChapter)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'isHiddenChapterTitle(foldedChapter)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'fractionalPartIsZero' src/activities/home/HomeActivity.cpp
+          grep -Fq 'seriesIndex.erase(decimalPos)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'snprintf(progressText, sizeof(progressText), "%d%c%d%% · %d / %d %s"' src/activities/home/HomeActivity.cpp
+          grep -Fq 'infoY += renderer.getLineHeight(UI_10_FONT_ID) + 8;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+
+      - name: Verify CPHUN-187 chapter filtering and Cover Grid geometry
+        run: |
+          set -euo pipefail
+          grep -Fq 'return {left, coverW, coverH, 38, 278, gapX, columns, 516};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'int titleY = layout.featuredY + 12;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'const size_t splitPos = foldedChapter.find("split");' src/activities/home/HomeActivity.cpp
+          grep -Fq 'isTechnicalPartTitle(foldedChapter)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'isHiddenChapterTitle(foldedChapter)' src/activities/home/HomeActivity.cpp
+          grep -Fq '"tartalom", "tartalomjegyzék", "borító", "impresszum"' src/activities/home/HomeActivity.cpp
+          grep -Fq '"címlap", "címoldal", "copyright", "index"' src/activities/home/HomeActivity.cpp
+          grep -Fq '"előszó", "prológus", "epilógus", "szószedet", "bevezető"' src/activities/home/HomeActivity.cpp
+          grep -Fq 'chapterTitleNeedsSuffix(folded)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'infoY += renderer.getLineHeight(UI_12_FONT_ID) + 8;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'infoY += renderer.getLineHeight(UI_10_FONT_ID) + 8;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+
+      - name: Verify CPHUN-188 reader dictionary rows
+        run: |
+          set -euo pipefail
+          grep -Fq '{MenuAction::DICTIONARY, StrId::STR_LOOKUP, "Szótári keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq '{MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP, "Kézi keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq '{MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq 'action == MenuAction::DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq 'menuRowItems[i].value = SETTINGS.dictionaryName' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -Fq 'action == MenuAction::DICTIONARY) {' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+
+      - name: Verify CPHUN-189 title cleanup, preview and Count Pages scaling
+        run: |
+          set -euo pipefail
+          grep -Fq 'calibre:user_metadata:#pages' lib/Epub/Epub/parsers/ContentOpfParser.cpp
+          grep -Fq 'int calibrePageCount = 0;' lib/Epub/Epub/parsers/ContentOpfParser.h
+          grep -Fq 'int calibrePageCount = 0;' lib/Epub/Epub.h
+          grep -Fq 'info.calibrePageCount = parser.calibrePageCount;' lib/Epub/Epub.cpp
+          grep -Fq '500 characters/page' src/activities/home/HomeActivity.cpp
+          grep -Fq 'REFERENCE_FONT_PT = 16.0f' src/activities/home/HomeActivity.cpp
+          grep -Fq 'REFERENCE_MARGIN_PX = 10' src/activities/home/HomeActivity.cpp
+          grep -Fq 'SETTINGS.getReaderLineCompression()' src/activities/home/HomeActivity.cpp
+          grep -Fq 'scaledCalibrePageCount(calibrePageCount, renderer)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'cleanDisplayedBookTitle' src/activities/home/HomeActivity.cpp
+          grep -Fq '{"ok", "x4", "korr", "jav"}' src/activities/home/HomeActivity.cpp
+          grep -Fq 'previewGridBook(selectorIndex)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'restoreOriginalGridBook();' src/activities/home/HomeActivity.cpp
+          grep -Fq 'originalResumePath' src/activities/home/HomeActivity.h
+          grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq '{MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq 'EXPORT_EDITS' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'HIGHLIGHT' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'EDIT' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'REINDEX_CHAPTER' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+
+      - name: Audit restored Hungarian Edition feature chain
+        run: |
+          set -euxo pipefail
+
+          # CPHUN-178/180 grayscale cover selection and accepted B default.
+          grep -Fq 'COVER_TEST_OVERLAY = 0' src/CrossPointSettings.h
+          grep -Fq 'coverTestMode = COVER_TEST_ABSOLUTE;' src/CrossPointSettings.h
+          grep -Fq '"coverTestMode", StrId::STR_CAT_DISPLAY' src/SettingsListBase.h
+          grep -Fq 'STR_CPHUN_COVER_TEST_MODE: "Borító mód"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_CPHUN_COVER_TEST_A:' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_CPHUN_COVER_TEST_B: "B - Atkinson Absolute"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_CPHUN_COVER_TEST_C:' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
+          grep -Fq 'getBookCoverViewBmpPath()' src/activities/boot_sleep/SleepActivity.cpp
+
+          # CPHUN-164..169 letter-spacing optimization and optical correction.
+          test -f lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'LetterSpacingOptimization' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'renderedFinalWordInkInset' lib/Epub/Epub/blocks/TextBlock.cpp
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'Betűköz optimalizálás' src/activities/settings/TextSettingsActivity.cpp
+
+          # Other accepted late Hungarian Edition features.
+          grep -Fq 'ScreenshotSequence::formatId' src/util/ScreenshotUtil.cpp
+          grep -Fq 'releaseSdFontCaches' lib/Epub/Epub/Section.cpp
+          grep -Fq 'hasHiddenAttribute(atts)' lib/KOReaderSync/ChapterXPathResolver.cpp
+          grep -Fq 'promptRebuildIndex' src/activities/library/LibraryListActivity.cpp
+
+          # CPHUN-182 additions must coexist with the restored chain.
+          grep -Fq 'HOME_COVER_GRID' src/CrossPointSettings.h
+          grep -Fq 'featuredProgressPercent' src/activities/home/HomeActivity.cpp
+          grep -Fq 'progressBarHeight' src/activities/home/HomeActivity.cpp
+          grep -Fq 'goToLibrary' src/activities/ActivityManager.cpp
+          grep -Fq 'CPHUN-261002-189-EXP' src/CPHUNBuildId.h
+          # CPHUN-182: image pages stage complete Absolute planes and expose
+          # only the final factory-quality activation to the panel.
+          grep -Fq 'absoluteImagePage' src/activities/reader/EpubReaderActivity.cpp
+          grep -Fq 'HalDisplay::GrayscaleMode::Absolute' src/activities/reader/EpubReaderActivity.cpp
+          grep -Fq 'CPHUN-182 Absolute image page' src/activities/reader/EpubReaderActivity.cpp
+          grep -Fq 'pageHasImagesNeedingDecode && !absoluteImagePage' src/activities/reader/EpubReaderActivity.cpp
+          # Four-state Reader > Images A/B selector. Existing persisted 0/1/2
+          # meanings stay intact; Standard is the new value 3.
+          grep -Fq 'IMAGES_STANDARD = 3' src/CrossPointSettings.h
+          grep -Fq 'imageRendering == IMAGES_STANDARD ? IMAGES_DISPLAY : imageRendering' src/CrossPointSettings.cpp
+          grep -Fq 'STR_IMAGES_STANDARD' src/SettingsListBase.h
+          grep -Fq 'STR_IMAGES_DISPLAY: "Frissített megjelenítés"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_STANDARD: "Standard megjelenítés"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_PLACEHOLDER: "Képkeret"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'STR_IMAGES_SUPPRESS: "Képek nélkül"' lib/I18n/translations/hungarian.yaml
+          grep -Fq 'SETTINGS.imageRendering == CrossPointSettings::IMAGES_DISPLAY' src/activities/reader/EpubReaderActivity.cpp
+          # User-facing version strings stay short even in branch/SHA test builds.
+          grep -Fq 'drawCenteredText(SMALL_FONT_ID, pageHeight - 72, "1.6.5")' src/activities/boot_sleep/BootActivity.cpp
+          grep -Fq 'drawLabelValue(tr(STR_CROSSPOINT_VERSION), "1.6.5")' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq '"- Szótár és szerkesztés → 2. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq '"- Magyar elválasztás → 3. oldal"' src/activities/settings/CrossPointVersionActivity.cpp
+          # CPHUN-182 UI stability: constrained language set, HU default,
+          # stable English Layout threshold value, and exact RoundedRaff cover cache.
+          grep -Fq 'constexpr static uint8_t totalItems = 12;' src/activities/settings/LanguageSelectActivity.h
+          grep -Fq 'Language::HU, Language::EN, Language::DE, Language::ES' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'Language::IT, Language::FR, Language::P2, Language::PL' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'Language::FI, Language::RU, Language::SV, Language::UK' src/activities/settings/LanguageSelectActivity.cpp
+          grep -Fq 'I18n() : _language(Language::HU)' lib/I18n/I18n.h
+          grep -Fq 'language = static_cast<uint8_t>(Language::HU);' src/CrossPointSettings.h
+          grep -Fq 'letterSpacingThresholdLabel' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'LayoutRow::LetterSpacingOptimizationThreshold' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'letterSpacingOptimizationThreshold != 0' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingOptimizationThreshold >= 50' src/CrossPointSettings.cpp
+          grep -Fq 'return FsHelpers::checkFileExtension(name, ".epub");' lib/LibraryIndex/LibraryBuilder.cpp
+          grep -Fq 'CLIX_FORMAT_VERSION = 3' lib/LibraryIndex/LibraryFormat.h
+          grep -Fq 'hungarianEditionLabel()' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'static constexpr uint16_t values[] = {0, 10, 40, 70};' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'hu ? "Gyenge" : "Weak"' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case LayoutRow::LetterSpacingOptimization:' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case LayoutRow::LetterSpacingOptimizationThreshold:' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case 50: return hu ? "Gyenge" : "Weak";' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case 60: return hu ? "Közepes" : "Medium";' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'case 70: return hu ? "Erős" : "Strong";' src/activities/settings/TextSettingsActivity.cpp
+          grep -Fq 'pinnedBookIndices[RecentBooksStore::MAX_RECENT_BOOKS]' src/activities/library/LibraryListActivity.h
+          grep -Fq 'FsHelpers::checkFileExtension(path, ".epub")' src/activities/library/LibraryListActivity.cpp
+          grep -Fq '(roundedRaffHome ? 14 : 0)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'roundedRaffHome ? metrics.homeCoverHeight : metrics.homeCoverTileHeight' src/activities/home/HomeActivity.cpp
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path("src/activities/ActivityManager.h").read_text(encoding="utf-8")
+          m=re.search(r'enum class HomeMenuItem \{([^}]*)\};', s)
+          if not m:
+              raise SystemExit("HomeMenuItem enum missing")
+          items=[x.strip() for x in m.group(1).split(",") if x.strip()]
+          if items.count("LIBRARY") != 1:
+              raise SystemExit(f"HomeMenuItem LIBRARY count is {items.count('LIBRARY')}, expected 1")
+          if items.count("RECENTS") != 1:
+              raise SystemExit(f"HomeMenuItem RECENTS count is {items.count('RECENTS')}, expected 1")
+          if len(items) != len(set(items)):
+              raise SystemExit("Duplicate HomeMenuItem enum value detected")
+          cpp=Path("src/activities/ActivityManager.cpp").read_text(encoding="utf-8")
+          hdr=Path("src/activities/ActivityManager.h").read_text(encoding="utf-8")
+          if "void ActivityManager::goToRecentBooks()" not in cpp or "void goToRecentBooks();" not in hdr:
+              raise SystemExit("RecentBooks compatibility route missing")
+          if '#include "home/RecentBooksActivity.h"' not in cpp:
+              raise SystemExit("RecentBooksActivity include missing")
+          PY
+
+          echo "Feature-chain audit passed for ${{ matrix.label }}."
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Build ${{ matrix.label }} Hungarian Edition firmware
+        run: |
+          set -euo pipefail
+          .venv/bin/pio run -e ${{ matrix.env }} | tee pio.log
+          cp ".pio/build/${{ matrix.env }}/firmware.bin" "${{ matrix.firmware }}"
+          grep -E "RAM:\\s|Flash:\\s" pio.log || true
+          stat -c '${{ matrix.label }} firmware bytes=%s' "${{ matrix.firmware }}"
+
+      - name: Upload ${{ matrix.label }} firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ github.run_id }}
+          path: ${{ matrix.firmware }}
+          if-no-files-found: error
+          retention-days: 90
