@@ -20,6 +20,33 @@ def write(path, text):
 p = "src/activities/settings/TextSettingsActivity.cpp"
 s = read(p)
 
+# Keep the CPHUN-182 crash fix (stable string literals), but make the visible
+# threshold label match the popup semantics in both languages.
+old_threshold_helper = """const char* letterSpacingThresholdLabel(const uint8_t value) {
+  switch (value) {
+    case 0: return "0";
+    case 50: return "50";
+    case 60: return "60";
+    case 70: return "70";
+    default: return "60";
+  }
+}
+"""
+new_threshold_helper = """const char* letterSpacingThresholdLabel(const uint8_t value) {
+  const bool hu = I18N.getLanguage() == Language::HU;
+  switch (value) {
+    case 0: return hu ? "KI" : "OFF";
+    case 50: return hu ? "Gyenge" : "Weak";
+    case 60: return hu ? "Közepes" : "Medium";
+    case 70: return hu ? "Erős" : "Strong";
+    default: return hu ? "Közepes" : "Medium";
+  }
+}
+"""
+if old_threshold_helper not in s:
+    raise SystemExit("CPHUN-184 threshold display helper anchor missing")
+s = s.replace(old_threshold_helper, new_threshold_helper, 1)
+
 fn_start = s.find("void TextSettingsActivity::confirmLayoutRow(int row)")
 fn_end = s.find("void TextSettingsActivity::confirmStyleRow", fn_start)
 if fn_start < 0 or fn_end < 0:
@@ -213,6 +240,9 @@ checks = [
     ('hu ? "Gyenge" : "Weak"', ui),
     ('hu ? "Közepes" : "Medium"', ui),
     ('hu ? "Erős" : "Strong"', ui),
+    ('case 50: return hu ? "Gyenge" : "Weak";', ui),
+    ('case 60: return hu ? "Közepes" : "Medium";', ui),
+    ('case 70: return hu ? "Erős" : "Strong";', ui),
     ('pinnedBookIndices[RecentBooksStore::MAX_RECENT_BOOKS]', libh),
     ('FsHelpers::checkFileExtension(path, ".epub")', libcpp),
     ('books[pinnedBookIndices[selectedEntry()]]', libcpp),
