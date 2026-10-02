@@ -48,7 +48,49 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 274, gapX, columns, 512};
+  return {left, coverW, coverH, 38, 278, gapX, columns, 516};
+}
+
+std::string trimCopy(std::string value) {
+  const auto first = value.find_first_not_of(" \t\r\n-_");
+  if (first == std::string::npos) return {};
+  const auto last = value.find_last_not_of(" \t\r\n-_");
+  return value.substr(first, last - first + 1);
+}
+
+std::string asciiLowerCopy(std::string value) {
+  for (char& c : value) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+  }
+  return value;
+}
+
+bool isTechnicalPartTitle(const std::string& lower) {
+  if (lower.rfind("part", 0) != 0 || lower.size() <= 4) return false;
+  for (size_t i = 4; i < lower.size(); ++i) {
+    if (lower[i] < '0' || lower[i] > '9') return false;
+  }
+  return true;
+}
+
+bool isHiddenChapterTitle(const std::string& lower) {
+  static constexpr const char* hidden[] = {
+      "tartalom", "tartalomjegyzék", "borító", "impresszum",
+      "címlap", "címoldal", "copyright", "index"};
+  for (const char* item : hidden) {
+    if (lower == item) return true;
+  }
+  return false;
+}
+
+bool chapterTitleNeedsSuffix(const std::string& lower) {
+  if (lower.find("fejezet") != std::string::npos || lower.find("chapter") != std::string::npos) return false;
+  static constexpr const char* noSuffix[] = {
+      "előszó", "prológus", "epilógus", "szószedet", "bevezető"};
+  for (const char* item : noSuffix) {
+    if (lower.rfind(item, 0) == 0) return false;
+  }
+  return true;
 }
 
 bool validBmpFile(const std::string& path) {
@@ -203,14 +245,23 @@ void HomeActivity::loadFeaturedProgress() {
 
   const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
   if (tocIndex >= 0 && tocIndex < epub->getTocItemsCount()) {
-    featuredChapterTitle = epub->getTocItem(tocIndex).title;
-    std::string foldedChapter = featuredChapterTitle;
-    for (char& c : foldedChapter) {
-      if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+    featuredChapterTitle = trimCopy(epub->getTocItem(tocIndex).title);
+    std::string foldedChapter = asciiLowerCopy(featuredChapterTitle);
+
+    // Remove technical suffixes that begin with "split". Keep the meaningful
+    // user-facing prefix, then trim separators left behind by the removal.
+    const size_t splitPos = foldedChapter.find("split");
+    if (splitPos != std::string::npos) {
+      featuredChapterTitle = trimCopy(featuredChapterTitle.substr(0, splitPos));
+      foldedChapter = asciiLowerCopy(featuredChapterTitle);
     }
-    // Calibre/splitter-generated navigation labels such as "index split 000"
-    // are implementation details, not useful chapter names on the Home screen.
-    if (foldedChapter.rfind("index split", 0) == 0 || foldedChapter.rfind("index_split", 0) == 0) {
+
+    // Hide generated and structural navigation labels from Home.
+    if (featuredChapterTitle.empty() ||
+        foldedChapter.rfind("index split", 0) == 0 ||
+        foldedChapter.rfind("index_split", 0) == 0 ||
+        isTechnicalPartTitle(foldedChapter) ||
+        isHiddenChapterTitle(foldedChapter)) {
       featuredChapterTitle.clear();
     }
   }
@@ -777,7 +828,7 @@ void HomeActivity::renderCoverGrid() {
     const int textX = layout.left + layout.coverW + 22;  // 182 px on 480-wide X4
     const int textW = std::max(40, width - textX - 34);   // 264 px on 480-wide X4
     const auto title = renderer.wrappedText(UI_12_FONT_ID, recentBooks[0].title.c_str(), textW, 4);
-    int titleY = layout.featuredY + 24;
+    int titleY = layout.featuredY + 12;
     for (const auto& line : title) {
       renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
       titleY += renderer.getLineHeight(UI_12_FONT_ID);
@@ -795,12 +846,12 @@ void HomeActivity::renderCoverGrid() {
       }
       author = renderer.truncatedText(UI_12_FONT_ID, author.c_str(), textW);
       renderer.drawText(UI_12_FONT_ID, textX, infoY, author.c_str(), true, EpdFontFamily::REGULAR);
-      infoY += renderer.getLineHeight(UI_12_FONT_ID) + 4;
+      infoY += renderer.getLineHeight(UI_12_FONT_ID) + 8;
     }
     if (!featuredSeries.empty()) {
       const auto series = renderer.truncatedText(UI_10_FONT_ID, featuredSeries.c_str(), textW);
       renderer.drawText(UI_10_FONT_ID, textX, infoY, series.c_str());
-      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 8;
     }
     if (!featuredChapterTitle.empty()) {
       std::string chapter = featuredChapterTitle;
@@ -810,11 +861,10 @@ void HomeActivity::renderCoverGrid() {
       }
       const bool hu = I18N.getLanguage() == Language::HU;
       const char* suffix = hu ? " fejezet" : " chapter";
-      const char* needle = hu ? "fejezet" : "chapter";
-      if (folded.find(needle) == std::string::npos) chapter += suffix;
+      if (chapterTitleNeedsSuffix(folded)) chapter += suffix;
       chapter = renderer.truncatedText(UI_10_FONT_ID, chapter.c_str(), textW);
       renderer.drawText(UI_10_FONT_ID, textX, infoY, chapter.c_str());
-      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+      infoY += renderer.getLineHeight(UI_10_FONT_ID) + 8;
     }
     if (featuredProgressTenths >= 0) {
       char progressText[48];
