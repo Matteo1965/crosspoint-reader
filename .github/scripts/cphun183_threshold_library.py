@@ -50,24 +50,24 @@ if count != 1:
     raise SystemExit("CPHUN-183 threshold load validator not found. Excerpt:\n" + excerpt)
 
 encode_re = re.compile(
-    r'  const uint8_t optimizationThresholdCode\s*=\s*'
-    r'letterSpacingLimitPercent\s*>\s*0\s*&&\s*letterSpacingOptimization\s*&&\s*'
-    r'\(isBitterExperimentalSize\s*\|\|\s*isNotoSerif16\)\s*'
-    r'\?\s*static_cast<uint8_t>\(\(letterSpacingOptimizationThreshold\s*-\s*45u\)\s*/\s*5u\)\s*'
-    r':\s*0;',
+    r'  const uint8_t optimizationThresholdCode\\s*=\\s*'
+    r'letterSpacingLimitPercent\\s*>\\s*0\\s*&&\\s*letterSpacingOptimization\\s*&&\\s*useSerifProfile\\s*'
+    r'\\?\\s*\\(letterSpacingOptimizationThreshold\\s*==\\s*0\\s*'
+    r'\\?\\s*7u\\s*'
+    r':\\s*static_cast<uint8_t>\\(\\(letterSpacingOptimizationThreshold\\s*-\\s*45u\\)\\s*/\\s*5u\\)\\)\\s*'
+    r':\\s*0;',
     re.S,
 )
 new_encode = """  const uint8_t optimizationThresholdCode =
-      letterSpacingLimitPercent > 0 && letterSpacingOptimization &&
-              letterSpacingOptimizationThreshold >= 50 &&
-              (isBitterExperimentalSize || isNotoSerif16)
+      letterSpacingLimitPercent > 0 && letterSpacingOptimization && useSerifProfile &&
+              letterSpacingOptimizationThreshold >= 50
           ? static_cast<uint8_t>((letterSpacingOptimizationThreshold - 45u) / 5u)
           : 0;"""
 s, count = encode_re.subn(new_encode, s, count=1)
 if count != 1:
     pos = s.find('optimizationThresholdCode')
     excerpt = s[max(0, pos-300):pos+900] if pos >= 0 else '<token absent>'
-    raise SystemExit("CPHUN-183 threshold encode block not found. Excerpt:\n" + excerpt)
+    raise SystemExit("CPHUN-183 threshold encode block not found. Excerpt:\\n" + excerpt)
 write(p, s)
 
 # Stable display literals used by the CPHUN-182 English Layout crash fix.
