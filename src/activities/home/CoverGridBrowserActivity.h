@@ -58,6 +58,7 @@ class CoverGridBrowserActivity final : public Activity {
 
   int thumbHeight() const;
   void paintCover(const GridBook& book, Rect rect, bool selectedFrame);
+  void renderGrayscaleCovers();
   int hitGridCover(int x, int y) const;
   bool hitFeaturedCover(int x, int y) const;
   bool hitSortTab(int x, int y, int& tab) const;
