@@ -62,6 +62,7 @@ class CoverGridBrowserActivity final : public Activity {
 
   library::LibraryIndexFile index_;
   std::vector<GridBook> books_;
+  int totalBooks_ = 0;
   int pageStart_ = 0;
   int selected_ = 0;
   int activeSortTab_ = 0;
