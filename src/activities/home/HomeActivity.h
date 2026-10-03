@@ -71,6 +71,7 @@ class HomeActivity final : public Activity {
   void loopCoverGrid();
   void renderCoverGrid();
   void paintGridCover(size_t index, Rect rect);
+  void renderGridGrayscaleCovers();
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
