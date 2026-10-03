@@ -685,6 +685,65 @@ void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect,
   if (selectedFrame) renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 3, true);
 }
 
+void CoverGridBrowserActivity::renderGrayscaleCovers() {
+  // First send the normal BW page as the grayscale base. In BW mode every
+  // non-white 2-bit cover pixel is black; the two overlay planes below lift
+  // levels 1/2 to the panel's dark/light gray states without touching UI text.
+  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+  auto drawBookPlane = [this](const GridBook& book, const Rect rect) {
+    if (!validBmpFile(book.thumbPath)) return;
+
+    HalFile file;
+    if (!Storage.openFileForRead("GRID", book.thumbPath, file)) return;
+    Bitmap bmp(file);
+    if (bmp.parseHeaders() != BmpReaderError::Ok || bmp.getWidth() <= 0 || bmp.getHeight() <= 0) {
+      file.close();
+      return;
+    }
+
+    const float imageRatio = static_cast<float>(bmp.getWidth()) / static_cast<float>(bmp.getHeight());
+    const float targetRatio = static_cast<float>(rect.width) / static_cast<float>(rect.height);
+    float cropX = 0.0f;
+    float cropY = 0.0f;
+    if (imageRatio > targetRatio)
+      cropX = std::max(0.0f, 1.0f - targetRatio / imageRatio);
+    else if (imageRatio < targetRatio)
+      cropY = std::max(0.0f, 1.0f - imageRatio / targetRatio);
+
+    renderer.drawBitmap(bmp, rect.x, rect.y, rect.width, rect.height, cropX, cropY);
+    file.close();
+  };
+
+  auto drawAllCoverPlanes = [this, &drawBookPlane]() {
+    if (books_.empty()) return;
+
+    const GridBook& selectedBook = books_[std::clamp(selected_, 0, static_cast<int>(books_.size()) - 1)];
+    drawBookPlane(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H});
+
+    for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
+      const int col = i % GRID_COLS;
+      const int row = i / GRID_COLS;
+      const int x = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
+      const int y = GRID_TOP + row * (GRID_H + GRID_GAP_Y);
+      drawBookPlane(books_[i], Rect{x, y, GRID_W, GRID_H});
+    }
+  };
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  drawAllCoverPlanes();
+  renderer.copyGrayscaleLsbBuffers();
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  drawAllCoverPlanes();
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+}
+
 void CoverGridBrowserActivity::render(RenderLock&&) {
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
@@ -806,5 +865,5 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  renderer.displayBuffer();
+  renderGrayscaleCovers();
 }
