@@ -229,7 +229,7 @@ bool CoverGridBrowserActivity::loadPage() {
     if (book.title.empty()) book.title = book.path;
 
     Epub epub(book.path, "/.crosspoint");
-    book.thumbPath = epub.getThumbBmpPath(thumbHeight());
+    book.thumbPath = epub.getGridThumbBmpPath(thumbHeight());
     books_.push_back(std::move(book));
   }
 
@@ -269,11 +269,11 @@ bool CoverGridBrowserActivity::ensurePageThumbs() {
       Epub epub(book.path, "/.crosspoint");
       bool loaded = epub.load(false, true);
       if (!loaded) loaded = epub.load(true, true);
-      if (!loaded || !epub.generateThumbBmp(thumbHeight())) {
+      if (!loaded || !epub.generateGridThumbBmp(thumbHeight())) {
         LOG_ERR("GRID", "Cannot generate thumbnail: %s", book.path.c_str());
         ok = false;
       }
-      book.thumbPath = epub.getThumbBmpPath(thumbHeight());
+      book.thumbPath = epub.getGridThumbBmpPath(thumbHeight());
     }
     GUI.fillPopupProgress(renderer, popup,
                           10 + static_cast<int>((90u * static_cast<unsigned>(i + 1)) /
