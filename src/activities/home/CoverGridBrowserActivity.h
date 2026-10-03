@@ -37,6 +37,8 @@ class CoverGridBrowserActivity final : public Activity {
   bool loadPage();
   bool ensurePageThumbs();
   bool reopenAfterChild();
+  void loadSelectedDetails();
+  void clearSelectedDetails();
 
   library::SortOrder sortOrder() const;
   void selectSortTab(int tab, bool toggleIfActive);
@@ -70,4 +72,9 @@ class CoverGridBrowserActivity final : public Activity {
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   OptionPopup optionPopup_;
+  int featuredProgressTenths_ = -1;
+  int featuredCurrentPage_ = 0;
+  int featuredTotalPages_ = 0;
+  std::string featuredSeries_;
+  std::string featuredChapterTitle_;
 };
