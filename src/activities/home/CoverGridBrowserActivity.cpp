@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <memory>
 #include <utility>
 
@@ -89,6 +90,7 @@ void CoverGridBrowserActivity::onEnter() {
   }
 
   loadPage();
+  index_.close();
   ensurePageThumbs();
   requestUpdate();
 }
@@ -109,6 +111,7 @@ bool CoverGridBrowserActivity::openIndex() {
     index_.close();
     return false;
   }
+  totalBooks_ = static_cast<int>(index_.bookCount());
   return true;
 }
 
@@ -125,7 +128,7 @@ library::SortOrder CoverGridBrowserActivity::sortOrder() const {
   return desc ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
 
-int CoverGridBrowserActivity::totalBooks() const { return index_.isOpen() ? static_cast<int>(index_.bookCount()) : 0; }
+int CoverGridBrowserActivity::totalBooks() const { return totalBooks_; }
 
 int CoverGridBrowserActivity::globalSelection() const {
   if (books_.empty()) return -1;
@@ -200,7 +203,6 @@ bool CoverGridBrowserActivity::ensurePageThumbs() {
 
   thumbnailsLoading_ = true;
   Rect popup = GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Borítók betöltése…" : "Loading covers…");
-  index_.close();
 
   bool ok = true;
   for (size_t i = 0; i < books_.size(); ++i) {
@@ -220,21 +222,15 @@ bool CoverGridBrowserActivity::ensurePageThumbs() {
                                                 std::max<size_t>(1, books_.size())));
   }
 
-  if (!openIndex()) {
-    LOG_ERR("GRID", "Cannot reopen index after thumbnail generation");
-    ok = false;
-  }
-
   thumbnailsReady_ = true;
   thumbnailsLoading_ = false;
   return ok;
 }
 
 bool CoverGridBrowserActivity::reopenAfterChild() {
-  if (!openIndex()) {
-    if (!rebuildIndex() || !openIndex()) return false;
-  }
-  loadPage();
+  // The page metadata and six thumbnail paths stay resident while the child
+  // activity is open. Keep the Library index closed so cover/info file access
+  // never competes for the SD reader handle.
   thumbnailsReady_ = true;
   requestUpdate();
   return true;
@@ -249,7 +245,9 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   }
   pageStart_ = 0;
   selected_ = 0;
+  if (!openIndex()) return;
   loadPage();
+  index_.close();
   ensurePageThumbs();
   requestUpdate();
 }
@@ -258,7 +256,9 @@ void CoverGridBrowserActivity::toggleSortDirection() {
   descendingTabs_ ^= static_cast<uint8_t>(1u << activeSortTab_);
   pageStart_ = 0;
   selected_ = 0;
+  if (!openIndex()) return;
   loadPage();
+  index_.close();
   ensurePageThumbs();
   requestUpdate();
 }
@@ -279,7 +279,9 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
   if (nextPage != pageStart_) {
     pageStart_ = nextPage;
     selected_ = next - pageStart_;
+    if (!openIndex()) return;
     loadPage();
+    index_.close();
     ensurePageThumbs();
   } else {
     selected_ = next - pageStart_;
@@ -295,7 +297,9 @@ void CoverGridBrowserActivity::stepPage(const int delta) {
   if (nextStart == pageStart_) return;
   pageStart_ = nextStart;
   selected_ = 0;
+  if (!openIndex()) return;
   loadPage();
+  index_.close();
   ensurePageThumbs();
   requestUpdate();
 }
@@ -304,13 +308,11 @@ std::shared_ptr<Epub> CoverGridBrowserActivity::loadSelectedEpub() {
   if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return {};
   const std::string path = books_[selected_].path;
 
-  index_.close();
   auto epub = std::make_shared<Epub>(path, "/.crosspoint");
   bool loaded = epub->load(false, true);
   if (!loaded) loaded = epub->load(true, true);
   if (!loaded) {
     LOG_ERR("GRID", "Cannot load selected EPUB: %s", path.c_str());
-    openIndex();
     return {};
   }
   return epub;
@@ -344,7 +346,6 @@ void CoverGridBrowserActivity::openSelectedCover() {
   std::string coverPath = epub->getBookCoverViewBmpPath();
   if (!Storage.exists(coverPath.c_str())) epub->generateBookCoverViewBmp();
   if (!Storage.exists(coverPath.c_str())) {
-    openIndex();
     requestUpdate();
     return;
   }
