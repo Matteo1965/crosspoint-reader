@@ -812,6 +812,37 @@ jobs:
           uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
           uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
 
+      - name: Finalize CPHUN-190 reader menu before compile
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          hp=Path("src/activities/reader/EpubReaderMenuActivity.h")
+          hs=hp.read_text(encoding="utf-8")
+          hs=hs.replace("    DICTIONARY_STATUS,\n","")
+          hp.write_text(hs,encoding="utf-8")
+
+          cp=Path("src/activities/reader/EpubReaderMenuActivity.cpp")
+          cs=cp.read_text(encoding="utf-8")
+
+          cs=cs.replace('  items.push_back({MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"});\n',"")
+
+          cs=re.sub(
+              r'\n\s*if\s*\(selectedAction\s*==\s*MenuAction::DICTIONARY_STATUS\)\s*\{.*?\n\s*\}\n',
+              '\n', cs, count=1, flags=re.S)
+
+          cs=re.sub(
+              r'\n\s*\} else if\s*\(action\s*==\s*MenuAction::DICTIONARY_STATUS\)\s*\{.*?(?=\n\s*\} else if|\n\s*\}\n)',
+              '\n', cs, count=1, flags=re.S)
+
+          cp.write_text(cs,encoding="utf-8")
+          PY
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.h
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq '{MenuAction::DICTIONARY, StrId::STR_LOOKUP, "Szótári keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq '{MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP, "Kézi keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+
       - name: Build ${{ matrix.label }} Hungarian Edition firmware
         run: |
           set -euo pipefail
