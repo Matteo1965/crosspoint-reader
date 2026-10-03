@@ -835,8 +835,9 @@ bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                   int targetMaxHeight) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+                                                   int targetMaxHeight, bool originalThresholds) {
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false, true, false,
+                                    originalThresholds);
 }
 
 bool PngToBmpConverter::pngFileToFloydSteinbergBmpStream(HalFile& pngFile, Print& bmpOut) {
