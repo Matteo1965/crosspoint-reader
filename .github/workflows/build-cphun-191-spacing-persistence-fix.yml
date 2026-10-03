@@ -633,9 +633,12 @@ jobs:
           grep -Fq 'doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;' src/CrossPointSettings.cpp
           grep -Fq 'doc["letterSpacingOptimization"] = letterSpacingOptimization;' src/CrossPointSettings.cpp
           grep -Fq 'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;' src/CrossPointSettings.cpp
-          grep -Fq 'letterSpacingLimitPercent != 550' src/CrossPointSettings.cpp
-          grep -Fq 'letterSpacingLimitPercent != 460' src/CrossPointSettings.cpp
-          grep -Fq 'letterSpacingLimitPercent != 280' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 40' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 70' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent == 550' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent == 460' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent == 280' src/CrossPointSettings.cpp
           ! grep -Fq 'letterSpacingLimitPercent != 200 && letterSpacingLimitPercent != 250' src/CrossPointSettings.cpp
           grep -Fq 'doc["letterSpacingOptimization"] | (uint8_t)0' src/CrossPointSettings.cpp
           grep -Fq 'doc["letterSpacingOptimizationThreshold"] | (uint8_t)60' src/CrossPointSettings.cpp
