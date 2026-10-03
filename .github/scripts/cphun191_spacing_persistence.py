@@ -26,36 +26,48 @@ if 'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThresho
     )
 
 # --- Load path --------------------------------------------------------------
-# Replace the complete correction-value load/migration region. Current values:
-# 0=Off, 550=Weak, 460=Medium, 280=Strong.
+# Replace the complete correction-value load/migration region.
+# Canonical persisted UI values since CPHUN-184:
+# 0=Off, 10=Weak, 40=Medium, 70=Strong.
+# Older internal physical thresholds 550/460/280 migrate once to 10/40/70.
 start = s.find('  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;')
 end = s.find('  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;', start)
 if start < 0 or end < 0:
     raise SystemExit("CPHUN-191: letter-spacing load region not found")
 
 canonical = '''  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
-  // CPHUN-191: preserve current four-state correction values across
-  // restart/deep-sleep wake. Older non-zero values migrate once to the
-  // nearest current correction level.
-  if (letterSpacingLimitPercent != 0 &&
-      letterSpacingLimitPercent != 550 &&
-      letterSpacingLimitPercent != 460 &&
-      letterSpacingLimitPercent != 280) {
-    constexpr uint16_t values[] = {550, 460, 280};
-    uint16_t best = values[0];
-    uint16_t diff = letterSpacingLimitPercent > best
-                        ? letterSpacingLimitPercent - best
-                        : best - letterSpacingLimitPercent;
-    for (uint16_t value : values) {
-      const uint16_t d = letterSpacingLimitPercent > value
-                             ? letterSpacingLimitPercent - value
-                             : value - letterSpacingLimitPercent;
-      if (d < diff) {
-        diff = d;
-        best = value;
+  // CPHUN-191: preserve the canonical CPHUN-184 UI values across
+  // restart/deep-sleep wake: 0=Off, 10=Weak, 40=Medium, 70=Strong.
+  if (letterSpacingLimitPercent == 550) {
+    letterSpacingLimitPercent = 10;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent == 460) {
+    letterSpacingLimitPercent = 40;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent == 280) {
+    letterSpacingLimitPercent = 70;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent != 0 &&
+             letterSpacingLimitPercent != 10 &&
+             letterSpacingLimitPercent != 40 &&
+             letterSpacingLimitPercent != 70) {
+    // One-time migration for other historical physical threshold values.
+    constexpr uint16_t legacyPhysical[] = {550, 460, 280};
+    constexpr uint16_t canonical[] = {10, 40, 70};
+    int bestIndex = 0;
+    uint16_t bestDiff = letterSpacingLimitPercent > legacyPhysical[0]
+                            ? letterSpacingLimitPercent - legacyPhysical[0]
+                            : legacyPhysical[0] - letterSpacingLimitPercent;
+    for (int i = 1; i < 3; ++i) {
+      const uint16_t d = letterSpacingLimitPercent > legacyPhysical[i]
+                             ? letterSpacingLimitPercent - legacyPhysical[i]
+                             : legacyPhysical[i] - letterSpacingLimitPercent;
+      if (d < bestDiff) {
+        bestDiff = d;
+        bestIndex = i;
       }
     }
-    letterSpacingLimitPercent = best;
+    letterSpacingLimitPercent = canonical[bestIndex];
     needsResave = true;
   }
 
@@ -115,9 +127,12 @@ required = [
     'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;',
     'doc["letterSpacingOptimization"] | (uint8_t)0',
     'doc["letterSpacingOptimizationThreshold"] | (uint8_t)60',
-    'letterSpacingLimitPercent != 550',
-    'letterSpacingLimitPercent != 460',
-    'letterSpacingLimitPercent != 280',
+    'letterSpacingLimitPercent != 10',
+    'letterSpacingLimitPercent != 40',
+    'letterSpacingLimitPercent != 70',
+    'letterSpacingLimitPercent == 550',
+    'letterSpacingLimitPercent == 460',
+    'letterSpacingLimitPercent == 280',
     'letterSpacingOptimizationThreshold != 0',
     'letterSpacingOptimizationThreshold != 50',
     'letterSpacingOptimizationThreshold != 60',
