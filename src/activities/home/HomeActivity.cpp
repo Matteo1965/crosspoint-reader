@@ -821,7 +821,7 @@ void HomeActivity::loopCoverGrid() {
   const auto layout = coverGridLayout(renderer);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int bookCount = static_cast<int>(recentBooks.size());
-  const int navCount = bookCount + 4;
+  const int navCount = bookCount + 5;
 
   auto activate = [this, bookCount]() {
     if (selectorIndex < bookCount) {
@@ -831,6 +831,7 @@ void HomeActivity::loopCoverGrid() {
     }
     switch (indexToMenuItem(selectorIndex - bookCount)) {
       case HomeMenuItem::LIBRARY: onLibraryOpen(); break;
+      case HomeMenuItem::COVER_GRID_BROWSER: onCoverGridOpen(); break;
       case HomeMenuItem::FILE_BROWSER: onFileBrowserOpen(); break;
       case HomeMenuItem::FILE_TRANSFER: onFileTransferOpen(); break;
       case HomeMenuItem::SETTINGS_MENU: onSettingsOpen(); break;
@@ -882,7 +883,7 @@ void HomeActivity::loopCoverGrid() {
 
   int menuRow = -1;
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 4, 0,
+  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 5, 0,
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
@@ -902,12 +903,13 @@ void HomeActivity::renderCoverGrid() {
   const int bookCount = static_cast<int>(recentBooks.size());
 
   auto drawMenu = [this, &metrics, &layout, width, height, bookCount]() {
-    std::vector<const char*> labels = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER),
+    const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
+    std::vector<const char*> labels = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER),
                                        tr(STR_SETTINGS_TITLE)};
-    std::vector<UIIcon> icons = {Library, Folder, Transfer, Settings};
+    std::vector<UIIcon> icons = {Library, Recent, Folder, Transfer, Settings};
     const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
     renderer.fillRect(0, layout.menuTop, width, menuHeight, false);
-    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 4,
+    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 5,
                        selectorIndex >= bookCount ? selectorIndex - bookCount : -1,
                        [&labels](int index) { return std::string(labels[index]); },
                        [&icons](int index) { return icons[index]; });
