@@ -905,6 +905,64 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
     renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, true);
 }
 
+void HomeActivity::renderGridGrayscaleCovers() {
+  const auto layout = coverGridLayout(renderer);
+
+  // Base pass: in BW mode a 2-bit BMP paints every non-white level black.
+  // The two overlay planes below then lift levels 1/2 to the panel's two gray states,
+  // while text, frames and menu pixels outside the cover rectangles remain untouched.
+  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+  auto drawCoverPlane = [this, &layout](const size_t index) {
+    if (index >= recentBooks.size()) return;
+    const RecentBook& book = recentBooks[index];
+    if (!FsHelpers::hasEpubExtension(book.path)) return;
+
+    Epub epub(book.path, "/.crosspoint");
+    const std::string path = epub.getGridThumbBmpPath(gridThumbHeight(static_cast<int>(index)));
+    if (!validBmpFile(path)) return;
+
+    const int x = index == 0
+                      ? layout.left
+                      : layout.left + ((static_cast<int>(index) - 1) % layout.columns) * (layout.coverW + layout.gapX);
+    const int y = index == 0 ? layout.featuredY : layout.gridY;
+    const Rect rect{x, y, layout.coverW, layout.coverH};
+
+    HalFile file;
+    if (!Storage.openFileForRead("HOME", path, file)) return;
+    Bitmap bmp(file);
+    if (bmp.parseHeaders() != BmpReaderError::Ok || bmp.getWidth() <= 0 || bmp.getHeight() <= 0) {
+      file.close();
+      return;
+    }
+
+    const float imageRatio = static_cast<float>(bmp.getWidth()) / bmp.getHeight();
+    const float targetRatio = static_cast<float>(rect.width) / rect.height;
+    float cropX = 0.0f;
+    float cropY = 0.0f;
+    if (imageRatio > targetRatio)
+      cropX = std::max(0.0f, 1.0f - targetRatio / imageRatio);
+    else if (imageRatio < targetRatio)
+      cropY = std::max(0.0f, 1.0f - imageRatio / targetRatio);
+
+    renderer.drawBitmap(bmp, rect.x, rect.y, rect.width, rect.height, cropX, cropY);
+    file.close();
+  };
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
+  renderer.copyGrayscaleLsbBuffers();
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+}
+
 void HomeActivity::previewGridBook(const int index) {
   if (index <= 0 || index >= static_cast<int>(recentBooks.size())) return;
   std::swap(recentBooks[0], recentBooks[index]);
@@ -1164,8 +1222,8 @@ void HomeActivity::renderCoverGrid() {
     return;
   }
 
-  renderer.displayBuffer();
-  gridFrameValid = true;
+  renderGridGrayscaleCovers();
+  gridFrameValid = false;
   previousGridSelection = selectorIndex;
 
   if (!firstRenderDone) {
