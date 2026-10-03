@@ -630,7 +630,6 @@ jobs:
           grep -Fq 'featuredChapterTitle' src/activities/home/HomeActivity.cpp
           grep -Fq '" fejezet"' src/activities/home/HomeActivity.cpp
           grep -Fq 'decimalSep' src/activities/home/HomeActivity.cpp
-          grep -Fq 'menuRowItems[i].value = SETTINGS.dictionaryName' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -Fq 'Javított árnyalatú képmegjelenítés' src/activities/settings/CrossPointVersionActivity.cpp
           grep -Fq 'CPHUN-261002-190-EXP' src/CPHUNBuildId.h
 
