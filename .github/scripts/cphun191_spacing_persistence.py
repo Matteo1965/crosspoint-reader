@@ -1,25 +1,42 @@
 from pathlib import Path
-import re
 
 p = Path("src/CrossPointSettings.cpp")
 s = p.read_text(encoding="utf-8")
 
-# CPHUN-191: canonical persistence for the four-state Hungarian letter-spacing
-# correction. Current stored values are:
-#   0=Off, 550=Weak, 460=Medium, 280=Strong.
-#
-# Older validators accepted only the historical 200..500 scale and therefore
-# reset 550/460/280 to zero before the later migration code could see them.
-# Replace the complete load/legacy-migration region with one canonical block.
+# --- Save path --------------------------------------------------------------
+# Ensure all three spacing settings are explicitly persisted. Older generated
+# sources may have only letterSpacingLimitPercent here.
+save_anchor = '  doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;\n'
+if save_anchor not in s:
+    raise SystemExit("CPHUN-191: letterSpacingLimitPercent save anchor missing")
+
+if 'doc["letterSpacingOptimization"] = letterSpacingOptimization;' not in s:
+    s = s.replace(
+        save_anchor,
+        save_anchor + '  doc["letterSpacingOptimization"] = letterSpacingOptimization;\n',
+        1,
+    )
+
+if 'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;' not in s:
+    anchor = '  doc["letterSpacingOptimization"] = letterSpacingOptimization;\n'
+    s = s.replace(
+        anchor,
+        anchor + '  doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;\n',
+        1,
+    )
+
+# --- Load path --------------------------------------------------------------
+# Replace the complete correction-value load/migration region. Current values:
+# 0=Off, 550=Weak, 460=Medium, 280=Strong.
 start = s.find('  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;')
 end = s.find('  minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;', start)
 if start < 0 or end < 0:
-    raise SystemExit("CPHUN-191: letter-spacing persistence region not found")
+    raise SystemExit("CPHUN-191: letter-spacing load region not found")
 
 canonical = '''  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
-  // CPHUN-191 persistence: preserve the current four-state correction values
-  // across restart/deep-sleep wake. Any older non-zero value is migrated once
-  // to the nearest current correction level.
+  // CPHUN-191: preserve current four-state correction values across
+  // restart/deep-sleep wake. Older non-zero values migrate once to the
+  // nearest current correction level.
   if (letterSpacingLimitPercent != 0 &&
       letterSpacingLimitPercent != 550 &&
       letterSpacingLimitPercent != 460 &&
@@ -41,43 +58,73 @@ canonical = '''  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | 
     letterSpacingLimitPercent = best;
     needsResave = true;
   }
+
+  // Persist optimizer ON/OFF independently from the correction level.
+  letterSpacingOptimization =
+      (doc["letterSpacingOptimization"] | (uint8_t)0) ? 4 : 0;
+
+  // CPHUN-183/184 semantics: Off / Weak / Medium / Strong = 0/50/60/70.
+  letterSpacingOptimizationThreshold =
+      doc["letterSpacingOptimizationThreshold"] | (uint8_t)60;
+  if (letterSpacingOptimizationThreshold != 0 &&
+      letterSpacingOptimizationThreshold != 50 &&
+      letterSpacingOptimizationThreshold != 60 &&
+      letterSpacingOptimizationThreshold != 70) {
+    letterSpacingOptimizationThreshold = 60;
+    needsResave = true;
+  }
+
 '''
 
 s = s[:start] + canonical + s[end:]
+p.write_text(s, encoding="utf-8")
 
-# The optimization ON/OFF state and threshold must also survive a settings
-# reload. Do not silently add duplicate fields; fail if the reconstructed
-# source no longer contains the accepted persistence wiring.
+# --- Fields -----------------------------------------------------------------
+hpath = Path("src/CrossPointSettings.h")
+h = hpath.read_text(encoding="utf-8")
+
+if 'uint8_t letterSpacingOptimization = 0;' not in h:
+    anchor = '  uint16_t letterSpacingLimitPercent = 0;\n'
+    if anchor not in h:
+        raise SystemExit("CPHUN-191: letterSpacingLimitPercent field anchor missing")
+    h = h.replace(
+        anchor,
+        anchor +
+        '  // Letter-spacing pair optimization: 0=off, 4=on.\n'
+        '  uint8_t letterSpacingOptimization = 0;\n',
+        1,
+    )
+
+if 'uint8_t letterSpacingOptimizationThreshold = 60;' not in h:
+    anchor = '  uint8_t letterSpacingOptimization = 0;\n'
+    h = h.replace(
+        anchor,
+        anchor +
+        '  // Pair-score threshold: 0=off, 50=weak, 60=medium, 70=strong.\n'
+        '  uint8_t letterSpacingOptimizationThreshold = 60;\n',
+        1,
+    )
+
+hpath.write_text(h, encoding="utf-8")
+
+# Final source-level assertions.
+final = p.read_text(encoding="utf-8")
 required = [
+    'doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;',
     'doc["letterSpacingOptimization"] = letterSpacingOptimization;',
     'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;',
-    'letterSpacingOptimization =',
     'doc["letterSpacingOptimization"] | (uint8_t)0',
-    'letterSpacingOptimizationThreshold =',
     'doc["letterSpacingOptimizationThreshold"] | (uint8_t)60',
-]
-for token in required:
-    if token not in s:
-        raise SystemExit(f"CPHUN-191: missing optimization persistence token: {token}")
-
-# Canonical threshold validation after CPHUN-183: only Off/50/60/70 are valid.
-if not all(token in s for token in [
+    'letterSpacingLimitPercent != 550',
+    'letterSpacingLimitPercent != 460',
+    'letterSpacingLimitPercent != 280',
     'letterSpacingOptimizationThreshold != 0',
     'letterSpacingOptimizationThreshold != 50',
     'letterSpacingOptimizationThreshold != 60',
     'letterSpacingOptimizationThreshold != 70',
-]):
-    raise SystemExit("CPHUN-191: canonical optimization-threshold validation missing")
+]
+for token in required:
+    if token not in final:
+        raise SystemExit(f"CPHUN-191: final persistence token missing: {token}")
 
-p.write_text(s, encoding="utf-8")
-
-# CrossPointSettings.h must expose both persisted optimizer fields.
-h = Path("src/CrossPointSettings.h").read_text(encoding="utf-8")
-for token in [
-    'uint8_t letterSpacingOptimization = 0;',
-    'uint8_t letterSpacingOptimizationThreshold = 60;',
-]:
-    if token not in h:
-        raise SystemExit(f"CPHUN-191: missing settings field: {token}")
-
-print("CPHUN-191 applied: correction/optimization settings survive reload and deep-sleep wake")
+print("CPHUN-191 applied: correction, optimization and threshold persist across reload/wake")
