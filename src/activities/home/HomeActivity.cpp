@@ -382,7 +382,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         book.coverBmpPath = thumbTemplate;
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbTemplate);
       }
-      const std::string coverPath = epub.getThumbBmpPath(thumbHeight);
+      const std::string coverPath =
+          coverGridActive() ? epub.getGridThumbBmpPath(thumbHeight) : epub.getThumbBmpPath(thumbHeight);
       if (Storage.exists(coverPath.c_str()) && !validBmpFile(coverPath)) {
         LOG_DBG("HOME", "Removing invalid EPUB thumbnail: %s", coverPath.c_str());
         Storage.remove(coverPath.c_str());
@@ -397,7 +398,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         // without CSS so the cover metadata is still available to the thumbnail generator.
         bool loaded = epub.load(false, true);
         if (!loaded) loaded = epub.load(true, true);
-        success = loaded && epub.generateThumbBmp(thumbHeight) && validBmpFile(coverPath);
+        success = loaded &&
+                  (coverGridActive() ? epub.generateGridThumbBmp(thumbHeight) : epub.generateThumbBmp(thumbHeight)) &&
+                  validBmpFile(coverPath);
       }
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       Xtc xtc(book.path, "/.crosspoint");
@@ -847,7 +850,13 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
   if (index >= recentBooks.size()) return;
   const RecentBook& book = recentBooks[index];
   const int thumbHeight = gridThumbHeight(static_cast<int>(index));
-  std::string path = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
+  std::string path;
+  if (FsHelpers::hasEpubExtension(book.path)) {
+    Epub epub(book.path, "/.crosspoint");
+    path = epub.getGridThumbBmpPath(thumbHeight);
+  } else {
+    path = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
+  }
 
   // Prefer the compact home thumbnail. If it is missing or corrupt, fall back
   // to the book's cached full cover so a failed thumbnail cannot blank the grid.
