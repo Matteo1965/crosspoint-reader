@@ -636,9 +636,11 @@ void HomeActivity::render(RenderLock&&) {
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
   coverRectX = 0;
-  coverRectY = metrics.homeTopPadding + 24;
+  const bool roundedRaffHome =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
+  coverRectY = metrics.homeTopPadding + 24 + (roundedRaffHome ? 14 : 0);
   coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
+  coverRectH = roundedRaffHome ? metrics.homeCoverHeight : metrics.homeCoverTileHeight;
 
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding + 24, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,

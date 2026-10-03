@@ -1,5 +1,6 @@
 #include "SleepActivity.h"
 
+#include <BitmapHelpers.h>
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FontCacheManager.h>
@@ -284,11 +285,12 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
           renderer.drawPixel(screenX, screenY, level < 3);
           break;
         case TransparentOverlayPass::GrayscaleLsb:
-          if (level == 1) renderer.drawPixel(screenX, screenY, false);
+        case TransparentOverlayPass::GrayscaleMsb: {
+          const auto planePixel =
+              grayPlanePixel(level, pass == TransparentOverlayPass::GrayscaleMsb, renderer.grayPlanesAreAbsolute());
+          if (planePixel.write) renderer.drawPixel(screenX, screenY, planePixel.black);
           break;
-        case TransparentOverlayPass::GrayscaleMsb:
-          if (level == 1 || level == 2) renderer.drawPixel(screenX, screenY, false);
-          break;
+        }
       }
     }
   }
@@ -343,9 +345,14 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
 
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
     return AlphaOverlayResult::Error;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return AlphaOverlayResult::Error;
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -355,7 +362,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   }
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -632,7 +639,14 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     renderer.invertScreen();
   }
 
-  if (hasGreyscale) {
+  const bool absolute =
+      hasGreyscale && SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_ABSOLUTE &&
+      renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    // CPHUN-179 B: official 1.6.5 Absolute path, no HALF preclean,
+    // original LSB/MSB RAM assignment and SDK factory 0xCC activation.
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return;
+  } else if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
     // behind. A FULL (GC) base parks pixels in a different charge state and
@@ -651,7 +665,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
         planesReady = false;
         break;
       }
-      renderer.clearScreen(0x00);
+      renderer.clearScreen(absolute ? 0xFF : 0x00);
       renderer.setRenderMode(plane);
       renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
       if (plane == GfxRenderer::GRAYSCALE_LSB)
@@ -706,9 +720,14 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return false;
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -716,7 +735,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   }
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -809,12 +828,27 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped)) {
-      LOG_ERR("SLP", "Failed to generate cover bmp");
-      return (this->*renderNoCoverSleepScreen)();
+    // CPHUN-178 mode C: the same cached 2-bit Floyd–Steinberg bitmap used
+    // by Book -> Show Cover. Only EPUB offers this dedicated cache.
+    if (SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_FLOYD_OVERLAY) {
+      const std::string fsPath = lastEpub.getBookCoverViewBmpPath();
+      if (Storage.exists(fsPath.c_str()) || lastEpub.generateBookCoverViewBmp()) {
+        coverBmpPath = fsPath;
+      } else {
+        LOG_ERR("SLP", "Floyd book-cover generation failed; using standard cover");
+      }
     }
-
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped);
+    if (coverBmpPath.empty()) {
+      const bool release165 = SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_ABSOLUTE &&
+                              renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                              display.getController() == HalDisplay::Controller::SSD1677 &&
+                              SETTINGS.sleepScreenCoverFilter == CrossPointSettings::NO_FILTER;
+      if (!lastEpub.generateCoverBmp(cropped, release165)) {
+        LOG_ERR("SLP", "Failed to generate cover bmp");
+        return (this->*renderNoCoverSleepScreen)();
+      }
+      coverBmpPath = lastEpub.getCoverBmpPath(cropped, release165);
+    }
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }

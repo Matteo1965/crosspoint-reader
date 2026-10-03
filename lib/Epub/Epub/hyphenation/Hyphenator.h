@@ -51,6 +51,7 @@ class Hyphenator {
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
   static void setHungarianExtended(bool enabled);
+  static void setHungarianMinima(size_t minPrefix, size_t minSuffix);
   static void setSoftHyphenEnabled(bool enabled);
 
  private:

@@ -512,7 +512,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
 
 // Internal implementation with configurable target size and bit depth
 bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& bmpOut, int targetWidth,
-                                                     int targetHeight, bool oneBit, bool crop) {
+                                                     int targetHeight, bool oneBit, bool crop, bool forceFloyd, bool originalThresholds) {
   LOG_DBG("JPG", "Converting JPEG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -584,8 +584,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
       scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
     }
 
-    outWidth = static_cast<int>(srcWidth * scale);
-    outHeight = static_cast<int>(srcHeight * scale);
+    // CPHUN-111: the dedicated full-screen cover path rounds to the nearest pixel.
+    // Example: a 313x500 cover fitted into 480x800 becomes 480x767, matching
+    // X4 EPUB Optimizer instead of being truncated to 480x766.
+    outWidth = static_cast<int>(srcWidth * scale + (forceFloyd ? 0.5f : 0.0f));
+    outHeight = static_cast<int>(srcHeight * scale + (forceFloyd ? 0.5f : 0.0f));
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
 
@@ -679,16 +682,16 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-      if (!ctx.atkinsonDitherer) {
-        LOG_ERR("JPG", "OOM: AtkinsonDitherer");
-        return false;
-      }
-    } else if (USE_FLOYD_STEINBERG) {
+    if (forceFloyd || (!USE_ATKINSON && USE_FLOYD_STEINBERG)) {
       ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
       if (!ctx.fsDitherer) {
         LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
+        return false;
+      }
+    } else if (USE_ATKINSON) {
+      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth, originalThresholds);
+      if (!ctx.atkinsonDitherer) {
+        LOG_ERR("JPG", "OOM: AtkinsonDitherer");
         return false;
       }
     }
@@ -713,17 +716,23 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
 }
 
 // Core function: Convert JPEG file to 2-bit BMP (uses default target size)
-bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop) {
+bool JpegToBmpConverter::jpegFileToBmpStream(HalFile& jpegFile, Print& bmpOut, bool crop, bool originalThresholds) {
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop);
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, crop, false, originalThresholds);
 }
 
 // Convert with custom target size (for thumbnails, 2-bit)
 bool JpegToBmpConverter::jpegFileToBmpStreamWithSize(HalFile& jpegFile, Print& bmpOut, int targetMaxWidth,
                                                      int targetMaxHeight) {
   return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+}
+
+bool JpegToBmpConverter::jpegFileToFloydSteinbergBmpStream(HalFile& jpegFile, Print& bmpOut) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return jpegFileToBmpStreamInternal(jpegFile, bmpOut, targetWidth, targetHeight, false, false, true);
 }
 
 // Convert to 1-bit BMP (black and white only, no grays) for fast home screen rendering

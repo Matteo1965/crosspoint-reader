@@ -33,7 +33,7 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
   for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
     for (int col = 0; col < bookmarkStatusIconWidth; ++col) {
-      const uint8_t byte = BookmarkStatusIcon[row * bytesPerRow + col / 8];
+      const uint8_t byte = NEW_DOGEAR_32x32[row * bytesPerRow + col / 8];
       const uint8_t mask = 1U << (7 - (col % 8));
       renderer.drawPixel(x + col, y + row, (byte & mask) != 0);
     }
@@ -811,7 +811,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   // Draw Bookmark as a full 16x16 corner marker. It no longer consumes
   // status-bar layout width and sits flush with the upper-right screen edge.
   if (isPageBookmarked) {
-    drawBookmarkStatusIcon(renderer, 446, 4);
+    drawBookmarkStatusIcon(renderer, 448, 2);
   }
 
   // Draw Title

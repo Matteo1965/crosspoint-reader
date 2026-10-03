@@ -12,7 +12,7 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 11;  // v11: generated TOC for weak single-entry EPUB TOCs
+constexpr uint8_t BOOK_CACHE_VERSION = 12;  // v12: preserve partial TOC and insert missing reading spines
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -456,6 +456,129 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   tocCount++;
 }
 
+
+
+bool BookMetadataCache::supplementTocWithMissingSpineFiles() {
+  if (!buildMode || !tocFile || !spineFile || tocCount == 0) return false;
+
+  const bool flushed = !passOut || passOut->flush();
+  passOut.reset();
+  tocFile.close();
+  if (!flushed) {
+    LOG_ERR("BMC", "Partial TOC supplement: failed to flush parsed TOC");
+    return false;
+  }
+
+  HalFile tocIn;
+  if (!Storage.openFileForRead("BMC", cachePath + tmpTocBinFile, tocIn)) {
+    LOG_ERR("BMC", "Partial TOC supplement: failed to reopen TOC temp file");
+    return false;
+  }
+
+  std::vector<TocEntry> original;
+  original.reserve(tocCount);
+  for (int i = 0; i < tocCount; ++i) original.push_back(readTocEntry(tocIn));
+  tocIn.close();
+
+  std::vector<bool> covered(spineCount, false);
+  for (const auto& item : original) {
+    if (item.spineIndex >= 0 && item.spineIndex < spineCount) covered[item.spineIndex] = true;
+  }
+
+  struct MissingToc {
+    TocEntry entry;
+    int spineIndex = -1;
+  };
+  std::vector<MissingToc> missing;
+
+  spineFile.seek(0);
+  for (int spine = 0; spine < spineCount; ++spine) {
+    const auto spineEntry = readSpineEntry(spineFile);
+    if (covered[spine]) continue;
+
+    std::string lower = spineEntry.href;
+    std::transform(lower.begin(), lower.end(), lower.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    const auto hash = lower.find('#');
+    if (hash != std::string::npos) lower.erase(hash);
+    const auto query = lower.find('?');
+    if (query != std::string::npos) lower.erase(query);
+
+    const bool html =
+        (lower.size() >= 5 && lower.rfind(".html") == lower.size() - 5) ||
+        (lower.size() >= 6 && lower.rfind(".xhtml") == lower.size() - 6) ||
+        (lower.size() >= 4 && lower.rfind(".htm") == lower.size() - 4);
+    if (!html) continue;
+
+    const auto slash = lower.find_last_of('/');
+    const std::string base = slash == std::string::npos ? lower : lower.substr(slash + 1);
+    if (base.find("cover") != std::string::npos ||
+        base == "nav.xhtml" || base == "nav.html" ||
+        base == "toc.xhtml" || base == "toc.html" || base == "toc.htm" ||
+        base.find("titlepage") != std::string::npos ||
+        base.find("title_page") != std::string::npos ||
+        base.find("copyright") != std::string::npos ||
+        base.find("colophon") != std::string::npos ||
+        base.find("footnote") != std::string::npos ||
+        base.find("endnote") != std::string::npos ||
+        base == "notes.html" || base == "notes.xhtml" || base == "notes.htm") {
+      continue;
+    }
+
+    std::string title = FsHelpers::decodeUriEscapes(spineEntry.href);
+    const auto titleHash = title.find('#');
+    if (titleHash != std::string::npos) title.erase(titleHash);
+    const auto titleQuery = title.find('?');
+    if (titleQuery != std::string::npos) title.erase(titleQuery);
+    const auto titleSlash = title.find_last_of('/');
+    if (titleSlash != std::string::npos) title.erase(0, titleSlash + 1);
+    const auto dot = title.find_last_of('.');
+    if (dot != std::string::npos) title.erase(dot);
+    for (char& ch : title) if (ch == '_' || ch == '-') ch = ' ';
+    while (!title.empty() && title.front() == ' ') title.erase(title.begin());
+    while (!title.empty() && title.back() == ' ') title.pop_back();
+    if (title.empty()) title = "Fejezet " + std::to_string(spine + 1);
+
+    MissingToc item;
+    item.entry = TocEntry(utf8ComposeNfc(title), spineEntry.href, "", 0, static_cast<int16_t>(spine));
+    item.spineIndex = spine;
+    missing.push_back(std::move(item));
+  }
+
+  std::vector<TocEntry> merged;
+  merged.reserve(original.size() + missing.size());
+  size_t mi = 0;
+  for (const auto& item : original) {
+    if (item.spineIndex >= 0) {
+      while (mi < missing.size() && missing[mi].spineIndex < item.spineIndex) {
+        merged.push_back(std::move(missing[mi].entry));
+        ++mi;
+      }
+    }
+    merged.push_back(item);
+  }
+  while (mi < missing.size()) {
+    merged.push_back(std::move(missing[mi].entry));
+    ++mi;
+  }
+
+  if (!Storage.openFileForWrite("BMC", cachePath + tmpTocBinFile, tocFile)) {
+    LOG_ERR("BMC", "Partial TOC supplement: failed to rewrite TOC temp file");
+    return false;
+  }
+
+  tocCount = 0;
+  passOut = makeUniqueNoThrow<serialization::BufferedFileWriter>(tocFile, BUILD_IO_BUFFER_SIZE);
+  for (const auto& item : merged) {
+    if (passOut) writeTocEntryTo(*passOut, item);
+    else writeTocEntry(tocFile, item);
+    ++tocCount;
+  }
+
+  LOG_DBG("BMC", "Partial TOC supplement: preserved %zu authored rows, inserted %zu missing spine rows",
+          original.size(), missing.size());
+  return !missing.empty();
+}
 
 bool BookMetadataCache::replaceTocWithSpineFiles() {
   if (!buildMode || !tocFile || !spineFile) {

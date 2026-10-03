@@ -22,8 +22,9 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   std::vector<std::string> cssFiles;
 
-  bool findContentOpfFile(std::string* contentOpfFile) const;
-  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
+  bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
+  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
@@ -55,8 +56,6 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  // Lightweight OPF-only metadata read for library indexing. Does not build
-  // spine/TOC/CSS/cover caches and is safe for unopened books.
   bool loadMetadata(std::string& title, std::string& author);
   bool clearCache() const;
   bool clearCachePreservingProgress();
@@ -68,8 +67,10 @@ class Epub {
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
   bool readBookInfo(BookInfo& info) const;
-  std::string getCoverBmpPath(bool cropped = false) const;
-  bool generateCoverBmp(bool cropped = false) const;
+  std::string getCoverBmpPath(bool cropped = false, bool release165 = false) const;
+  bool generateCoverBmp(bool cropped = false, bool release165 = false) const;
+  std::string getBookCoverViewBmpPath() const;
+  bool generateBookCoverViewBmp() const;
   std::string getThumbBmpPath() const;
   std::string getThumbBmpPath(int height) const;
   bool generateThumbBmp(int height) const;

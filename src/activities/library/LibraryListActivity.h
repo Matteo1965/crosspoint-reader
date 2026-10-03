@@ -7,8 +7,10 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
+#include "components/OptionPopup.h"
 
 // One Library screen: every indexed book on the card shown by recency, title,
 // or author. The Recent shelf orders by file modification time (when a book
@@ -44,6 +46,18 @@ class LibraryListActivity final : public UiTabListActivity {
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
+  int tabWidthPercent(int index) const override {
+    if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;
+    static constexpr int widths[3] = {41, 25, 34};
+    return index >= 0 && index < 3 ? widths[index] : 0;
+  }
+  int tabSideMarginPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 16 : 0;
+  }
+  int tabGapPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 6 : 0;
+  }
+  freeink::ui::TabIndicator tabIndicator(int index) const override;
   void onTabAction(int index) override;
   void stepTab(int direction) override;
   bool handleCustomInput() override;
@@ -52,10 +66,14 @@ class LibraryListActivity final : public UiTabListActivity {
   // The FreeInkUI header owns both the title and search touch target.
   void drawChrome() override {}
   void drawFooter() override;
+  // OptionPopup is a self-contained modal: it owns rendering (and the button
+  // hints) whenever it is up.
+  void render(RenderLock&& lock) override;
 
  private:
   // The screen's own actions, after the base's ACTION_ROW / ACTION_TAB.
   static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
+  static constexpr freeink::ui::ActionId ACTION_REBUILD = ACTION_SEARCH + 1;
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
@@ -65,11 +83,19 @@ class LibraryListActivity final : public UiTabListActivity {
   // Input
   void openSelectedBook();
   void openSearch();
+  // Shared tail of row activation and the options menu's Open entry.
+  void openBookByPath(const std::string& path);
+  void promptRebuildIndex();
+  void resetAfterRebuild();
+  // Recent-row long-press menu: open / remove from recents / delete / rebuild.
+  void showRecentBookOptions(int entry);
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
   // Long-press delete owns the gesture where grouping does not apply: the
   // Recent sort, degraded lists, and any active search result.
   bool deleteEligible() const;
+  // Resolves the row's path and title, then confirms via promptDeleteBookByPath.
   void promptDeleteBook(int entry);
+  void promptDeleteBookByPath(const std::string& path, const std::string& title);
   bool collapseGroups(int bookEntry);
   void expandGroup(int groupEntry);
   void restoreExpandedList();
@@ -79,6 +105,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
   static void searchActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void rebuildActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   // Data
   void applyFilter();
@@ -161,9 +188,17 @@ class LibraryListActivity final : public UiTabListActivity {
   // ascending, so unpinned entries map to sort rows with a <=10-step walk.
   uint16_t pinnedAscRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
   uint16_t overlapRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
+  // Library shows EPUB only. Keep a compact mapping from visible pinned rows
+  // to the original RecentBooksStore slots so non-EPUB recents remain stored
+  // for other UI paths without appearing on the Library shelf.
+  uint8_t pinnedBookIndices[RecentBooksStore::MAX_RECENT_BOOKS] = {};
   uint8_t pinnedTotal = 0;
   uint8_t overlapCount = 0;
 
   bool lockNextConfirmRelease = false;
   bool lockNextBackRelease = false;
+
+  // Row options modal (Recent long-press menu); owned here so it outlives the
+  // touch event that opened it.
+  OptionPopup optionPopup;
 };

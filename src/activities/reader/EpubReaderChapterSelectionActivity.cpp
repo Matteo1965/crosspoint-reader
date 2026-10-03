@@ -12,13 +12,28 @@
 
 namespace fui = freeink::ui;
 
-EpubReaderChapterSelectionActivity::EpubReaderChapterSelectionActivity(GfxRenderer& renderer,
-                                                                       MappedInputManager& mappedInput,
-                                                                       const std::shared_ptr<Epub>& epub,
-                                                                       const int currentSpineIndex)
+EpubReaderChapterSelectionActivity::EpubReaderChapterSelectionActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, const std::shared_ptr<Epub>& epub,
+    const int currentSpineIndex, std::vector<VirtualChapter> virtualChapters)
     : UiListActivity("EpubReaderChapterSelection", renderer, mappedInput),
       epub(epub),
-      currentSpineIndex(currentSpineIndex) {}
+      currentSpineIndex(currentSpineIndex),
+      virtualChapters(std::move(virtualChapters)) {
+  virtualInsertAfter = epub ? epub->getTocIndexForSpineIndex(currentSpineIndex) : -1;
+}
+
+int EpubReaderChapterSelectionActivity::virtualIndexForRow(const int row) const {
+  if (virtualInsertAfter < 0 || virtualChapters.empty()) return -1;
+  const int first = virtualInsertAfter + 1;
+  const int index = row - first;
+  return index >= 0 && index < static_cast<int>(virtualChapters.size()) ? index : -1;
+}
+
+int EpubReaderChapterSelectionActivity::realTocIndexForRow(const int row) const {
+  if (virtualInsertAfter < 0 || virtualChapters.empty()) return row;
+  const int firstAfterVirtual = virtualInsertAfter + 1 + static_cast<int>(virtualChapters.size());
+  return row >= firstAfterVirtual ? row - static_cast<int>(virtualChapters.size()) : row;
+}
 
 void EpubReaderChapterSelectionActivity::onEnter() {
   UiListActivity::onEnter();
@@ -61,12 +76,18 @@ void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start) {
 
   windowCount = total - clamped < TOC_WINDOW ? total - clamped : TOC_WINDOW;
   for (int i = 0; i < windowCount; i++) {
-    const auto tocItem = epub->getTocItem(clamped + i);
-    std::string indent(tocItem.level > 0 ? (tocItem.level - 1) * 2 : 0, ' ');
-    windowLabels[i] = indent + tocItem.title;
+    const int row = clamped + i;
+    const int virtualIndex = virtualIndexForRow(row);
+    if (virtualIndex >= 0) {
+      windowLabels[i] = "  " + virtualChapters[virtualIndex].title;
+    } else {
+      const auto tocItem = epub->getTocItem(realTocIndexForRow(row));
+      std::string indent(tocItem.level > 0 ? (tocItem.level - 1) * 2 : 0, ' ');
+      windowLabels[i] = indent + tocItem.title;
+    }
     fui::ListItem item;
     item.label = windowLabels[i].c_str();
-    item.actionValue = static_cast<int16_t>(clamped + i);
+    item.actionValue = static_cast<int16_t>(row);
     windowItems[i] = item;
   }
   windowStart = clamped;
@@ -92,7 +113,18 @@ void EpubReaderChapterSelectionActivity::activateIndex(const int index) {
   // an unrelated element on the next render.
   app.clearTapFlash();
   nav.selected = index;
-  const auto tocItem = epub->getTocItem(index);
+  const int virtualIndex = virtualIndexForRow(index);
+  if (virtualIndex >= 0) {
+    const auto& v = virtualChapters[virtualIndex];
+    if (v.progressPermille > 0) {
+      setResult(ChapterResult{v.spineIndex, "__cphun_pct_" + std::to_string(v.progressPermille)});
+    } else {
+      setResult(ChapterResult{v.spineIndex, "__cphun_page_" + std::to_string(v.page)});
+    }
+    finish();
+    return;
+  }
+  const auto tocItem = epub->getTocItem(realTocIndexForRow(index));
   if (tocItem.spineIndex == -1) {
     ActivityResult result;
     result.isCancelled = true;

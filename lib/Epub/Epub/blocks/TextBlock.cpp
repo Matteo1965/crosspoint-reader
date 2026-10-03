@@ -11,6 +11,9 @@
 
 #include "../../../../src/fontIds.h"
 #include "../ParsedText.h"
+#include "../ShortHyphenGlyph.h"
+#include "../LetterSpacingOptimization.h"
+#include "../OpticalLineCorrection.h"
 
 namespace {
 
@@ -25,103 +28,251 @@ uint32_t countCodepoints(const char* text) {
   return count;
 }
 
-constexpr char SHORT_HYPHEN_UTF8[] = "\xE2\x80\x91";
-constexpr size_t SHORT_HYPHEN_BYTES = 3;
-
-bool endsWithShortHyphen(const char* text) {
+bool endsWithSelectedShortHyphen(const char* text, const short_hyphen::Glyph glyph) {
   if (text == nullptr) return false;
   const size_t len = strlen(text);
-  return len >= SHORT_HYPHEN_BYTES &&
-         memcmp(text + len - SHORT_HYPHEN_BYTES, SHORT_HYPHEN_UTF8, SHORT_HYPHEN_BYTES) == 0;
+  const size_t glyphBytes = strlen(glyph.utf8);
+  return len >= glyphBytes &&
+         memcmp(text + len - glyphBytes, glyph.utf8, glyphBytes) == 0;
 }
 
 int trailingShortHyphenInkShift(const GfxRenderer& renderer, const int fontId,
-                                const EpdFontFamily::Style style) {
+                               const EpdFontFamily::Style style,
+                               const short_hyphen::Glyph glyph) {
   const auto it = renderer.getFontMap().find(fontId);
   if (it == renderer.getFontMap().end()) return 0;
-  const EpdGlyph* glyph = it->second.getGlyph(0x2011, style);
-  if (!glyph) return 0;
-  int renderedLeft = glyph->left;
+  const EpdGlyph* bitmap = it->second.getGlyph(glyph.codepoint, style);
+  if (!bitmap) return 0;
+  int renderedLeft = bitmap->left;
   if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) renderedLeft /= 2;
-  // CPHUN-54 places the U+2011 pen origin on the optical boundary.
-  // Shift only the glyph bitmap by -left so its visible bitmap starts on that
-  // boundary. Layout widths, justification gaps and every word X stay unchanged.
   return -renderedLeft;
 }
 
 void drawTrackedText(const GfxRenderer& renderer, const int fontId, const int x, const int y, const char* text,
                      const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir,
-                     const uint8_t letterSpacingPx, const bool alignTrailingShortHyphenInk) {
+                     const uint8_t letterSpacingPx, const bool alignTrailingShortHyphenInk,
+                     LetterSpacingOptimization::Accumulator* optimizationAcc) {
   if (text == nullptr || *text == '\0') return;
 
-  const bool adjustTrailingHyphen = alignTrailingShortHyphenInk && endsWithShortHyphen(text);
+  const auto shortGlyph = short_hyphen::select(renderer, fontId, style);
+  const bool adjustTrailingHyphen =
+      alignTrailingShortHyphenInk && endsWithSelectedShortHyphen(text, shortGlyph);
   if (letterSpacingPx == 0) {
     if (!adjustTrailingHyphen) {
       renderer.drawText(fontId, x, y, text, true, style, baseDir);
       return;
     }
-
     const size_t len = strlen(text);
-    const std::string prefix(text, len - SHORT_HYPHEN_BYTES);
+    const std::string prefix(text, len - strlen(shortGlyph.utf8));
     if (!prefix.empty()) renderer.drawText(fontId, x, y, prefix.c_str(), true, style, baseDir);
-
     const int fullAdvance = renderer.getTextAdvanceX(fontId, text, style);
-    const int hyphenAdvance = renderer.getTextAdvanceX(fontId, SHORT_HYPHEN_UTF8, style);
+    const int hyphenAdvance = renderer.getTextAdvanceX(fontId, shortGlyph.utf8, style);
     const int hyphenPenX = x + fullAdvance - hyphenAdvance;
-    renderer.drawText(fontId, hyphenPenX + trailingShortHyphenInkShift(renderer, fontId, style), y,
-                      SHORT_HYPHEN_UTF8, true, style, baseDir);
+    renderer.drawText(fontId, hyphenPenX + trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph), y,
+                      shortGlyph.utf8, true, style, baseDir);
     return;
   }
 
-  // ParsedText enables tracking only on pure-LTR justified lines. Render one
-  // codepoint at a time so the physical glyph positions match the +1 px per
-  // internal pair already reserved by layout, while preserving pair kerning.
+  const bool packedOptimization =
+      LetterSpacingOptimization::isPackedConfig(letterSpacingPx);
+  const bool optimizeThisWord =
+      packedOptimization && optimizationAcc &&
+      LetterSpacingOptimization::beginWord(text, style, *optimizationAcc);
+
+  if (packedOptimization && !optimizeThisWord) {
+    if (!adjustTrailingHyphen) {
+      renderer.drawText(fontId, x, y, text, true, style, baseDir);
+      return;
+    }
+    const size_t len = strlen(text);
+    const std::string prefix(text, len - strlen(shortGlyph.utf8));
+    if (!prefix.empty()) renderer.drawText(fontId, x, y, prefix.c_str(), true, style, baseDir);
+    const int fullAdvance = renderer.getTextAdvanceX(fontId, text, style);
+    const int hyphenAdvance = renderer.getTextAdvanceX(fontId, shortGlyph.utf8, style);
+    const int hyphenPenX = x + fullAdvance - hyphenAdvance;
+    renderer.drawText(fontId, hyphenPenX + trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph), y,
+                      shortGlyph.utf8, true, style, baseDir);
+    return;
+  }
+
+  if (optimizeThisWord) {
+    const auto fontIt = renderer.getFontMap().find(fontId);
+    if (fontIt == renderer.getFontMap().end()) return;
+    const EpdFontFamily& font = fontIt->second;
+
+    const auto* cursor = reinterpret_cast<const uint8_t*>(text);
+    int nativePenX = x;
+    int optimizationOffset = 0;
+    uint32_t previous = 0;
+    uint32_t beforePrevious = 0;
+
+    while (*cursor) {
+      const auto* glyphStart = cursor;
+      const uint32_t cp = utf8NextCodepoint(&cursor);
+      if (cp == 0) break;
+
+      if (previous != 0) {
+        // Match GfxRenderer::drawText exactly: combine the previous glyph's
+        // 12.4 advance with this pair's 4.4 kerning, then round once.
+        // Do not reconstruct the pen from prefix widths; that can introduce
+        // +/-1 px differential-rounding errors between adjacent pairs.
+        const EpdGlyph* previousGlyph = font.getGlyph(previous, style);
+        const int32_t previousAdvanceFP = previousGlyph ? static_cast<int32_t>(previousGlyph->advanceX) : 0;
+        const int32_t kernFP = static_cast<int32_t>(font.getKerning(previous, cp, style));
+        const int32_t pairAdvanceFP = previousAdvanceFP + kernFP;
+        const int nativePairAdvancePx = static_cast<int>((pairAdvanceFP + 8) >> 4);
+        nativePenX += nativePairAdvancePx;
+
+        // The optimizer contributes only real whole pixels. A non-emitting
+        // pair therefore keeps its native spacing pixel-identical.
+        const auto* lookahead = cursor;
+        const uint32_t next = *lookahead ? utf8NextCodepoint(&lookahead) : 0;
+        optimizationOffset += LetterSpacingOptimization::consumeGuardedPair(
+            beforePrevious, previous, cp, next, style, *optimizationAcc);
+      }
+
+      const size_t glyphBytes = static_cast<size_t>(cursor - glyphStart);
+      char glyphText[5];
+      memcpy(glyphText, glyphStart, glyphBytes);
+      glyphText[glyphBytes] = '\0';
+
+      int glyphX = nativePenX + optimizationOffset;
+      if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {
+        glyphX += trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph);
+      }
+      renderer.drawText(fontId, glyphX, y, glyphText, true, style, baseDir);
+      beforePrevious = previous;
+      previous = cp;
+    }
+    return;
+  }
+
   const auto* cursor = reinterpret_cast<const uint8_t*>(text);
   int penX = x;
   uint32_t previous = 0;
+  const int standaloneBudget = OpticalLineCorrection::standaloneBudget(letterSpacingPx);
+  const int standaloneSlots = standaloneBudget > 0 ? static_cast<int>(countCodepoints(text)) - 1 : 0;
+  int standaloneSlot = 0;
   while (*cursor) {
     const auto* glyphStart = cursor;
     const uint32_t cp = utf8NextCodepoint(&cursor);
     if (cp == 0) break;
-
     if (previous != 0) {
-      penX += renderer.getKerning(fontId, previous, cp, style) + letterSpacingPx;
+      const int extra = standaloneBudget > 0
+          ? OpticalLineCorrection::extraForSlot(standaloneSlot++, standaloneSlots, standaloneBudget)
+          : letterSpacingPx;
+      penX += renderer.getKerning(fontId, previous, cp, style) + extra;
     }
-
     const size_t glyphBytes = static_cast<size_t>(cursor - glyphStart);
     char glyphText[5];
     memcpy(glyphText, glyphStart, glyphBytes);
     glyphText[glyphBytes] = '\0';
     int glyphX = penX;
-    if (adjustTrailingHyphen && cp == 0x2011 && *cursor == 0) {
-      glyphX += trailingShortHyphenInkShift(renderer, fontId, style);
+    if (adjustTrailingHyphen && cp == shortGlyph.codepoint && *cursor == 0) {
+      glyphX += trailingShortHyphenInkShift(renderer, fontId, style, shortGlyph);
     }
     renderer.drawText(fontId, glyphX, y, glyphText, true, style, baseDir);
-    // Advance the logical pen exactly as before; the render-only shift must not
-    // alter word width or following positions.
     penX += renderer.getTextAdvanceX(fontId, glyphText, style);
     previous = cp;
   }
 }
 
+// Read actual 1-bit or 2-bit glyph pixels AFTER SD font prewarming.
+// CPHUN-164 measured too early, frequently obtaining no bitmap at layout time.
+// A missing glyph/bitmap returns -1, never the misleading zero inset.
+// Reconstruct the actual last-glyph ink edge using drawText's pair-level
+// fixed-point advance and kerning, NOT the layout SD advance-table sum.
+// Only ordinary LTR Latin words enter this path via ParsedText's eligibility
+// gate. Non-resident glyphs and unsupported shaping fail closed.
+int renderedFinalWordInkInset(const GfxRenderer& renderer, const int fontId,
+                             const char* text, const EpdFontFamily::Style style,
+                             const int plannedAdvance) {
+  if (!text || !*text || plannedAdvance <= 0) return -1;
+  const auto it = renderer.getFontMap().find(fontId);
+  if (it == renderer.getFontMap().end()) return -1;
+  const EpdFontFamily& font = it->second;
+  const EpdFontData* data = font.getData(style);
+  if (!data || (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) return -1;
+
+  // Keep the original string untouched for the layout fast-path measurement.
+  const char* cursor = text;
+  uint32_t previous = 0;
+  int32_t previousAdvanceFP = 0;
+  int nativePen = 0;
+  const EpdGlyph* lastGlyph = nullptr;
+  uint32_t lastCodepoint = 0;
+  while (*cursor) {
+    uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor));
+    if (!cp) break;
+    if (utf8IsCombiningMark(cp)) return -1;  // not the plain native paint path
+    cp = font.applyLigatures(cp, cursor, style);
+    if (!font.hasCodepoint(cp, style)) return -1; // fallback fonts use a different path
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+    if (!glyph) return -1;
+    if (previous != 0) {
+      // Identical to GfxRenderer::drawText: round the previous glyph's
+      // 12.4 advance PLUS this pair's 4.4 kerning once.
+      nativePen += static_cast<int>(
+          (previousAdvanceFP + static_cast<int32_t>(font.getKerning(previous, cp, style)) + 8) >> 4);
+    }
+    previousAdvanceFP = glyph->advanceX;
+    previous = cp;
+    lastGlyph = glyph;
+    lastCodepoint = cp;
+  }
+  if (!lastGlyph || !OpticalLineCorrection::isLatinLetter(lastCodepoint) ||
+      lastGlyph->width == 0 || lastGlyph->height == 0) return -1;
+
+  const uint8_t* bitmap = renderer.getGlyphBitmap(data, lastGlyph);
+  if (!bitmap) return -1;
+  // GfxRenderer BW draws all nonwhite antialiasing pixels, not only >=2.
+  int rightmostPainted = -1;
+  int pixel = 0;
+  for (int row = 0; row < lastGlyph->height; ++row) {
+    for (int col = 0; col < lastGlyph->width; ++col, ++pixel) {
+      uint8_t intensity = 0;
+      if (data->is2Bit) {
+        const int shift = 6 - ((pixel & 3) << 1);
+        intensity = static_cast<uint8_t>((bitmap[pixel >> 2] >> shift) & 3u);
+      } else {
+        intensity = (bitmap[pixel >> 3] & (0x80u >> (pixel & 7))) ? 3u : 0u;
+      }
+      if (OpticalLineCorrection::countsAsPaintedInk(intensity) && col > rightmostPainted)
+        rightmostPainted = col;
+    }
+  }
+  const int lastInk = rightmostPainted;
+  if (lastInk < 0) return -1;
+  const int glyphAdvance = static_cast<int>((previousAdvanceFP + 8) >> 4);
+  const int glyphInkRight = static_cast<int>(lastGlyph->left) + lastInk + 1;
+  const int nativeAdvance = nativePen + glyphAdvance;
+  const int layoutBaseAdvance = renderer.getTextAdvanceX(fontId, text, style);
+  return OpticalLineCorrection::effectiveFinalInkInset(
+      plannedAdvance, layoutBaseAdvance, nativeAdvance,
+      std::max(0, glyphAdvance - glyphInkRight));
+}
+
 }  // namespace
 
-size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
+size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes, const bool hasOptical) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
-  size_t size =
-      static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t) + sizeof(uint8_t));
+  size_t size = static_cast<size_t>(wordCount) *
+                (sizeof(uint32_t) + sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
   }
-  return size + textBytes;
+  return size + (hasOptical ? wordCount : 0) + textBytes;
 }
 
 void TextBlock::bindArenaPointers() {
   uint8_t* base = arena.get();
   const size_t wc = numWords;
-  textOffArr = reinterpret_cast<const uint16_t*>(base);
-  xposArr = reinterpret_cast<const int16_t*>(base + wc * 2);
-  size_t off = wc * 4;
+  visibleOffsetArr = reinterpret_cast<const uint32_t*>(base);
+  size_t off = wc * sizeof(uint32_t);
+  textOffArr = reinterpret_cast<const uint16_t*>(base + off);
+  off += wc * sizeof(uint16_t);
+  xposArr = reinterpret_cast<const int16_t*>(base + off);
+  off += wc * sizeof(int16_t);
   if (focusPresent) {
     focusSuffixXArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
@@ -132,6 +283,10 @@ void TextBlock::bindArenaPointers() {
   off += wc;
   if (focusPresent) {
     focusBoundaryArr = base + off;
+    off += wc;
+  }
+  if (opticalTargetRightX_ > 0) {
+    opticalGapsArr = base + off;
     off += wc;
   }
   textArr = reinterpret_cast<const char*>(base + off);
@@ -152,10 +307,16 @@ void TextBlock::refreshRenderFlags() {
 }
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
-                     const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
+                     const std::vector<EpdFontFamily::Style>& wordStyles,
+                     const std::vector<uint32_t>& wordVisibleOffsets, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
-                     std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), letterSpacingPx(letterSpacingPx) {
+                     std::vector<std::string> rubyTexts, const uint8_t letterSpacingPx,
+                      const uint16_t opticalTargetRightX,
+                      const uint16_t opticalLastWordAdvance,
+                      const std::vector<uint8_t>& opticalGaps)
+    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), letterSpacingPx(letterSpacingPx),
+      opticalTargetRightX_(opticalGaps.empty() ? 0 : opticalTargetRightX),
+      opticalLastWordAdvance_(opticalGaps.empty() ? 0 : opticalLastWordAdvance) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
   // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
   // every line it extracts, ruby or not; release it here rather than carrying it for the
@@ -167,7 +328,9 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
-  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > 10000 ||
+  if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
+      words.size() != wordVisibleOffsets.size() || words.size() > 10000 ||
+       (!opticalGaps.empty() && words.size() != opticalGaps.size()) ||
       (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size()))) {
     LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
@@ -196,7 +359,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   }
   textBytes = static_cast<uint16_t>(totalText);
 
-  const size_t size = arenaSize(numWords, focusPresent, textBytes);
+  const size_t size = arenaSize(numWords, focusPresent, textBytes, opticalTargetRightX_ != 0);
   arena = makeUniqueNoThrow<uint8_t[]>(size);
   if (!arena) {
     LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
@@ -209,6 +372,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   bindArenaPointers();
 
   // Pass 2: fill. Mutable aliases of the const views bound above.
+  auto* visibleOffsets = const_cast<uint32_t*>(visibleOffsetArr);
   auto* textOff = const_cast<uint16_t*>(textOffArr);
   auto* xpos = const_cast<int16_t*>(xposArr);
   auto* styles = const_cast<uint8_t*>(stylesArr);
@@ -216,6 +380,7 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   auto* text = const_cast<char*>(textArr);
   uint16_t off = 0;
   for (uint16_t i = 0; i < numWords; i++) {
+    visibleOffsets[i] = wordVisibleOffsets[i];
     textOff[i] = off;
     xpos[i] = wordXpos[i];
     styles[i] = static_cast<uint8_t>(wordStyles[i]);
@@ -224,6 +389,9 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     memcpy(text + off, words[i].data(), words[i].size());
     off += static_cast<uint16_t>(words[i].size());
     text[off++] = '\0';
+  }
+  if (opticalTargetRightX_ > 0) {
+    memcpy(const_cast<uint8_t*>(opticalGapsArr), opticalGaps.data(), numWords);
   }
   if (focusPresent) {
     auto* suffixX = const_cast<uint16_t*>(focusSuffixXArr);
@@ -259,15 +427,47 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     std::string text;
     BidiUtils::BidiBaseDir baseDir;
   };
+  int opticalExtra = 0;
+  int opticalGapCount = 0;
+  int opticalInset = -1;
+  if (!scanning && opticalTargetRightX_ > 0 && numWords > 1 && opticalGapsArr) {
+    opticalInset = renderedFinalWordInkInset(
+        renderer, fontId, wordText(numWords - 1), wordStyle(numWords - 1),
+        opticalLastWordAdvance_);
+    opticalExtra = OpticalLineCorrection::missingFinalInkPixels(
+        opticalTargetRightX_, xposArr[numWords - 1], opticalLastWordAdvance_, opticalInset);
+    for (uint16_t j = 1; j < numWords; ++j)
+      opticalGapCount += opticalGapsArr[j] != 0;
+    if (opticalGapCount == 0) opticalExtra = 0;
+  }
+  int opticalGapIndex = 0;
+  int opticalCumulative = 0;
+  const auto opticalShiftAt = [&](uint16_t i) {
+    if (opticalExtra > 0 && opticalGapsArr && opticalGapsArr[i]) {
+      opticalCumulative += OpticalLineCorrection::extraForSlot(
+          opticalGapIndex++, opticalGapCount, opticalExtra);
+    }
+    return opticalCumulative;
+  };
   const bool blockHasRuby = hasRuby();
 
   if (simpleRender) {
+    const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+    const auto optimizationFontIt = renderer.getFontMap().find(fontId);
+    const uint8_t optimizationPointSize = optimizationFontIt == renderer.getFontMap().end()
+                                              ? 16
+                                              : LetterSpacingOptimization::pointSizeForFont(
+                                                    optimizationFontIt->second, pairTable);
+    LetterSpacingOptimization::Accumulator optimizationAcc(
+        LetterSpacingOptimization::unpackThresholdCode(letterSpacingPx),
+        LetterSpacingOptimization::unpackBudget(letterSpacingPx),
+        pairTable, optimizationPointSize);
     for (uint16_t i = 0; i < numWords; ++i) {
       const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
       const bool alignTrailingShortHyphenInk =
           i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();
-      drawTrackedText(renderer, fontId, xposArr[i] + x, y, wordText(i), wordStyle(i), baseDir, letterSpacingPx,
-                      alignTrailingShortHyphenInk);
+      drawTrackedText(renderer, fontId, xposArr[i] + x + opticalShiftAt(i), y, wordText(i), wordStyle(i), baseDir, letterSpacingPx,
+                      alignTrailingShortHyphenInk, &optimizationAcc);
     }
     return;
   }
@@ -331,9 +531,19 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   // not once per word.
   const int rubyShift = getRubyShift(ascender);
 
+  const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+  const auto optimizationFontIt = renderer.getFontMap().find(fontId);
+  const uint8_t optimizationPointSize = optimizationFontIt == renderer.getFontMap().end()
+                                            ? 16
+                                            : LetterSpacingOptimization::pointSizeForFont(
+                                                  optimizationFontIt->second, pairTable);
+  LetterSpacingOptimization::Accumulator optimizationAcc(
+      LetterSpacingOptimization::unpackThresholdCode(letterSpacingPx),
+      LetterSpacingOptimization::unpackBudget(letterSpacingPx),
+      pairTable, optimizationPointSize);
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
-    const int wordX = xposArr[i] + x;
+    const int wordX = xposArr[i] + x + opticalShiftAt(i);
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(wordBidiDir(i));
     const uint8_t boundary = focusBoundary(i);
@@ -372,7 +582,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const bool alignTrailingShortHyphenInk =
           i + 1 == numWords && ParsedText::isShortHyphenEnabled() && ParsedText::isOpticalMarginEnabled();
       drawTrackedText(renderer, fontId, drawX, wordY, word, currentStyle, baseDir, letterSpacingPx,
-                      alignTrailingShortHyphenInk);
+                      alignTrailingShortHyphenInk, &optimizationAcc);
     }
 
     // Horizontal ruby text rendering
@@ -391,7 +601,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       int lineStartX = drawX;
       int lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir);
       const uint32_t cps = countCodepoints(word);
-      if (letterSpacingPx != 0 && cps > 1) {
+      if (letterSpacingPx == 1 && cps > 1) {
         lineWidth += static_cast<int>(cps - 1) * letterSpacingPx;
       }
 
@@ -406,7 +616,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         lineStartX += renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
         lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir);
         const uint32_t visibleCps = countCodepoints(visibleText);
-        if (letterSpacingPx != 0 && visibleCps > 1) {
+        if (letterSpacingPx == 1 && visibleCps > 1) {
           lineWidth += static_cast<int>(visibleCps - 1) * letterSpacingPx;
         }
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
@@ -452,8 +662,10 @@ bool TextBlock::serialize(HalFile& file) const {
   // CPHUN-260827-24: persist the actual tracking value. The bidi high bit only
   // records tracking presence and cannot distinguish +1 px from +2 px.
   serialization::writePod(file, letterSpacingPx);
+  serialization::writePod(file, opticalTargetRightX_);
+  serialization::writePod(file, opticalLastWordAdvance_);
   if (numWords > 0) {
-    const size_t size = arenaSize(numWords, focusPresent, textBytes);
+    const size_t size = arenaSize(numWords, focusPresent, textBytes, opticalTargetRightX_ != 0);
     if (file.write(arena.get(), size) != size) {
       LOG_ERR("TXB", "Serialization failed: arena write (%u bytes)", static_cast<uint32_t>(size));
       return false;
@@ -489,10 +701,14 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint8_t hasFocus;
   uint16_t textBytes;
   uint8_t cachedLetterSpacingPx = 0;
+  uint16_t cachedOpticalTargetX = 0;
+  uint16_t cachedOpticalAdvance = 0;
   serialization::readPod(file, wc);
   serialization::readPod(file, hasFocus);
   serialization::readPod(file, textBytes);
   serialization::readPod(file, cachedLetterSpacingPx);
+  serialization::readPod(file, cachedOpticalTargetX);
+  serialization::readPod(file, cachedOpticalAdvance);
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -513,9 +729,13 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   block->numWords = wc;
   block->textBytes = textBytes;
   block->focusPresent = hasFocus != 0;
+  block->opticalTargetRightX_ = cachedOpticalTargetX;
+  block->opticalLastWordAdvance_ = cachedOpticalAdvance;
+  if ((wc == 0 && cachedOpticalTargetX != 0) ||
+      (cachedOpticalTargetX != 0 && cachedOpticalAdvance == 0)) return nullptr;
 
   if (wc > 0) {
-    const size_t size = arenaSize(wc, block->focusPresent, textBytes);
+    const size_t size = arenaSize(wc, block->focusPresent, textBytes, block->opticalTargetRightX_ != 0);
     block->arena = makeUniqueNoThrow<uint8_t[]>(size);
     if (!block->arena) {
       LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));

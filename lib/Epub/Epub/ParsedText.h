@@ -64,6 +64,7 @@ class ParsedText {
   uint8_t hangingPunctuationLimitPx;
   bool fixedDialogueSpacing;
   uint16_t letterSpacingLimitPercent;
+  uint8_t letterSpacingOptimizationThresholdCode;
   bool isNaturalAlign;
   bool hasRtlWord;
   std::vector<std::string> reorderedWordsScratch;
@@ -115,7 +116,9 @@ class ParsedText {
         focusReadingEnabled(focusReadingEnabled),
         hangingPunctuationLimitPx(hangingPunctuationLimitPx),
         fixedDialogueSpacing(fixedDialogueSpacing),
-        letterSpacingLimitPercent(letterSpacingLimitPercent),
+        letterSpacingLimitPercent(static_cast<uint16_t>(letterSpacingLimitPercent & 0x1FFFu)),
+        letterSpacingOptimizationThresholdCode(
+            static_cast<uint8_t>((letterSpacingLimitPercent >> 13) & 0x07u)),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;

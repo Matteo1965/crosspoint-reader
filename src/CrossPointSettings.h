@@ -1,5 +1,6 @@
 #pragma once
 #include <ArduinoJson.h>
+#include <I18n.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
 
@@ -25,6 +26,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
+  // A/B/C physical-panel test; B (official Atkinson Absolute) is the default.
+  enum COVER_TEST_MODE : uint8_t { COVER_TEST_OVERLAY = 0, COVER_TEST_ABSOLUTE = 1,
+                                   COVER_TEST_FLOYD_OVERLAY = 2, COVER_TEST_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
     BLACK_AND_WHITE = 1,
@@ -200,6 +204,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
+  uint8_t coverTestMode = COVER_TEST_ABSOLUTE;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
   // Status bar settings
@@ -257,8 +262,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Keep the gap after a paragraph-opening en/em dash fixed and unbreakable.
   uint8_t fixedDialogueSpacing = 0;
   // 0 disables the post-layout +1 px letter-spacing correction; otherwise the
-  // value is the word-space stretch threshold in percent (180..360).
+  // value is the word-space stretch threshold in percent (280..550), using a non-linear UI scale.
   uint16_t letterSpacingLimitPercent = 0;
+  // Final semantics: 0=off, 4=on (fixed validated 100% profile).
+  // Legacy stored values 1..3 normalize to 4 on load.
+  uint8_t letterSpacingOptimization = 0;
+  // Bitter 12/14/16/18 normalized pair-score cutoff. 60 preserves the
+  // historical Bitter 16 pt 655-pair behavior.
+  uint8_t letterSpacingOptimizationThreshold = 60;
   // Minimum natural word-space width in justified text: 50..100 percent.
   uint8_t minimumSpacePercent = 100;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -267,12 +278,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
   uint8_t hungarianHyphenationExtended = 0;
+  // Hungarian Liang minPrefix/minSuffix preset: 0=1-1, 1=1-2, 2=2-2, 3=2-3, 4=3-3.
+  uint8_t hyphenationThreshold = 2;
   uint8_t softHyphenEnabled = 0;
 
   // Reader screen margin settings
-  static constexpr uint8_t SCREEN_MARGIN_MIN = 10;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 24;
-  static constexpr uint8_t SCREEN_MARGIN_STEP = 2;
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 25;
+  // UI uses the explicit non-linear list 5,10,12,14,16,18,20,25.
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
@@ -305,8 +319,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Word selector mode used by the hardware OpenDictionary action: 0=Dictionary, 1=Highlight, 2=Edit.
+  uint8_t wordSelectionMode = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Show the title and author read from inside each book rather than its
+  // filename. Users can disable this to make index rebuilds skip EPUB parsing.
+  uint8_t libraryUseMetadata = 1;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
@@ -330,8 +349,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Restore the saved on/off state after a normal boot or wake. Brightness and
   // warmth are always remembered even when this is disabled.
   uint8_t frontlightRestoreOnWake = 1;
-  // Language setting (Language enum index, default 0 = EN)
-  uint8_t language = 0;
+  // Hungarian Edition default UI language. Persisted as a stable BCP-47/code string.
+  uint8_t language = static_cast<uint8_t>(Language::HU);
   // Keyboard layouts the user can reach, using keyboard_layouts::ALL table bits.
   // 0 means "not configured", resolved to the UI language's layout plus English.
   // Any other value is an explicit choice and is used as-is: the language of the

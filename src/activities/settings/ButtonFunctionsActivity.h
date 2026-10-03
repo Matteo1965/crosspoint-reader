@@ -26,7 +26,8 @@ class ButtonFunctionsActivity final : public UiListActivity {
   static ReaderButtonGesture gestureForRow(int row);
   static const char* actionLabel(ReaderAction action);
   void rebuildRows();
-  void openActionPicker(int row);
+  void openCategoryPicker(int row);
+  void openActionPicker(int row, const ReaderAction* actions, size_t actionCount, const char* categoryTitle);
 
   OptionPopup optionPopup_;
   std::vector<std::string> labels_;

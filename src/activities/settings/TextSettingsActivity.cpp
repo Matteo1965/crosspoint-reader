@@ -24,10 +24,53 @@ namespace {
 // Tab labels for Font | Size | Layout | Style.
 constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
 
+constexpr uint16_t LETTER_SPACING_THRESHOLDS[] = {0, 550, 530, 500, 460, 410, 350, 280};
+
+int letterSpacingUiIndex(const uint16_t value) {
+  if (value == 0) return 0;
+  int best = 1;
+  uint16_t bestDiff = value > LETTER_SPACING_THRESHOLDS[1]
+                          ? value - LETTER_SPACING_THRESHOLDS[1]
+                          : LETTER_SPACING_THRESHOLDS[1] - value;
+  for (int i = 2; i < static_cast<int>(std::size(LETTER_SPACING_THRESHOLDS)); ++i) {
+    const uint16_t threshold = LETTER_SPACING_THRESHOLDS[i];
+    const uint16_t diff = value > threshold ? value - threshold : threshold - value;
+    if (diff < bestDiff) {
+      best = i;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+constexpr uint16_t CPHUN139_CORRECTION_VALUES[] = {0, 550, 460, 280};
+
+int correctionLevelIndex(const uint16_t storedValue) {
+  if (storedValue == 0) return 0;
+  const int oldIndex = letterSpacingUiIndex(storedValue);
+  if (oldIndex <= 2) return 1;
+  if (oldIndex <= 5) return 2;
+  return 3;
+}
+
+const char* correctionLevelLabel(const int index) {
+  const bool hu = I18N.getLanguage() == Language::HU;
+  constexpr const char* huLabels[] = {"KI", "Gyenge", "Közepes", "Erős"};
+  constexpr const char* enLabels[] = {"Off", "Weak", "Medium", "Strong"};
+  return (hu ? huLabels : enLabels)[std::clamp(index, 0, 3)];
+}
+
+const char* optimizationThresholdLabel(const uint8_t threshold) {
+  if (threshold == 0) return correctionLevelLabel(0);
+  if (threshold == 50) return correctionLevelLabel(1);
+  if (threshold == 60) return correctionLevelLabel(2);
+  return correctionLevelLabel(3);
+}
+
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {StrId::STR_LINE_SPACING, StrId::STR_EXTRA_SPACING, StrId::STR_ALIGNMENT,
                                          StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_HYPHENATION,
-                                        StrId::STR_EMBEDDED_STYLE, StrId::STR_TEXT_AA};
+                                        StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE, StrId::STR_TEXT_AA};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -82,11 +125,35 @@ std::string lineSpacingLabel(const uint8_t value) {
       return I18N.get(StrId::STR_NORMAL);
   }
 }
+
+const char* letterSpacingThresholdLabel(const uint8_t value) {
+  const bool hu = I18N.getLanguage() == Language::HU;
+  switch (value) {
+    case 0: return hu ? "KI" : "OFF";
+    case 50: return hu ? "Gyenge" : "Weak";
+    case 60: return hu ? "Közepes" : "Medium";
+    case 70: return hu ? "Erős" : "Strong";
+    default: return hu ? "Közepes" : "Medium";
+  }
+}
+
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
-constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
-constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
-constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
+constexpr uint8_t MARGIN_VALUES[] = {5, 10, 12, 14, 16, 18, 20, 25};
+
+int marginUiIndex(const uint8_t value) {
+  int best = 0;
+  int bestDistance = 1000;
+  for (int i = 0; i < static_cast<int>(std::size(MARGIN_VALUES)); ++i) {
+    const int delta = static_cast<int>(value) - static_cast<int>(MARGIN_VALUES[i]);
+    const int distance = delta < 0 ? -delta : delta;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
+}
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -114,6 +181,10 @@ void TextSettingsActivity::onEnter() {
   bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
   usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
   previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
+  // CPHUN-125: RoundedRaff needs more vertical room for the Layout list.
+  // Shorten only the preview pane; its caption, the tabs, and every following
+  // control consequently move up by 10 px while row sizes stay unchanged.
+  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF) previewHeight -= 16;
 
   fonts_.clear();
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
@@ -162,6 +233,10 @@ void TextSettingsActivity::rebuildRowItems() {
           item.label = I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Min. word spacing";
         } else if (i == static_cast<int>(LayoutRow::LetterSpacingCorrection)) {
           item.label = I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction";
+        } else if (i == static_cast<int>(LayoutRow::LetterSpacingOptimization)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Betűköz optimalizálás" : "Letter spacing optimization";
+        } else if (i == static_cast<int>(LayoutRow::LetterSpacingOptimizationThreshold)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Optimalizációs küszöb" : "Optimization threshold";
         } else if (i == static_cast<int>(LayoutRow::ScreenMargin)) {
           item.label = I18N.get(StrId::STR_SCREEN_MARGIN);
         } else if (i == static_cast<int>(LayoutRow::HangingPunctuation)) {
@@ -175,7 +250,9 @@ void TextSettingsActivity::rebuildRowItems() {
         }
         break;
       case Tab::Style:
-        if (i == static_cast<int>(StyleRow::SoftHyphen)) {
+        if (i == static_cast<int>(StyleRow::HyphenationThreshold)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Elválasztási küszöb" : "Hyphenation threshold";
+        } else if (i == static_cast<int>(StyleRow::SoftHyphen)) {
           item.label = I18N.getLanguage() == Language::HU ? "Beágyazott elválasztás" : "Embedded hyphenation";
         } else {
           item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
@@ -264,8 +341,14 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   // directly) and above the caption band + button hints.
   const int tabTop = afterHeader + previewHeight;
   const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
+
+  // The Layout tab never renders the "not in preview" caption. Let its list
+  // extend all the way down to the top edge of the physical button-hint band.
+  // Other tabs retain the legacy caption reserve.
+  const int contentBottomReserve =
+      tab_ == Tab::Layout ? metrics_.buttonHintsHeight : bottomReserved + captionHeight;
   screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(tabTop), 0, static_cast<int16_t>(bottomReserved + captionHeight), 0});
+      fui::Insets{static_cast<int16_t>(tabTop), 0, static_cast<int16_t>(contentBottomReserve), 0});
 
   buildTabBar(screen);
 
@@ -291,7 +374,18 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       default:
         break;
     }
-    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::LetterSpacingOptimizationThreshold)) {
+      // Stable literal: avoids the English Layout crash seen when the longer
+      // label caused the UI to consume a stale mutable-string value pointer.
+      rowItems_[i].value = letterSpacingThresholdLabel(SETTINGS.letterSpacingOptimizationThreshold);
+    } else {
+      rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    }
+    const bool nudgeOffRight =
+        I18N.getLanguage() == Language::HU &&
+        (tab_ == Tab::Layout || tab_ == Tab::Style) &&
+        rowValues_[i] == tr(STR_STATE_OFF);
+    rowItems_[i].valueOffsetX = nudgeOffRight ? 4 : 0;
   }
 
   fui::ListProps props;
@@ -302,7 +396,10 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   props.valueInset = 8;               // air between the value and the row edge
   const bool compactLyraLayout = tab_ == Tab::Layout &&
       (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::LYRA_3_COVERS);
-  const int16_t textSettingsRowHeight = compactLyraLayout ? 36 : 40;
+  const bool compactRoundedRaffRows =
+      SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF;
+  const int16_t textSettingsRowHeight =
+      (compactLyraLayout || compactRoundedRaffRows) ? 36 : 40;
   props.rowHeight = textSettingsRowHeight;
   props.rowGap = 0;
   // Titles match the value's font size (smallText) so both sides of a row
@@ -324,7 +421,9 @@ const char* TextSettingsActivity::confirmLabelText() const {
       // Layout rows use pickers except no remaining toggle-only row here.
       return tr(STR_SELECT);
     case Tab::Style:
-      return tr(STR_TOGGLE);
+      return ringPos() > 0 && static_cast<StyleRow>(ringPos() - 1) == StyleRow::HyphenationThreshold
+                 ? tr(STR_SELECT)
+                 : tr(STR_TOGGLE);
     default:
       return tr(STR_SELECT);
   }
@@ -493,14 +592,67 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       break;
     }
     case LayoutRow::LetterSpacingCorrection: {
-      const char* options[] = {tr(STR_STATE_OFF), "10%", "20%", "30%", "40%", "50%", "60%", "70%"};
-      const uint16_t v = SETTINGS.letterSpacingLimitPercent;
-      const int cur = v == 0 ? 0 : std::clamp<int>((260 - std::clamp<int>(v, 120, 240)) / 20, 1, 7);
-      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction",
-                        options, 8, cur, [](int idx) {
-                          SETTINGS.letterSpacingLimitPercent = idx == 0 ? 0 : static_cast<uint16_t>(260 - idx * 20);
-                          SETTINGS.saveToFile();
-                        });
+      const bool hu = I18N.getLanguage() == Language::HU;
+      const char* options[] = {
+          hu ? "KI" : "OFF",
+          hu ? "Gyenge" : "Weak",
+          hu ? "Közepes" : "Medium",
+          hu ? "Erős" : "Strong",
+      };
+      int cur = 0;
+      switch (SETTINGS.letterSpacingLimitPercent) {
+        case 0: cur = 0; break;
+        case 10: cur = 1; break;
+        case 40: cur = 2; break;
+        case 70: cur = 3; break;
+        default: cur = 0; break;
+      }
+      optionPopup_.show(
+          hu ? "Betűköz korrekció" : "Letter spacing correction",
+          options, 4, cur, [](int idx) {
+            static constexpr uint16_t values[] = {0, 10, 40, 70};
+            if (idx >= 0 && idx < 4) {
+              SETTINGS.letterSpacingLimitPercent = values[idx];
+              SETTINGS.saveToFile();
+            }
+          });
+      requestUpdate();
+      break;
+    }
+    case LayoutRow::LetterSpacingOptimization:
+      if (SETTINGS.letterSpacingLimitPercent == 0) {
+        requestUpdate();
+        break;
+      }
+      SETTINGS.letterSpacingOptimization = SETTINGS.letterSpacingOptimization ? 0 : 4;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
+    case LayoutRow::LetterSpacingOptimizationThreshold: {
+      const bool hu = I18N.getLanguage() == Language::HU;
+      const char* options[] = {
+          hu ? "KI" : "OFF",
+          hu ? "Gyenge" : "Weak",
+          hu ? "Közepes" : "Medium",
+          hu ? "Erős" : "Strong",
+      };
+      int cur = 2;
+      switch (SETTINGS.letterSpacingOptimizationThreshold) {
+        case 0: cur = 0; break;
+        case 50: cur = 1; break;
+        case 60: cur = 2; break;
+        case 70: cur = 3; break;
+        default: cur = 2; break;
+      }
+      optionPopup_.show(
+          hu ? "Optimalizációs küszöb" : "Optimization threshold",
+          options, 4, cur, [](int idx) {
+            static constexpr uint8_t values[] = {0, 50, 60, 70};
+            if (idx >= 0 && idx < 4) {
+              SETTINGS.letterSpacingOptimizationThreshold = values[idx];
+              SETTINGS.saveToFile();
+            }
+          });
       requestUpdate();
       break;
     }
@@ -516,12 +668,14 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       break;
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
-      options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
-      for (int m = MARGIN_MIN; m <= MARGIN_MAX; m += MARGIN_STEP) options.push_back(std::to_string(m));
-      const int cur = (std::clamp<int>(SETTINGS.screenMargin, MARGIN_MIN, MARGIN_MAX) - MARGIN_MIN) / MARGIN_STEP;
+      options.reserve(std::size(MARGIN_VALUES));
+      for (const uint8_t m : MARGIN_VALUES) options.push_back(std::to_string(m));
+      const int cur = marginUiIndex(SETTINGS.screenMargin);
       optionPopup_.show(StrId::STR_SCREEN_MARGIN, options, cur, [](int idx) {
-        SETTINGS.screenMargin = static_cast<uint8_t>(MARGIN_MIN + idx * MARGIN_STEP);
-        SETTINGS.saveToFile();
+        if (idx >= 0 && idx < static_cast<int>(std::size(MARGIN_VALUES))) {
+          SETTINGS.screenMargin = MARGIN_VALUES[idx];
+          SETTINGS.saveToFile();
+        }
       });
       requestUpdate();
       break;
@@ -546,11 +700,19 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::MinimumSpace:
       return std::to_string(SETTINGS.minimumSpacePercent) + "%";
     case LayoutRow::LetterSpacingCorrection: {
-      const uint16_t v = SETTINGS.letterSpacingLimitPercent;
-      if (v == 0) return tr(STR_STATE_OFF);
-      const int displayPercent = (260 - std::clamp<int>(v, 120, 240)) / 2;
-      return std::to_string(displayPercent) + "%";
+      const bool hu = I18N.getLanguage() == Language::HU;
+      switch (SETTINGS.letterSpacingLimitPercent) {
+        case 0: return hu ? "KI" : "OFF";
+        case 10: return hu ? "Gyenge" : "Weak";
+        case 40: return hu ? "Közepes" : "Medium";
+        case 70: return hu ? "Erős" : "Strong";
+        default: return hu ? "KI" : "OFF";
+      }
     }
+    case LayoutRow::LetterSpacingOptimization:
+      return SETTINGS.letterSpacingOptimization ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case LayoutRow::LetterSpacingOptimizationThreshold:
+      return optimizationThresholdLabel(SETTINGS.letterSpacingOptimizationThreshold);
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::HangingPunctuation:
@@ -583,6 +745,17 @@ void TextSettingsActivity::confirmStyleRow(int row) {
       requestUpdate();
       return;
     }
+    case StyleRow::HyphenationThreshold: {
+      const char* options[] = {"1-1", "1-2", "2-2", "2-3", "3-3"};
+      const int cur = std::min<int>(SETTINGS.hyphenationThreshold, 4);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Elválasztási küszöb" : "Hyphenation threshold",
+                        options, 5, cur, [](int idx) {
+                          SETTINGS.hyphenationThreshold = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
+    }
     case StyleRow::SoftHyphen:
       SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled;
       break;
@@ -609,6 +782,10 @@ std::string TextSettingsActivity::styleValueText(int row) const {
       return SETTINGS.hungarianHyphenationExtended
                  ? (I18N.getLanguage() == Language::HU ? "Kiterjesztett magyar" : "Extended Hungarian")
                  : (I18N.getLanguage() == Language::HU ? "Alap" : "Basic");
+    case StyleRow::HyphenationThreshold: {
+      static constexpr const char* labels[] = {"1-1", "1-2", "2-2", "2-3", "3-3"};
+      return labels[std::min<uint8_t>(SETTINGS.hyphenationThreshold, 4)];
+    }
     case StyleRow::SoftHyphen:
       return SETTINGS.softHyphenEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::EmbeddedStyle:
@@ -626,7 +803,8 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (ringPos() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
-  return row == StyleRow::Hyphenation || row == StyleRow::SoftHyphen || row == StyleRow::EmbeddedStyle ||
+  return row == StyleRow::Hyphenation || row == StyleRow::HyphenationThreshold || row == StyleRow::SoftHyphen ||
+         row == StyleRow::EmbeddedStyle ||
          row == StyleRow::AntiAliasing;
 }
 

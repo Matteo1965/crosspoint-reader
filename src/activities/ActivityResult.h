@@ -21,6 +21,13 @@ struct DictionaryHeadwordResult {
   std::string headword;
 };
 
+struct HighlightResult {
+  int spineIndex = 0;
+  uint32_t visibleTextOffset = 0;
+  uint16_t length = 0;
+  std::string text;
+};
+
 struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
@@ -67,14 +74,18 @@ struct FootnoteResult {
   std::string href;
 };
 
+struct FootnotePopupNavResult {
+  int8_t delta = 0;  // -1 = previous, +1 = next
+};
+
 struct FilePathResult {
   std::string path;
 };
 
 using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, DictionaryHeadwordResult, MenuResult, ChapterResult,
-                 PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                 FilePathResult>;
+    std::variant<std::monostate, WifiResult, KeyboardResult, DictionaryHeadwordResult, HighlightResult, MenuResult,
+                 ChapterResult, PercentResult, IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult,
+                 FootnoteResult, FootnotePopupNavResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

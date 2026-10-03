@@ -17,7 +17,7 @@
 namespace {
 constexpr size_t MAX_LINE_BYTES = 191;
 constexpr int SIDE_PADDING = 20;
-constexpr int METADATA_VALUE_X = 182;
+constexpr int METADATA_VALUE_X = 180;
 
 std::string trimCopy(std::string value) {
   auto isWs = [](unsigned char c) { return std::isspace(c) != 0; };
@@ -273,8 +273,8 @@ std::string formatFileSizeMb(const uint64_t bytes) {
 
 std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer, const int maxWidth) {
   if (value.empty()) return value;
-  const int spaceWidth = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
-  const int ellipsisWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "…", EpdFontFamily::REGULAR);
+  const int spaceWidth = renderer.getSpaceWidth(NOTOSANS_14_FONT_ID, EpdFontFamily::REGULAR);
+  const int ellipsisWidth = renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, "…", EpdFontFamily::REGULAR);
 
   std::vector<std::string> words;
   size_t pos = 0;
@@ -290,7 +290,7 @@ std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer,
   int lineWidth = 0;
   size_t secondLineStart = std::string::npos;
   for (size_t i = 0; i < words.size(); ++i) {
-    const int wordWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, words[i].c_str(), EpdFontFamily::REGULAR);
+    const int wordWidth = renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, words[i].c_str(), EpdFontFamily::REGULAR);
     int gap = out.empty() ? 0 : spaceWidth;
     if (lineWidth + gap + wordWidth > maxWidth) {
       if (line == 0) {
@@ -302,7 +302,7 @@ std::string limitTagsToTwoLines(const std::string& value, GfxRenderer& renderer,
         while (!out.empty()) {
           const size_t tailStart = secondLineStart == std::string::npos ? 0 : secondLineStart;
           const std::string tail = out.substr(std::min(tailStart, out.size()));
-          const int tailWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, tail.c_str(), EpdFontFamily::REGULAR);
+          const int tailWidth = renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, tail.c_str(), EpdFontFamily::REGULAR);
           if (tailWidth + ellipsisWidth <= maxWidth) break;
           while (!out.empty() && out.back() == ' ') out.pop_back();
           if (out.empty()) break;
@@ -328,7 +328,7 @@ BookInfoActivity::BookInfoActivity(GfxRenderer& renderer, MappedInputManager& ma
 
 void BookInfoActivity::onEnter() {
   Activity::onEnter();
-  renderer.setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID);
+  renderer.setMissingGlyphFallbackFont(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID);
   if (epub_) epub_->readBookInfo(info_);
   buildText();
   wrapText();
@@ -405,7 +405,8 @@ int BookInfoActivity::measureSpan(const char* text, size_t len) const {
   len = std::min(len, MAX_LINE_BYTES);
   memcpy(buf, text, len);
   buf[len] = '\0';
-  return renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, buf, EpdFontFamily::REGULAR);
+  return renderer.getTextAdvanceX(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID, buf,
+                                  EpdFontFamily::REGULAR);
 }
 
 void BookInfoActivity::wrapText() {
@@ -420,7 +421,8 @@ void BookInfoActivity::wrapText() {
   const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
   const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
-  const int lineHeight = renderer.getLineHeight(NOTOSERIF_14_FONT_ID);
+  const int lineHeight = renderer.getLineHeight(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID
+                                                                    : NOTOSERIF_14_FONT_ID);
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
                       metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
@@ -710,7 +712,8 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
   const int lastLine = currentPage_ + 1 < static_cast<int>(pageStarts_.size())
                            ? pageStarts_[currentPage_ + 1]
                            : static_cast<int>(lines_.size());
-  const int lineHeight = renderer.getLineHeight(NOTOSERIF_14_FONT_ID);
+  const int lineHeight = renderer.getLineHeight(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID
+                                                                    : NOTOSERIF_14_FONT_ID);
 
   for (int i = firstLine; i < lastLine; ++i) {
     const Line& line = lines_[i];
@@ -721,13 +724,13 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
         const size_t labelLen = std::min(static_cast<size_t>(line.metadataLabelLen), MAX_LINE_BYTES);
         memcpy(labelBuf, text_.c_str() + line.metadataLabelStart, labelLen);
         labelBuf[labelLen] = '\0';
-        renderer.drawText(NOTOSERIF_14_FONT_ID, x, y, labelBuf, true, EpdFontFamily::REGULAR);
+        renderer.drawText(NOTOSANS_14_FONT_ID, x, y, labelBuf, true, EpdFontFamily::REGULAR);
       }
       if (line.len > 0) {
         const size_t valueLen = std::min(static_cast<size_t>(line.len), MAX_LINE_BYTES);
         memcpy(buf, text_.c_str() + line.start, valueLen);
         buf[valueLen] = '\0';
-        renderer.drawText(NOTOSERIF_14_FONT_ID, METADATA_VALUE_X, y, buf, true, EpdFontFamily::REGULAR);
+        renderer.drawText(NOTOSANS_14_FONT_ID, METADATA_VALUE_X, y, buf, true, EpdFontFamily::REGULAR);
       }
       y += lineHeight;
       if (line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
@@ -826,7 +829,7 @@ void BookInfoActivity::render(RenderLock&&) {
 
   const char* title = page_ == Page::Description ? "Fülszöveg" : "Metaadatok";
   const int headerY = contentY + metrics.topPadding;
-  GUI.drawHeader(renderer, Rect{contentX, headerY, contentWidth, metrics.headerHeight}, title);
+  GUI.drawHeader(renderer, Rect{contentX, headerY, contentWidth, metrics.headerHeight}, "");
 
   // BookInfo pages intentionally omit the standard header battery indicator.
   constexpr int headerStatusClearWidth = 112;
@@ -835,6 +838,9 @@ void BookInfoActivity::render(RenderLock&&) {
   if (clearWidth > 0 && metrics.headerHeight > 1) {
     renderer.fillRect(clearX, headerY, clearWidth, metrics.headerHeight - 1, false);
   }
+
+  const int titleY = headerY + (metrics.headerHeight - renderer.getLineHeight(NOTOSANS_16_FONT_ID)) / 2;
+  renderer.drawText(NOTOSANS_16_FONT_ID, contentX + SIDE_PADDING, titleY, title, true, EpdFontFamily::REGULAR);
 
   if (totalPages_ > 1) {
     char counter[16];

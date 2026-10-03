@@ -129,6 +129,7 @@ class KeyboardEntryActivity : public Activity {
 
   void insertUtf8(const char* out);
   bool backspaceUtf8();
+  bool deleteForwardUtf8();
   static size_t utf8Prev(const std::string& s, size_t pos);
   static size_t utf8Next(const std::string& s, size_t pos);
 

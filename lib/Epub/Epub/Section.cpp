@@ -45,7 +45,14 @@ namespace {
 //      with no bottom inset refuse to draw.
 // v43: TextBlock arena stores one cached BidiBaseDir byte per word. This avoids
 //      repeating Unicode direction detection on every page redraw.
-constexpr uint8_t SECTION_FILE_VERSION = 56;
+// CPHUN-159: HTML hidden attribute changes section layout.
+// CPHUN-163: glyph fallback changes line widths and pagination.
+// CPHUN-164: guarded optimization and five-pixel ink-edge positions.
+// CPHUN-165: cached optical target/gaps and per-line render-time closure.
+// CPHUN-167: invalidate saved lines after full-word ink correction.
+// CPHUN-168: painted-pixel ink closure; normal exclusive right margin.
+// CPHUN-169: 8px optical closure, production without TXT diagnostics.
+constexpr uint8_t SECTION_FILE_VERSION = 69;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -63,7 +70,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // only fails (noisily, via the block-decode error path) when a page is loaded.
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
-constexpr uint32_t HEADER_SIZE = 46;
+constexpr uint32_t HEADER_SIZE = 48;
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -110,6 +117,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphAlignment) +
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
                                    sizeof(spec.hyphenationEnabled) + sizeof(spec.hungarianHyphenationExtended) +
+                                   sizeof(spec.hungarianMinPrefix) + sizeof(spec.hungarianMinSuffix) +
                                    sizeof(spec.hangingPunctuationLimitPx) + sizeof(spec.shortHyphen) +
                                    sizeof(spec.fixedDialogueSpacing) +
                                    sizeof(spec.minimumSpacePercent) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
@@ -127,6 +135,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.viewportHeight);
   serialization::writePod(file, spec.hyphenationEnabled);
   serialization::writePod(file, spec.hungarianHyphenationExtended);
+  serialization::writePod(file, spec.hungarianMinPrefix);
+  serialization::writePod(file, spec.hungarianMinSuffix);
   serialization::writePod(file, spec.hangingPunctuationLimitPx);
   serialization::writePod(file, spec.shortHyphen);
   serialization::writePod(file, spec.fixedDialogueSpacing);
@@ -169,6 +179,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
     bool fileHungarianHyphenationExtended;
+    uint8_t fileHungarianMinPrefix;
+    uint8_t fileHungarianMinSuffix;
     uint8_t fileHangingPunctuationLimitPx;
     bool fileShortHyphen;
     bool fileFixedDialogueSpacing;
@@ -185,6 +197,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileViewportHeight);
     serialization::readPod(file, fileHyphenationEnabled);
     serialization::readPod(file, fileHungarianHyphenationExtended);
+    serialization::readPod(file, fileHungarianMinPrefix);
+    serialization::readPod(file, fileHungarianMinSuffix);
     serialization::readPod(file, fileHangingPunctuationLimitPx);
     serialization::readPod(file, fileShortHyphen);
     serialization::readPod(file, fileFixedDialogueSpacing);
@@ -199,12 +213,24 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
         spec.hyphenationEnabled != fileHyphenationEnabled ||
         spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
+        spec.hungarianMinPrefix != fileHungarianMinPrefix || spec.hungarianMinSuffix != fileHungarianMinSuffix ||
         spec.hangingPunctuationLimitPx != fileHangingPunctuationLimitPx || spec.shortHyphen != fileShortHyphen ||
         spec.fixedDialogueSpacing != fileFixedDialogueSpacing || spec.minimumSpacePercent != fileMinimumSpacePercent ||
         spec.letterSpacingLimitPercent != fileLetterSpacingLimitPercent || spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled) {
       file.close();
-      LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
+      LOG_ERR("SCT",
+              "CPHUN-150 cache mismatch: font=%d/%d viewport=%ux%u/%ux%u "
+              "tracking=%u/%u margins=%u/%u line=%u/%u",
+              fileFontId, spec.fontId,
+              static_cast<unsigned>(fileViewportWidth), static_cast<unsigned>(fileViewportHeight),
+              static_cast<unsigned>(spec.viewportWidth), static_cast<unsigned>(spec.viewportHeight),
+              static_cast<unsigned>(fileLetterSpacingLimitPercent),
+              static_cast<unsigned>(spec.letterSpacingLimitPercent),
+              static_cast<unsigned>(fileHangingPunctuationLimitPx),
+              static_cast<unsigned>(spec.hangingPunctuationLimitPx),
+              static_cast<unsigned>(fileExtraParagraphSpacing),
+              static_cast<unsigned>(spec.extraParagraphSpacing));
       clearCache();
       return false;
     }
@@ -462,6 +488,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ParsedText::setOpticalMarginEnabled(spec.hangingPunctuationLimitPx > 0);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);
+  Hyphenator::setHungarianMinima(spec.hungarianMinPrefix, spec.hungarianMinSuffix);
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {

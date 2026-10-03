@@ -9,24 +9,76 @@
 namespace fui = freeink::ui;
 
 namespace {
-constexpr ReaderAction ACTIONS[] = {
+constexpr ReaderAction READING_ACTIONS[] = {
     ReaderAction::None,
     ReaderAction::PreviousPage,
     ReaderAction::NextPage,
-    ReaderAction::OpenReaderMenu,
-    ReaderAction::OpenTextSettings,
-    ReaderAction::OpenDictionary,
-    ReaderAction::GoHome,
-    ReaderAction::ScreenMarginDown,
-    ReaderAction::ScreenMarginUp,
-    ReaderAction::ToggleBookmark,
-    ReaderAction::OpenBookmarks,
     ReaderAction::ReaderBack,
+    ReaderAction::OpenReaderMenu,
+    ReaderAction::OpenBookmarks,
+    ReaderAction::ToggleBookmark,
+    ReaderAction::OpenChapterSelection,
+    ReaderAction::OpenDictionary,
+    ReaderAction::OpenManualDictionarySearch,
+    ReaderAction::OpenHighlight,
+};
+
+constexpr ReaderAction TEXT_ACTIONS[] = {
+    ReaderAction::OpenTextSettings,
     ReaderAction::FontSizeDown,
     ReaderAction::FontSizeUp,
-    ReaderAction::OpenSettings,
-    ReaderAction::OpenChapterSelection,
+    ReaderAction::LineSpacingPrevious,
+    ReaderAction::LineSpacingNext,
+    ReaderAction::LetterSpacingCorrectionDown,
+    ReaderAction::LetterSpacingCorrectionUp,
+    ReaderAction::LetterSpacingOptimizationDown,
+    ReaderAction::LetterSpacingOptimizationUp,
 };
+
+constexpr ReaderAction LAYOUT_ACTIONS[] = {
+    ReaderAction::ExtraParagraphSpacingDown,
+    ReaderAction::ExtraParagraphSpacingUp,
+    ReaderAction::MinimumSpaceDown,
+    ReaderAction::MinimumSpaceUp,
+    ReaderAction::ScreenMarginDown,
+    ReaderAction::ScreenMarginUp,
+};
+
+constexpr ReaderAction TEST_ACTIONS[] = {
+    ReaderAction::TestLetterSpacingCorrectionMinMax,
+    ReaderAction::TestLetterSpacingOptimizationOff100,
+    ReaderAction::TestLineSpacingMinMax,
+    ReaderAction::TestExtraParagraphSpacingOffMax,
+    ReaderAction::TestMinimumSpaceMinMax,
+};
+
+constexpr ReaderAction SYSTEM_ACTIONS[] = {
+    ReaderAction::ToggleNightMode,
+    ReaderAction::Screenshot,
+    ReaderAction::GoHome,
+    ReaderAction::OpenSettings,
+};
+
+struct ActionCategory {
+  const char* hu;
+  const char* en;
+  const ReaderAction* actions;
+  size_t count;
+};
+
+constexpr ActionCategory ACTION_CATEGORIES[] = {
+    {"Olvasás", "Reading", READING_ACTIONS, std::size(READING_ACTIONS)},
+    {"Szöveg", "Text", TEXT_ACTIONS, std::size(TEXT_ACTIONS)},
+    {"Elrendezés", "Layout", LAYOUT_ACTIONS, std::size(LAYOUT_ACTIONS)},
+    {"Teszt funkciók", "Test functions", TEST_ACTIONS, std::size(TEST_ACTIONS)},
+    {"Rendszer", "System", SYSTEM_ACTIONS, std::size(SYSTEM_ACTIONS)},
+};
+
+static_assert(std::size(READING_ACTIONS) <= 16);
+static_assert(std::size(TEXT_ACTIONS) <= 16);
+static_assert(std::size(LAYOUT_ACTIONS) <= 16);
+static_assert(std::size(TEST_ACTIONS) <= 16);
+static_assert(std::size(SYSTEM_ACTIONS) <= 16);
 
 constexpr int kMappingCount = 12;
 constexpr int kReferenceWidth = 480;
@@ -66,10 +118,10 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
     case ReaderAction::NextPage: return hu ? "Következő oldal" : "Next page";
     case ReaderAction::PreviousChapter: return hu ? "Előző fejezet" : "Previous chapter";
     case ReaderAction::NextChapter: return hu ? "Következő fejezet" : "Next chapter";
-    case ReaderAction::OpenReaderMenu: return hu ? "Olvasó menü" : "Reader menu";
-    case ReaderAction::OpenDictionary: return hu ? "Keresés / Szótár" : "Search / Dictionary";
+    case ReaderAction::OpenReaderMenu: return hu ? "Olvasómenü" : "Reader menu";
+    case ReaderAction::OpenDictionary: return hu ? "Szótár" : "Search / Dictionary";
     case ReaderAction::OpenBookmarks: return hu ? "Könyvjelzők" : "Bookmarks";
-    case ReaderAction::ToggleBookmark: return hu ? "Könyvjelző hozzáadása" : "Add bookmark";
+    case ReaderAction::ToggleBookmark: return hu ? "Könyvjelző jelölés" : "Add bookmark";
     case ReaderAction::OpenChapterSelection: return hu ? "Fejezetválasztás" : "Chapter selection";
     case ReaderAction::OpenGoToPercent: return hu ? "Ugrás %-ra" : "Go to %";
     case ReaderAction::OpenTextSettings: return hu ? "Szövegbeállítások" : "Text settings";
@@ -81,19 +133,34 @@ const char* ButtonFunctionsActivity::actionLabel(const ReaderAction action) {
     case ReaderAction::FontPrevious: return hu ? "Előző betű" : "Previous font";
     case ReaderAction::FontSizeUp: return hu ? "Betűméret +" : "Font size +";
     case ReaderAction::FontSizeDown: return hu ? "Betűméret −" : "Font size -";
-    case ReaderAction::LineSpacingNext: return hu ? "Soremelés +" : "Line spacing +";
-    case ReaderAction::LineSpacingPrevious: return hu ? "Soremelés −" : "Line spacing -";
+    case ReaderAction::LineSpacingNext: return hu ? "Sorköz +" : "Line spacing +";
+    case ReaderAction::LineSpacingPrevious: return hu ? "Sorköz −" : "Line spacing -";
     case ReaderAction::ScreenMarginUp: return hu ? "Margó növelése" : "Increase margin";
     case ReaderAction::ScreenMarginDown: return hu ? "Margó csökkentése" : "Decrease margin";
-    case ReaderAction::ToggleNightMode: return hu ? "Éjszakai mód KI/BE" : "Night mode on/off";
+    case ReaderAction::ToggleNightMode: return hu ? "Sötét mód KI/BE" : "Night mode on/off";
     case ReaderAction::ToggleHyphenation: return hu ? "Elválasztás KI/BE" : "Hyphenation on/off";
     case ReaderAction::ToggleSoftHyphen: return hu ? "Kiterjesztett elválasztás KI/BE" : "Extended hyphenation on/off";
     case ReaderAction::ToggleParagraphAlignment: return hu ? "Igazítás váltás" : "Toggle alignment";
     case ReaderAction::RotateOrientation: return hu ? "Képernyő forgatás" : "Rotate screen";
     case ReaderAction::ForceRefresh: return hu ? "Képernyőfrissítés" : "Screen refresh";
     case ReaderAction::Screenshot: return hu ? "Képernyőkép" : "Screenshot";
-    case ReaderAction::GoHome: return hu ? "Kezdőképernyő" : "Home";
+    case ReaderAction::GoHome: return hu ? "Főoldal" : "Home";
     case ReaderAction::OpenSettings: return hu ? "Beállítások" : "Settings";
+    case ReaderAction::LetterSpacingCorrectionUp: return hu ? "Betűköz korrekció növelése" : "Letter spacing correction +";
+    case ReaderAction::LetterSpacingCorrectionDown: return hu ? "Betűköz korrekció csökkentése" : "Letter spacing correction -";
+    case ReaderAction::LetterSpacingOptimizationUp: return hu ? "Betűköz optimalizálás növelése" : "Letter spacing optimization +";
+    case ReaderAction::LetterSpacingOptimizationDown: return hu ? "Betűköz optimalizálás csökkentése" : "Letter spacing optimization -";
+    case ReaderAction::ExtraParagraphSpacingUp: return hu ? "Extra bekezdésköz növelése" : "Extra paragraph spacing +";
+    case ReaderAction::ExtraParagraphSpacingDown: return hu ? "Extra bekezdésköz csökkentése" : "Extra paragraph spacing -";
+    case ReaderAction::MinimumSpaceUp: return hu ? "Min. szóköz növelése" : "Minimum word spacing +";
+    case ReaderAction::MinimumSpaceDown: return hu ? "Min. szóköz csökkentése" : "Minimum word spacing -";
+    case ReaderAction::OpenHighlight: return hu ? "Megjelölés" : "Mark word";
+    case ReaderAction::OpenManualDictionarySearch: return hu ? "Kézi keresés" : "Manual search";
+    case ReaderAction::TestLetterSpacingCorrectionMinMax: return hu ? "Betűköz korr. MIN/MAX" : "Letter correction MIN/MAX";
+    case ReaderAction::TestLetterSpacingOptimizationOff100: return hu ? "Betűköz opt. KI/100%" : "Letter optimization OFF/100%";
+    case ReaderAction::TestLineSpacingMinMax: return hu ? "Sorköz MIN/MAX" : "Line spacing MIN/MAX";
+    case ReaderAction::TestExtraParagraphSpacingOffMax: return hu ? "Extra bekezdésköz KI/MAX" : "Paragraph spacing OFF/MAX";
+    case ReaderAction::TestMinimumSpaceMinMax: return hu ? "Min. szóköz MIN/MAX" : "Word spacing MIN/MAX";
     default: return hu ? "Nincs" : "None";
   }
 }
@@ -185,27 +252,49 @@ bool ButtonFunctionsActivity::handleCustomInput() {
 
 void ButtonFunctionsActivity::activateIndex(const int index) {
   if (index < 0 || index >= kMappingCount) return;
-  openActionPicker(index);
+  openCategoryPicker(index);
 }
 
-void ButtonFunctionsActivity::openActionPicker(const int row) {
-  const ReaderAction selected = READER_BUTTONS.get(buttonForRow(row), gestureForRow(row));
-  int current = 0;
+void ButtonFunctionsActivity::openCategoryPicker(const int row) {
+  const bool hu = I18N.getLanguage() == Language::HU;
   std::vector<std::string> options;
-  options.reserve(std::size(ACTIONS));
-  for (int i = 0; i < static_cast<int>(std::size(ACTIONS)); ++i) {
-    options.emplace_back(actionLabel(ACTIONS[i]));
-    if (ACTIONS[i] == selected) current = i;
-  }
+  options.reserve(std::size(ACTION_CATEGORIES));
+  for (const auto& category : ACTION_CATEGORIES) options.emplace_back(hu ? category.hu : category.en);
 
   std::vector<const char*> optionPtrs;
   optionPtrs.reserve(options.size());
   for (const auto& option : options) optionPtrs.push_back(option.c_str());
 
   const std::string title = labels_[row];
+  optionPopup_.show(title.c_str(), optionPtrs.data(), static_cast<int>(optionPtrs.size()), 0,
+                    [this, row, hu](int idx) {
+                      if (idx < 0 || idx >= static_cast<int>(std::size(ACTION_CATEGORIES))) return;
+                      const auto& category = ACTION_CATEGORIES[idx];
+                      openActionPicker(row, category.actions, category.count, hu ? category.hu : category.en);
+                    });
+  requestUpdate();
+}
+
+void ButtonFunctionsActivity::openActionPicker(const int row, const ReaderAction* actions, const size_t actionCount,
+                                               const char* categoryTitle) {
+  const ReaderAction selected = READER_BUTTONS.get(buttonForRow(row), gestureForRow(row));
+  int current = 0;
+  std::vector<std::string> options;
+  options.reserve(actionCount);
+  for (size_t i = 0; i < actionCount; ++i) {
+    options.emplace_back(actionLabel(actions[i]));
+    if (actions[i] == selected) current = static_cast<int>(i);
+  }
+
+  std::vector<const char*> optionPtrs;
+  optionPtrs.reserve(options.size());
+  for (const auto& option : options) optionPtrs.push_back(option.c_str());
+
+  const std::string title = labels_[row] + " - " + categoryTitle;
   optionPopup_.show(title.c_str(), optionPtrs.data(), static_cast<int>(optionPtrs.size()), current,
-                    [this, row](int idx) {
-                      READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), ACTIONS[idx]);
+                    [this, row, actions, actionCount](int idx) {
+                      if (idx < 0 || idx >= static_cast<int>(actionCount)) return;
+                      READER_BUTTONS.set(buttonForRow(row), gestureForRow(row), actions[idx]);
                       READER_BUTTONS.saveToFile();
                       rebuildRows();
                     });

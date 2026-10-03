@@ -100,6 +100,23 @@ class SettingsActivity final : public UiTabListActivity {
   int tabCount() const override { return categoryCount; }
   int activeTab() const override { return selectedCategoryIndex; }
   const char* tabLabel(int index) const override { return I18N.get(categoryNames[index]); }
+  int tabWidthPercent(int index) const override {
+    if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;
+    static constexpr int widths[categoryCount] = {23, 23, 24, 30};
+    return index >= 0 && index < categoryCount ? widths[index] : 0;
+  }
+  int tabSideMarginPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 16 : 0;
+  }
+  int tabGapPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 4 : 0;
+  }
+  int tabHorizontalInsetPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 0 : -1;
+  }
+  int tabBottomSpacingPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 6 : -1;
+  }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onTabAction(int index) override;

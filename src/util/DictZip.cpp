@@ -39,7 +39,9 @@ struct ChunkSource {
   InflateReader reader;  // must be first
   HalFile* file = nullptr;
   uint32_t remaining = 0;  // compressed bytes left in this chunk
+  unsigned long deadlineMs = 0;
   bool readFailed = false;
+  bool timedOut = false;
   uint8_t buf[INPUT_BUF_BYTES] = {};
 };
 
@@ -51,6 +53,10 @@ static_assert(offsetof(ChunkSource, reader) == 0, "InflateReader must be first f
 // buffer used to impose.
 int chunkReadCb(uzlib_uncomp* u) {
   auto* src = reinterpret_cast<ChunkSource*>(u);
+  if (src->deadlineMs != 0 && static_cast<long>(millis() - src->deadlineMs) >= 0) {
+    src->timedOut = true;
+    return -1;
+  }
   if (src->remaining == 0) return -1;
 
   const uint32_t want = src->remaining < INPUT_BUF_BYTES ? src->remaining : INPUT_BUF_BYTES;
@@ -88,6 +94,8 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   if (!src) return fail(ExtractError::LowMemory);
   src->file = &file;
   src->remaining = compressedSize;
+  constexpr unsigned long MAX_DICTZIP_SLICE_MS = 1500;
+  src->deadlineMs = millis() + MAX_DICTZIP_SLICE_MS;
 
   // compressedOffset comes from the untrusted .dz chunk table, so an out-of-range
   // seek is possible — guard it rather than reading from the prior position.
@@ -106,17 +114,19 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   // A decode failure after the callback hit an IO error is a read failure, not
   // a corrupt stream — keep the two distinguishable for the caller.
   const auto decodeFail = [&src, &fail] {
-    return fail(src->readFailed ? ExtractError::ReadError : ExtractError::Decompress);
+    return fail((src->readFailed || src->timedOut) ? ExtractError::ReadError : ExtractError::Decompress);
   };
 
   uint32_t batch;
   while (discardSize > 0) {
+    if (static_cast<long>(millis() - src->deadlineMs) >= 0) { src->timedOut = true; return decodeFail(); }
     batch = discardSize < 512 ? discardSize : 512;
     if (!src->reader.read(buf.get(), batch)) return decodeFail();
     discardSize -= batch;
   }
 
   while (extractSize > 0) {
+    if (static_cast<long>(millis() - src->deadlineMs) >= 0) { src->timedOut = true; return decodeFail(); }
     batch = extractSize < 512 ? extractSize : 512;
     if (!src->reader.read(buf.get(), batch)) return decodeFail();
     if (outFile.write(buf.get(), batch) != batch) return fail(ExtractError::ReadError);

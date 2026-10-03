@@ -4,8 +4,10 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <array>
 #include <atomic>
 #include <memory>
+#include <string>
 #include <optional>
 #include <vector>
 
@@ -15,9 +17,15 @@
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "components/OptionPopup.h"
+#include "highlights/TextEditStore.h"
+#include "highlights/HighlightMode.h"
+#include "highlights/HighlightStore.h"
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
+  std::unique_ptr<HighlightStore> highlightStore;
+  std::unique_ptr<TextEditStore> textEditStore;
+  std::optional<HighlightResult> pendingEditSelection;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -32,6 +40,7 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long pageTurnDuration = 0UL;
   int8_t pendingManualTurn = 0;
   bool pendingPercentJump = false;
+  bool pendingVirtualChapterJump = false;
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
@@ -41,6 +50,8 @@ class EpubReaderActivity final : public ReaderActivity {
   bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
+  bool showExportSuccess = false;
+  unsigned long exportSuccessTime = 0UL;
   unsigned long dictionaryMessageTime = 0UL;
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
@@ -68,6 +79,21 @@ class EpubReaderActivity final : public ReaderActivity {
   void advancePastSkippedSpines(bool forward);
 
   std::vector<FootnoteEntry> currentPageFootnotes;
+  static constexpr size_t FOOTNOTE_TEXT_CACHE_SLOTS = 8;
+  std::array<int, FOOTNOTE_TEXT_CACHE_SLOTS> footnoteTextCacheIndexes_ = {-1, -1, -1, -1, -1, -1, -1, -1};
+  std::array<std::string, FOOTNOTE_TEXT_CACHE_SLOTS> footnoteTextCacheTexts_;
+  int footnoteTextCacheSpine_ = -1;
+  int footnoteTextCachePage_ = -1;
+  const std::string& getCachedCurrentPageFootnoteText(int sourceSpineIndex, int noteIndex);
+  std::vector<FootnoteEntry> bookFootnotes;
+  bool bookFootnotesIndexed = false;
+  mutable std::string footnoteResolverCachedTarget;
+  void ensureBookFootnotes();
+  std::string extractFootnoteText(const FootnoteEntry& footnote, int sourceSpineIndex) const;
+  void openFootnotesList(bool wholeBook, bool returnToMenu, int sourceSpineIndex = -1);
+  void openFootnotePopupSession(bool wholeBook, bool returnToMenu, int sourceSpineIndex, int noteIndex);
+
+  void openFootnotePopup(const FootnoteEntry& footnote, int sourceSpineIndex);
   struct SavedPosition {
     int spineIndex;
     int pageNumber;
@@ -97,6 +123,7 @@ class EpubReaderActivity final : public ReaderActivity {
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
   static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
   bool buildPopupPending = false;
+  bool forceChapterReindex = false;
   void showBuildPopup(GfxRenderer& renderer, int& pagesUntilFullRefresh);
   bool applyDeferredReposition();
   void clearDeferredReposition();
@@ -107,7 +134,13 @@ class EpubReaderActivity final : public ReaderActivity {
   ChapterPosition chapterPosition() const;
   int bookPercentFor(const ChapterPosition& position) const;
   void openReaderMenu(bool startOnBookTab = false);
-  void openDictionaryWordSelect();
+  void openDictionaryWordSelect(WordSelectionMode mode = WordSelectionMode::Dictionary);
+  void openSearchFootnoteOrWordSelect(WordSelectionMode mode);
+  void openSearchFootnoteList(WordSelectionMode mode, int sourceSpineIndex);
+  void openSearchFootnotePopup(WordSelectionMode mode, int sourceSpineIndex, int noteIndex);
+
+  void openEditKeyboard(HighlightResult selection);
+  bool exportEditsTsv();
   bool launchKOReaderSync();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();

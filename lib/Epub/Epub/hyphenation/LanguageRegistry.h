@@ -24,3 +24,4 @@ const LanguageHyphenator* getLanguageHyphenatorForPrimaryTag(const std::string& 
 
 // Exposes the list of supported languages primarily for tooling/tests.
 LanguageEntryView getLanguageEntries();
+void setHungarianHyphenationMinima(size_t minPrefix, size_t minSuffix);

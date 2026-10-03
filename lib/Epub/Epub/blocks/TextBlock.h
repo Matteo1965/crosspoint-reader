@@ -44,11 +44,15 @@ class TextBlock final : public Block {
   uint16_t textBytes = 0;  // total size of the text region, including NULs
   bool focusPresent = false;
   uint8_t letterSpacingPx = 0;
+  uint16_t opticalTargetRightX_ = 0;  // 0 means no optical closure
+  uint16_t opticalLastWordAdvance_ = 0;
   bool simpleRender = false;
   bool isValid = true;
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
   // instead of abort() (bare new is not nothrow with -fno-exceptions).
   std::unique_ptr<uint8_t[]> arena;
+  // CPHUN-132: exact visible Unicode-codepoint offset in the spine for each word.
+  const uint32_t* visibleOffsetArr = nullptr;
   // Typed views into the arena, bound once after the arena is filled. All
   // 16-bit bases sit at even offsets, so direct dereference is alignment-safe.
   const uint16_t* textOffArr = nullptr;
@@ -56,12 +60,13 @@ class TextBlock final : public Block {
   const uint16_t* focusSuffixXArr = nullptr;  // null when !focusPresent
   const uint8_t* stylesArr = nullptr;
   const uint8_t* bidiDirArr = nullptr;
+  const uint8_t* opticalGapsArr = nullptr;  // allocated only for optical lines
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
   std::vector<std::string> rubyTexts;
 
   TextBlock() = default;  // deserialize() fills the fields directly
-  static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
+  static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes, bool hasOptical);
   void bindArenaPointers();
   void refreshRenderFlags();
 
@@ -70,9 +75,12 @@ class TextBlock final : public Block {
   // vectors die with the caller. On arena OOM the block is empty and valid()
   // is false -- callers must check and fail the line instead of using it.
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
-                     const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
+                     const std::vector<EpdFontFamily::Style>& wordStyles,
+                     const std::vector<uint32_t>& wordVisibleOffsets, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
-                     std::vector<std::string> rubyTexts = {}, uint8_t letterSpacingPx = 0);
+                     std::vector<std::string> rubyTexts = {}, uint8_t letterSpacingPx = 0,
+                     uint16_t opticalTargetRightX = 0, uint16_t opticalLastWordAdvance = 0,
+                     const std::vector<uint8_t>& opticalGaps = {});
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;
@@ -88,6 +96,7 @@ class TextBlock final : public Block {
     const uint16_t end = (i + 1 < numWords) ? textOffArr[i + 1] : textBytes;
     return end - textOffArr[i] - 1;  // exclude the NUL
   }
+  uint32_t wordVisibleTextOffset(const uint16_t i) const { return visibleOffsetArr[i]; }
   int16_t wordXpos(const uint16_t i) const { return xposArr[i]; }
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
   uint8_t wordBidiDir(const uint16_t i) const { return bidiDirArr[i] & 0x01; }

@@ -7,7 +7,8 @@
 
 class FootnotePopupActivity final : public Activity {
  public:
-  FootnotePopupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string label, std::string text);
+  FootnotePopupActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string label, std::string text,
+                        bool canReturnToList = true, bool canNavigateSiblings = false);
 
   void onEnter() override;
   void onExit() override;
@@ -21,5 +22,8 @@ class FootnotePopupActivity final : public Activity {
   std::string label_;
   std::string text_;
   std::vector<std::string> lines_;
+  std::vector<uint8_t> lineJustified_;
   int firstLine_ = 0;
+  bool canReturnToList_ = true;
+  bool canNavigateSiblings_ = false;
 };

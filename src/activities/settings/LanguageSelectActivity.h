@@ -22,7 +22,7 @@ class LanguageSelectActivity final : public UiListActivity {
   void activateIndex(int index) override;
   const char* headerTitle() const override;
 
-  constexpr static uint8_t totalItems = getLanguageCount();
+  constexpr static uint8_t totalItems = 12;
 
   // Row storage: totalItems is a compile-time constant, so a fixed-capacity
   // array avoids any heap allocation for the row list. Built once in

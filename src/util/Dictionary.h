@@ -95,7 +95,7 @@ class Dictionary {
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
 
  private:
-  static constexpr uint32_t SAMPLE_INTERVAL = 256;
+  static constexpr uint32_t SAMPLE_INTERVAL = 32;
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
   // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is

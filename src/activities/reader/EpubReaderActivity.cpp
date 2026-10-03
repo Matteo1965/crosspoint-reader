@@ -12,6 +12,9 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -26,6 +29,7 @@
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
+#include "FootnotePopupActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
@@ -46,8 +50,50 @@
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ScreenshotUtil.h"
+#include "highlights/HighlightRenderer.h"
+#include "highlights/TextEditRenderer.h"
+#include "activities/util/KeyboardEntryActivity.h"
 
 namespace {
+
+struct Cphun150LayoutSnapshot {
+  ReaderRenderSpec spec;
+  uint8_t orientation;
+  uint8_t screenMargin;
+  uint8_t statusBarHeight;
+};
+
+Cphun150LayoutSnapshot captureReaderLayout(const uint16_t width, const uint16_t height) {
+  return {SETTINGS.readerRenderSpec(width, height), SETTINGS.orientation, SETTINGS.screenMargin,
+          UITheme::getInstance().getStatusBarHeight()};
+}
+
+bool readerLayoutMatches(const Cphun150LayoutSnapshot& saved,
+                         const uint16_t width, const uint16_t height) {
+  if (saved.orientation != SETTINGS.orientation || saved.screenMargin != SETTINGS.screenMargin ||
+      saved.statusBarHeight != UITheme::getInstance().getStatusBarHeight()) {
+    return false;
+  }
+  const ReaderRenderSpec current = SETTINGS.readerRenderSpec(width, height);
+  const ReaderRenderSpec& old = saved.spec;
+  return old.fontId == current.fontId &&
+         old.lineCompression == current.lineCompression &&
+         old.extraParagraphSpacing == current.extraParagraphSpacing &&
+         old.paragraphAlignment == current.paragraphAlignment &&
+         old.viewportWidth == current.viewportWidth &&
+         old.viewportHeight == current.viewportHeight &&
+         old.hyphenationEnabled == current.hyphenationEnabled &&
+         old.hungarianHyphenationExtended == current.hungarianHyphenationExtended &&
+         old.hangingPunctuationLimitPx == current.hangingPunctuationLimitPx &&
+         old.shortHyphen == current.shortHyphen &&
+         old.fixedDialogueSpacing == current.fixedDialogueSpacing &&
+         old.minimumSpacePercent == current.minimumSpacePercent &&
+         old.letterSpacingLimitPercent == current.letterSpacingLimitPercent &&
+         old.embeddedStyle == current.embeddedStyle &&
+         old.imageRendering == current.imageRendering &&
+         old.focusReadingEnabled == current.focusReadingEnabled;
+}
+
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
@@ -67,6 +113,66 @@ constexpr char READ_FOLDER[] = "/read";
 bool isInReadFolder(const std::string& path) {
   constexpr size_t n = sizeof(READ_FOLDER) - 1;
   return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
+}
+
+std::string trimPlain(std::string value) {
+  auto ws = [](unsigned char c) { return std::isspace(c) != 0; };
+  while (!value.empty() && ws(static_cast<unsigned char>(value.front()))) value.erase(value.begin());
+  while (!value.empty() && ws(static_cast<unsigned char>(value.back()))) value.pop_back();
+  return value;
+}
+
+std::string htmlToPlain(const std::string& html) {
+  std::string out;
+  out.reserve(html.size());
+  bool inTag = false;
+  bool pendingSpace = false;
+  for (size_t i = 0; i < html.size(); ++i) {
+    const char c = html[i];
+    if (c == '<') { inTag = true; pendingSpace = !out.empty(); continue; }
+    if (c == '>') { inTag = false; continue; }
+    if (inTag) continue;
+    if (c == '&') {
+      const size_t semi = html.find(';', i + 1);
+      if (semi != std::string::npos && semi - i <= 8) {
+        const std::string entity = html.substr(i, semi - i + 1);
+        if (entity == "&nbsp;") { pendingSpace = true; i = semi; continue; }
+        if (entity == "&amp;") { if (pendingSpace && !out.empty()) out.push_back(' '); out.push_back('&'); pendingSpace = false; i = semi; continue; }
+        if (entity == "&quot;") { if (pendingSpace && !out.empty()) out.push_back(' '); out.push_back('\"'); pendingSpace = false; i = semi; continue; }
+        if (entity == "&lt;") { if (pendingSpace && !out.empty()) out.push_back(' '); out.push_back('<'); pendingSpace = false; i = semi; continue; }
+        if (entity == "&gt;") { if (pendingSpace && !out.empty()) out.push_back(' '); out.push_back('>'); pendingSpace = false; i = semi; continue; }
+      }
+    }
+    if (std::isspace(static_cast<unsigned char>(c))) { pendingSpace = !out.empty(); continue; }
+    if (pendingSpace && !out.empty()) out.push_back(' ');
+    pendingSpace = false;
+    out.push_back(c);
+  }
+  return trimPlain(std::move(out));
+}
+
+std::string htmlAttribute(const std::string& tag, const char* name) {
+  const std::string needle = std::string(name) + "=";
+  size_t p = tag.find(needle);
+  if (p == std::string::npos) return {};
+  p += needle.size();
+  while (p < tag.size() && std::isspace(static_cast<unsigned char>(tag[p]))) ++p;
+  if (p >= tag.size()) return {};
+  const char quote = tag[p];
+  if (quote != '\'' && quote != '\"') return {};
+  const size_t end = tag.find(quote, p + 1);
+  return end == std::string::npos ? std::string() : tag.substr(p + 1, end - p - 1);
+}
+
+bool looksLikeFootnoteLabel(const std::string& label) {
+  if (label.empty() || label.size() > 24) return false;
+  bool hasDigit = false;
+  for (unsigned char c : label) {
+    if (c >= '0' && c <= '9') { hasDigit = true; continue; }
+    if (std::isspace(c) || c == '{' || c == '}' || c == '[' || c == ']' || c == '(' || c == ')' || c == '.') continue;
+    return false;
+  }
+  return hasDigit;
 }
 
 struct ProgressRange {
@@ -234,8 +340,533 @@ bool EpubReaderActivity::loadBook() {
     }
   }
 
+  highlightStore = std::make_unique<HighlightStore>(epub->getPath());
+  highlightStore->load();
+  textEditStore = std::make_unique<TextEditStore>(epub->getPath());
+  textEditStore->load();
   loadCachedBookmarks();
   return true;
+}
+
+void EpubReaderActivity::ensureBookFootnotes() {
+  if (bookFootnotesIndexed || !epub) return;
+  bookFootnotesIndexed = true;
+  bookFootnotes.clear();
+
+  // CPHUN-135r4i: SAFE CURRENT-SPINE INDEX ONLY.
+  // Never walk the whole EPUB from the Reader menu. R4G reproduced an X4
+  // abort while the synchronous whole-book scan reached Michelangelo note 132.
+  // One spine/XHTML is bounded enough for an interactive menu operation while
+  // still allowing notes elsewhere in the current chapter to be listed.
+  constexpr size_t MAX_SPINE_FOOTNOTES = 160;
+  constexpr size_t ROLLING_LIMIT = 6144;
+  if (currentSpineIndex < 0 || currentSpineIndex >= epub->getSpineItemsCount()) return;
+
+  const auto item = epub->getSpineItem(currentSpineIndex);
+  const std::string tmpPath = epub->getCachePath() + "/.footnotes_spine_scan.tmp";
+
+  auto lowerAscii = [](std::string v) {
+    for (char& c : v) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return v;
+  };
+
+  auto isForwardNoteref = [&](const std::string& tag, const std::string& href, const std::string& label) {
+    if (href.empty() || !looksLikeFootnoteLabel(label)) return false;
+    const std::string t = lowerAscii(tag);
+    const std::string h = lowerAscii(href);
+    if (t.find("noteref") != std::string::npos || t.find("doc-noteref") != std::string::npos) return true;
+    if (t.find("footnote") != std::string::npos || t.find("endnote") != std::string::npos) return true;
+
+    const size_t hash = h.find('#');
+    const std::string path = hash == std::string::npos ? h : h.substr(0, hash);
+    const std::string frag = hash == std::string::npos ? std::string() : h.substr(hash + 1);
+    if (path.find("footnote") != std::string::npos || path.find("endnote") != std::string::npos ||
+        path.find("notes.") != std::string::npos || path.find("/notes") != std::string::npos ||
+        path.find("note.") != std::string::npos) return true;
+    if (frag.find("footnote") != std::string::npos || frag.find("endnote") != std::string::npos ||
+        frag.rfind("note_", 0) == 0 || frag.rfind("note-", 0) == 0) return true;
+    return false;
+  };
+
+  HalFile out;
+  if (!Storage.openFileForWrite("ERS", tmpPath, out)) return;
+  const bool streamed = epub->readItemContentsToStream(item.href, out, 1024);
+  out.close();
+  if (!streamed) {
+    Storage.remove(tmpPath.c_str());
+    return;
+  }
+
+  HalFile in;
+  if (!Storage.openFileForRead("ERS", tmpPath, in)) {
+    Storage.remove(tmpPath.c_str());
+    return;
+  }
+
+  std::string pending;
+  pending.reserve(2048);
+  uint8_t chunk[768];
+  while (bookFootnotes.size() < MAX_SPINE_FOOTNOTES) {
+    const int got = in.read(chunk, sizeof(chunk));
+    if (got <= 0) break;
+    pending.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(got));
+
+    while (true) {
+      const size_t a = pending.find("<a");
+      if (a == std::string::npos) {
+        if (pending.size() > 256) pending.erase(0, pending.size() - 256);
+        break;
+      }
+      const size_t tagEnd = pending.find('>', a + 2);
+      const size_t close = pending.find("</a>", a + 2);
+      if (tagEnd == std::string::npos || close == std::string::npos || close < tagEnd) {
+        if (a > 0) pending.erase(0, a);
+        if (pending.size() > ROLLING_LIMIT) pending.erase(0, pending.size() - 512);
+        break;
+      }
+
+      const std::string tag = pending.substr(a, tagEnd - a + 1);
+      std::string href = htmlAttribute(tag, "href");
+      const std::string label = htmlToPlain(pending.substr(tagEnd + 1, close - tagEnd - 1));
+      pending.erase(0, close + 4);
+      if (!isForwardNoteref(tag, href, label)) continue;
+
+      // CPHUN-135r4j: preserve the href exactly as it appears in the source XHTML.
+      // extractFootnoteText() resolves it once, relative to currentSpineIndex.
+
+      const bool duplicate = std::any_of(bookFootnotes.begin(), bookFootnotes.end(), [&](const FootnoteEntry& e) {
+        return href == e.href;
+      });
+      if (duplicate) continue;
+
+      FootnoteEntry entry;
+      std::strncpy(entry.number, label.c_str(), sizeof(entry.number) - 1);
+      entry.number[sizeof(entry.number) - 1] = ' ';
+      std::strncpy(entry.href, href.c_str(), sizeof(entry.href) - 1);
+      entry.href[sizeof(entry.href) - 1] = ' ';
+      bookFootnotes.push_back(entry);
+    }
+  }
+  in.close();
+  Storage.remove(tmpPath.c_str());
+  LOG_DBG("ERS", "Current-spine footnote index: spine=%d, entries=%u", currentSpineIndex,
+          static_cast<unsigned>(bookFootnotes.size()));
+}
+
+std::string EpubReaderActivity::extractFootnoteText(const FootnoteEntry& footnote, const int sourceSpineIndex) const {
+  if (!epub || footnote.href[0] == '\0') return {};
+
+  const std::string href(footnote.href);
+  const std::string marker(footnote.number);
+  const size_t hash = href.find('#');
+  const std::string hrefPath = hash == std::string::npos ? href : href.substr(0, hash);
+  const std::string fragment = hash == std::string::npos ? std::string() : href.substr(hash + 1);
+
+  std::string sourceHref;
+  if (sourceSpineIndex >= 0 && sourceSpineIndex < epub->getSpineItemsCount()) {
+    sourceHref = epub->getSpineItem(sourceSpineIndex).href;
+  }
+
+  auto normalizePath = [](const std::string& baseFile, const std::string& relative) {
+    if (relative.empty()) return baseFile;
+    if (relative.find("://") != std::string::npos) return relative;
+    std::string joined;
+    if (!relative.empty() && relative[0] == '/') {
+      joined = relative.substr(1);
+    } else {
+      const size_t slash = baseFile.rfind('/');
+      joined = slash == std::string::npos ? relative : baseFile.substr(0, slash + 1) + relative;
+    }
+    std::vector<std::string> parts;
+    size_t p = 0;
+    while (p <= joined.size()) {
+      const size_t q = joined.find('/', p);
+      const std::string part = joined.substr(p, q == std::string::npos ? std::string::npos : q - p);
+      if (part == "..") {
+        if (!parts.empty()) parts.pop_back();
+      } else if (!part.empty() && part != ".") {
+        parts.push_back(part);
+      }
+      if (q == std::string::npos) break;
+      p = q + 1;
+    }
+    std::string out;
+    for (size_t i = 0; i < parts.size(); ++i) {
+      if (i) out += '/';
+      out += parts[i];
+    }
+    return out;
+  };
+
+  const std::string targetHref = normalizePath(sourceHref, hrefPath);
+  std::string errorCode;
+  std::string diagContext;
+  size_t diagnosticTargetSize = 0;
+  bool diagnosticTargetSizeOk = false;
+
+  auto writeDiagnostic = [&](const char* code) {
+    constexpr const char* LOG_DIR = "/logfiles";
+    const bool logDirReady = Storage.ensureDirectoryExists(LOG_DIR);
+    const size_t slash = bookPath.find_last_of("/\\");
+    const std::string fallbackDir = slash == std::string::npos ? std::string() : bookPath.substr(0, slash + 1);
+    const std::string dir = logDirReady ? std::string(LOG_DIR) + "/" : fallbackDir;
+    std::string tag = fragment.empty() ? "unknown" : fragment;
+    for (char& c : tag) {
+      if (!(std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_')) c = '_';
+    }
+    if (tag.size() > 40) tag.resize(40);
+    const std::string logPath = dir + "footnote_error_" + std::to_string(millis()) + "_" + tag + ".txt";
+    std::string log;
+    log.reserve(2048);
+    log += "CrossPoint Footnote Diagnostic\nFormat version: 1\n\n";
+    log += "Firmware: CPHUN-260917-135R4E-EXP\n";
+    log += "Book: " + epub->getTitle() + "\n";
+    log += "EPUB: " + bookPath + "\n";
+    log += "Source spine: " + std::to_string(sourceSpineIndex) + "\n";
+    log += "Source XHTML: " + sourceHref + "\n";
+    log += "Marker: " + marker + "\n";
+    log += "Original href: " + href + "\n";
+    log += "Resolved target: " + targetHref + "\n";
+    log += "Fragment: " + fragment + "\n";
+    log += "Target size lookup: ";
+    log += diagnosticTargetSizeOk ? "OK" : "FAILED";
+    log += "\n";
+    log += "Target inflated size: " + std::to_string(diagnosticTargetSize) + "\n\n";
+    log += "Error: ";
+    log += code;
+    log += "\n\nContext (max 1024 bytes):\n";
+    if (diagContext.size() > 1024) diagContext.resize(1024);
+    log += diagContext;
+    log += "\n";
+    if (log.size() > 8192) log.resize(8192);
+    HalFile out;
+    if (Storage.openFileForWrite("ERS", logPath, out)) {
+      out.write(reinterpret_cast<const uint8_t*>(log.data()), log.size());
+      out.close();
+      LOG_DBG("ERS", "Footnote diagnostic written: %s", logPath.c_str());
+    }
+  };
+
+  if (targetHref.empty() || targetHref.find("://") != std::string::npos) {
+    writeDiagnostic("FOOTNOTE_TARGET_INVALID");
+    return {};
+  }
+
+  diagnosticTargetSizeOk = epub->getItemSize(targetHref, &diagnosticTargetSize);
+  if (!diagnosticTargetSizeOk) {
+    writeDiagnostic("EPUB_ITEM_SIZE_FAILED");
+    return {};
+  }
+
+  const std::string tmpPath = epub->getCachePath() + "/.footnote_resolver.tmp";
+
+  // CPHUN-135r4k2f7: if the same XHTML target was already extracted during
+  // this reader session, reuse it instead of streaming the ZIP member again.
+  bool haveCachedTarget = false;
+  if (footnoteResolverCachedTarget == targetHref) {
+    HalFile probe;
+    if (Storage.openFileForRead("ERS", tmpPath, probe)) {
+      probe.close();
+      haveCachedTarget = true;
+    } else {
+      footnoteResolverCachedTarget.clear();
+    }
+  }
+
+  if (!haveCachedTarget) {
+    Storage.remove(tmpPath.c_str());
+    HalFile out;
+    if (!Storage.openFileForWrite("ERS", tmpPath, out)) {
+      writeDiagnostic("TEMP_FILE_OPEN_FAILED");
+      return {};
+    }
+
+    const bool streamed = epub->readItemContentsToStream(targetHref, out, 1024);
+    out.flush();
+    out.close();
+    if (!streamed) {
+      Storage.remove(tmpPath.c_str());
+      footnoteResolverCachedTarget.clear();
+      writeDiagnostic("EPUB_ZIP_STREAM_FAILED");
+      return {};
+    }
+    footnoteResolverCachedTarget = targetHref;
+  }
+
+  bool tempReadFailed = false;
+  auto readNeedle = [&](const std::vector<std::string>& needles, bool fragmentSearch) -> std::string {
+    HalFile in;
+    if (!Storage.openFileForRead("ERS", tmpPath, in)) {
+      tempReadFailed = true;
+      return {};
+    }
+    std::string scan;
+    std::string capture;
+    scan.reserve(12288);
+    capture.reserve(12288);
+    constexpr size_t SCAN_LIMIT = 12288;
+    constexpr size_t CAPTURE_LIMIT = 16384;
+    uint8_t chunk[768];
+    bool found = false;
+    std::string blockTag;
+    std::string activeNeedle;
+
+    while (true) {
+      const int got = in.read(chunk, sizeof(chunk));
+      if (got <= 0) break;
+      if (diagContext.size() < 1024) {
+        const size_t take = std::min<size_t>(static_cast<size_t>(got), 1024 - diagContext.size());
+        diagContext.append(reinterpret_cast<const char*>(chunk), take);
+      }
+      if (!found) {
+        scan.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(got));
+        size_t pos = std::string::npos;
+        for (const auto& needle : needles) {
+          if (needle.empty()) continue;
+          const size_t candidate = scan.find(needle);
+          if (candidate != std::string::npos && (pos == std::string::npos || candidate < pos)) {
+            pos = candidate;
+            activeNeedle = needle;
+          }
+        }
+        if (pos == std::string::npos) {
+          if (scan.size() > SCAN_LIMIT) scan.erase(0, scan.size() - 2048);
+          continue;
+        }
+
+        size_t begin = pos;
+        struct Block { const char* open; const char* close; };
+        constexpr Block blocks[] = {{"<dl", "dl"}, {"<aside", "aside"}, {"<section", "section"},
+                                    {"<li", "li"}, {"<div", "div"}, {"<p", "p"}};
+        size_t best = std::string::npos;
+        for (const auto& b : blocks) {
+          const size_t bp = scan.rfind(b.open, pos);
+          if (bp != std::string::npos && (best == std::string::npos || bp > best)) {
+            best = bp;
+            blockTag = b.close;
+          }
+        }
+        if (best != std::string::npos) begin = best;
+        else {
+          const size_t lt = scan.rfind('<', pos);
+          if (lt != std::string::npos) begin = lt;
+        }
+        capture.assign(scan.data() + begin, scan.size() - begin);
+        found = true;
+        scan.clear();
+      } else {
+        capture.append(reinterpret_cast<const char*>(chunk), static_cast<size_t>(got));
+      }
+
+      if (!found) continue;
+      if (capture.size() > CAPTURE_LIMIT) capture.resize(CAPTURE_LIMIT);
+
+      size_t stop = std::string::npos;
+      size_t suffix = 0;
+      if (!blockTag.empty() && blockTag != "p") {
+        const std::string close = "</" + blockTag + ">";
+        stop = capture.find(close);
+        suffix = close.size();
+      } else if (blockTag == "p") {
+        // Some Calibre footnotes (e.g. id_Footnote_N) continue through several
+        // paragraphs. For those, stop at the next note anchor instead of the
+        // first </p>. Other p-based notes remain one bounded paragraph.
+        bool multiParagraph = false;
+        std::string family;
+        if (fragment.rfind("id_Footnote_", 0) == 0) family = "id_Footnote_";
+        else if (fragment.rfind("Footnote_", 0) == 0) family = "Footnote_";
+        if (!family.empty()) {
+          multiParagraph = true;
+          const size_t first = capture.find(activeNeedle);
+          size_t next = capture.find("id=\"" + family, first == std::string::npos ? 1 : first + activeNeedle.size());
+          const size_t next2 = capture.find("id='" + family, first == std::string::npos ? 1 : first + activeNeedle.size());
+          if (next == std::string::npos || (next2 != std::string::npos && next2 < next)) next = next2;
+          if (next != std::string::npos) {
+            const size_t pbegin = capture.rfind("<p", next);
+            stop = pbegin == std::string::npos ? next : pbegin;
+            suffix = 0;
+          }
+        }
+        if (!multiParagraph) {
+          stop = capture.find("</p>");
+          suffix = 4;
+        }
+      }
+
+      if (stop != std::string::npos) {
+        capture.resize(stop + suffix);
+        in.close();
+        return trimPlain(htmlToPlain(capture));
+      }
+      if (capture.size() >= CAPTURE_LIMIT) {
+        in.close();
+        return trimPlain(htmlToPlain(capture));
+      }
+    }
+    in.close();
+    if (found && !capture.empty()) return trimPlain(htmlToPlain(capture));
+    return {};
+  };
+
+  std::vector<std::string> anchorNeedles;
+  if (!fragment.empty()) {
+    anchorNeedles.push_back("id=\"" + fragment + "\"");
+    anchorNeedles.push_back("id='" + fragment + "'");
+    anchorNeedles.push_back("name=\"" + fragment + "\"");
+    anchorNeedles.push_back("name='" + fragment + "'");
+    std::string text = readNeedle(anchorNeedles, true);
+    if (!text.empty()) {
+      return text;
+    }
+    errorCode = "FOOTNOTE_ANCHOR_NOT_FOUND";
+  }
+
+  // Marker fallback for EPUBs without a usable fragment. Exact visible marker
+  // is tried first, then common numeric note-id families.
+  std::vector<std::string> markerNeedles;
+  if (!marker.empty()) markerNeedles.push_back(marker);
+  std::string digits;
+  for (const char c : marker) if (c >= '0' && c <= '9') digits += c;
+  if (!digits.empty()) {
+    markerNeedles.push_back(">" + digits + "<");
+    markerNeedles.push_back("{" + digits + "}");
+    markerNeedles.push_back("[" + digits + "]");
+    markerNeedles.push_back("id=\"note_" + digits + "\"");
+    markerNeedles.push_back("id=\"Footnote_" + digits + "\"");
+    markerNeedles.push_back("id=\"footnote-" + digits + "\"");
+    markerNeedles.push_back("id=\"n" + digits + "\"");
+  }
+  if (!markerNeedles.empty()) {
+    std::string text = readNeedle(markerNeedles, false);
+    if (!text.empty()) {
+      return text;
+    }
+  }
+
+  if (tempReadFailed) {
+    writeDiagnostic("TEMP_FILE_READ_FAILED");
+  } else {
+    writeDiagnostic(errorCode.empty() ? "FOOTNOTE_UNSUPPORTED_STRUCTURE" : errorCode.c_str());
+  }
+  return {};
+}
+
+void EpubReaderActivity::openFootnotePopup(const FootnoteEntry& footnote, const int sourceSpineIndex) {
+  std::string text = extractFootnoteText(footnote, sourceSpineIndex);
+  if (text.empty()) text = "A lábjegyzet tartalma nem olvasható ebben az EPUB-ban.";
+  startActivityForResult(
+      std::make_unique<FootnotePopupActivity>(renderer, mappedInput, footnote.number, std::move(text), false),
+      [this](const ActivityResult&) { requestUpdate(); });
+}
+
+const std::string& EpubReaderActivity::getCachedCurrentPageFootnoteText(const int sourceSpineIndex,
+                                                                        const int noteIndex) {
+  static const std::string empty;
+  if (noteIndex < 0 || noteIndex >= static_cast<int>(currentPageFootnotes.size())) return empty;
+
+  if (footnoteTextCacheSpine_ != sourceSpineIndex ||
+      (section && footnoteTextCachePage_ != section->currentPage)) {
+    footnoteTextCacheIndexes_.fill(-1);
+    for (auto& text : footnoteTextCacheTexts_) text.clear();
+    footnoteTextCacheSpine_ = sourceSpineIndex;
+    footnoteTextCachePage_ = section ? section->currentPage : -1;
+  }
+
+  const size_t slot = static_cast<size_t>(noteIndex) % FOOTNOTE_TEXT_CACHE_SLOTS;
+  if (footnoteTextCacheIndexes_[slot] == noteIndex && !footnoteTextCacheTexts_[slot].empty()) {
+    LOG_DBG("FNT", "Cache hit note=%d heap=%u max=%u", noteIndex, static_cast<unsigned>(ESP.getFreeHeap()),
+            static_cast<unsigned>(ESP.getMaxAllocHeap()));
+    return footnoteTextCacheTexts_[slot];
+  }
+
+  LOG_INF("FNT", "Extract begin note=%d heap=%u max=%u", noteIndex, static_cast<unsigned>(ESP.getFreeHeap()),
+          static_cast<unsigned>(ESP.getMaxAllocHeap()));
+  std::string text = extractFootnoteText(currentPageFootnotes[noteIndex], sourceSpineIndex);
+  if (text.empty()) text = "A lábjegyzet tartalma nem olvasható ebben az EPUB-ban.";
+  footnoteTextCacheTexts_[slot] = std::move(text);
+  footnoteTextCacheIndexes_[slot] = noteIndex;
+  LOG_INF("FNT", "Extract end note=%d bytes=%u heap=%u max=%u", noteIndex,
+          static_cast<unsigned>(footnoteTextCacheTexts_[slot].size()), static_cast<unsigned>(ESP.getFreeHeap()),
+          static_cast<unsigned>(ESP.getMaxAllocHeap()));
+  return footnoteTextCacheTexts_[slot];
+}
+
+void EpubReaderActivity::openFootnotePopupSession(const bool wholeBook, const bool returnToMenu,
+                                                    const int sourceSpineIndex, int noteIndex) {
+  const auto& notes = wholeBook ? bookFootnotes : currentPageFootnotes;
+  if (notes.empty()) {
+    requestUpdate();
+    return;
+  }
+
+  const int count = static_cast<int>(notes.size());
+  noteIndex = (noteIndex % count + count) % count;
+  const FootnoteEntry note = notes[noteIndex];
+
+  std::string text;
+  if (!wholeBook) {
+    text = getCachedCurrentPageFootnoteText(sourceSpineIndex, noteIndex);
+  } else {
+    text = extractFootnoteText(note, sourceSpineIndex);
+    if (text.empty()) text = "A lábjegyzet tartalma nem olvasható ebben az EPUB-ban.";
+  }
+
+  startActivityForResult(
+      std::make_unique<FootnotePopupActivity>(renderer, mappedInput, note.number, std::move(text), true, count > 1),
+      [this, wholeBook, returnToMenu, sourceSpineIndex, noteIndex](const ActivityResult& popupResult) {
+        if (popupResult.isCancelled) {
+          openFootnotesList(wholeBook, returnToMenu, sourceSpineIndex);
+          return;
+        }
+        if (const auto* nav = std::get_if<FootnotePopupNavResult>(&popupResult.data)) {
+          openFootnotePopupSession(wholeBook, returnToMenu, sourceSpineIndex, noteIndex + nav->delta);
+          return;
+        }
+        requestUpdate();  // Bezárás -> reader
+      });
+}
+
+void EpubReaderActivity::openFootnotesList(const bool wholeBook, const bool returnToMenu,
+                                           const int sourceSpineIndex) {
+  const auto& notes = wholeBook ? bookFootnotes : currentPageFootnotes;
+  if (notes.empty()) {
+    if (returnToMenu) openReaderMenu();
+    return;
+  }
+
+  const int sourceSpine = sourceSpineIndex >= 0 ? sourceSpineIndex : currentSpineIndex;
+
+  // Preserve the existing one-note direct-popup behavior.
+  if (notes.size() == 1) {
+    const FootnoteEntry note = notes.front();
+    std::string text = extractFootnoteText(note, sourceSpine);
+    if (text.empty()) text = "A lábjegyzet tartalma nem olvasható ebben az EPUB-ban.";
+    startActivityForResult(
+        std::make_unique<FootnotePopupActivity>(renderer, mappedInput, note.number, std::move(text), false, false),
+        [this](const ActivityResult&) { requestUpdate(); });
+    return;
+  }
+
+  startActivityForResult(
+      std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, notes),
+      [this, wholeBook, returnToMenu, sourceSpine](const ActivityResult& result) {
+        if (result.isCancelled) {
+          if (returnToMenu) openReaderMenu();
+          else requestUpdate();
+          return;
+        }
+
+        const auto& selected = std::get<FootnoteResult>(result.data);
+        const auto& source = wholeBook ? bookFootnotes : currentPageFootnotes;
+        const auto it = std::find_if(source.begin(), source.end(),
+                                     [&](const FootnoteEntry& e) { return selected.href == e.href; });
+        if (it == source.end()) {
+          requestUpdate();
+          return;
+        }
+        const int index = static_cast<int>(std::distance(source.begin(), it));
+        openFootnotePopupSession(wholeBook, returnToMenu, sourceSpine, index);
+      });
 }
 
 ChapterPosition EpubReaderActivity::chapterPosition() const {
@@ -245,8 +876,8 @@ ChapterPosition EpubReaderActivity::chapterPosition() const {
 
 int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
   if (!epub || epub->getBookSize() == 0 || !position.hasTotal()) return 0;
-  const float progress = epub->calculateProgress(currentSpineIndex,
-                                                 std::clamp(position.chapterFraction(), 0.0f, 1.0f));
+  const float progress = epub->calculateProgress(
+      currentSpineIndex, std::clamp(position.chapterFraction(), 0.0f, 1.0f));
   return clampPercent(static_cast<int>(std::clamp(progress, 0.0f, 1.0f) * 100.0f + 0.5f));
 }
 
@@ -258,7 +889,8 @@ void EpubReaderActivity::openReaderMenu(const bool startOnBookTab) {
   const int bookProgressPercent = bookPercentFor(position);
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(), startOnBookTab),
+                             SETTINGS.orientation, true,
+                             !cachedBookmarks.empty() || (highlightStore && !highlightStore->items().empty()), startOnBookTab),
                          [this](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
                            if (SETTINGS.orientation != menu.orientation) {
@@ -285,13 +917,35 @@ void EpubReaderActivity::showBuildPopup(GfxRenderer& renderer, int& pagesUntilFu
   buildPopupPending = false;
 }
 
-void EpubReaderActivity::openDictionaryWordSelect() {
-  if (SETTINGS.dictionaryName[0] == '\0') {
-    showDictionaryMessage = true;
-    dictionaryMessageTime = millis();
-    requestUpdate();
-    return;
+void EpubReaderActivity::openEditKeyboard(HighlightResult selection) {
+  if (!epub) return;
+  if (!textEditStore) {
+    textEditStore = std::make_unique<TextEditStore>(epub->getPath());
+    textEditStore->load();
   }
+  std::string initialText = selection.text;
+  if (textEditStore) {
+    if (const auto* old = textEditStore->find(selection.spineIndex, selection.visibleTextOffset)) {
+      initialText = old->replacementText;
+    }
+  }
+
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, "Szerkesztés", initialText, 0, InputType::Text),
+      [this, selection = std::move(selection)](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          if (const auto* keyboard = std::get_if<KeyboardResult>(&result.data)) {
+            if (textEditStore) {
+              textEditStore->upsert({selection.spineIndex, selection.visibleTextOffset, selection.length,
+                                     selection.text, keyboard->text, keyboard->text.empty()});
+            }
+          }
+        }
+        requestUpdate();
+      });
+}
+
+void EpubReaderActivity::openDictionaryWordSelect(const WordSelectionMode mode) {
   if (!section) return;
   auto page = section->loadPage(section->currentPage);
   if (!page) return;
@@ -299,15 +953,118 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
+  const int verticalScreenMargin =
+      SETTINGS.screenMargin == 5 ? 4 : std::max(0, static_cast<int>(SETTINGS.screenMargin) - 6);
   orientedMarginTop += verticalScreenMargin;
-  // CPHUN-57: move the visible top text boundary 6 px upward relative to CPHUN-54.
-  orientedMarginTop = std::max(0, orientedMarginTop - 6);
   orientedMarginLeft += SETTINGS.screenMargin;
 
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  const std::string highlightBookPath = epub->getPath();
+  std::vector<uint32_t> highlightedOffsets;
+  if (highlightStore) {
+    for (const auto& item : highlightStore->items()) {
+      if (item.spineIndex == currentSpineIndex) highlightedOffsets.push_back(item.visibleTextOffset);
+    }
+  }
+  // CPHUN-132r1: the dictionary index/lookup path is memory-sensitive. The
+  // highlight list is persisted already, so release its heap while the word
+  // selector/dictionary owns the foreground, then reload it on return.
+  highlightStore.reset();
+  auto selector = std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
+                                                                 orientedMarginLeft, orientedMarginTop,
+                                                                 currentSpineIndex, mode,
+                                                                 std::move(highlightedOffsets));
+  if (section->currentPage > 0) selector->setPreviousBoundaryPage(section->loadPage(section->currentPage - 1));
+  if (section->currentPage + 1 < static_cast<int>(section->pageCount))
+    selector->setNextBoundaryPage(section->loadPage(section->currentPage + 1));
+  startActivityForResult(
+      std::move(selector),
+      [this, highlightBookPath, mode](const ActivityResult& result) {
+        highlightStore = std::make_unique<HighlightStore>(highlightBookPath);
+        highlightStore->load();
+        if (!result.isCancelled) {
+          if (const auto* selected = std::get_if<HighlightResult>(&result.data)) {
+            if (mode == WordSelectionMode::Edit) {
+              pendingEditSelection = *selected;
+              requestUpdate();
+              return;
+            }
+            if (highlightStore) {
+              highlightStore->toggle({selected->spineIndex, selected->visibleTextOffset, selected->length, selected->text});
+            }
+          }
+        }
+        requestUpdate();
+      });
+}
+
+void EpubReaderActivity::openSearchFootnotePopup(const WordSelectionMode mode, const int sourceSpineIndex,
+                                                   int noteIndex) {
+  if (currentPageFootnotes.empty()) {
+    openDictionaryWordSelect(mode);
+    return;
+  }
+
+  const int count = static_cast<int>(currentPageFootnotes.size());
+  noteIndex = (noteIndex % count + count) % count;
+  const FootnoteEntry note = currentPageFootnotes[noteIndex];
+
+  std::string text = getCachedCurrentPageFootnoteText(sourceSpineIndex, noteIndex);
+
+  startActivityForResult(
+      std::make_unique<FootnotePopupActivity>(renderer, mappedInput, note.number, std::move(text), true, count > 1),
+      [this, mode, sourceSpineIndex, noteIndex](const ActivityResult& popupResult) {
+        if (popupResult.isCancelled) {
+          openDictionaryWordSelect(mode);  // Shortcut: Vissza -> selected word mode, never the list.
+          return;
+        }
+        if (const auto* nav = std::get_if<FootnotePopupNavResult>(&popupResult.data)) {
+          openSearchFootnotePopup(mode, sourceSpineIndex, noteIndex + nav->delta);
+          return;
+        }
+        requestUpdate();  // Bezárás -> reader
+      });
+}
+
+void EpubReaderActivity::openSearchFootnoteList(const WordSelectionMode mode, const int sourceSpineIndex) {
+  if (currentPageFootnotes.empty()) {
+    openDictionaryWordSelect(mode);
+    return;
+  }
+  if (currentPageFootnotes.size() == 1) {
+    openSearchFootnotePopup(mode, sourceSpineIndex, 0);
+    return;
+  }
+
+  startActivityForResult(
+      std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+      [this, mode, sourceSpineIndex](const ActivityResult& result) {
+        if (result.isCancelled) {
+          openDictionaryWordSelect(mode);  // Vissza from list -> selected word mode
+          return;
+        }
+
+        const auto& selected = std::get<FootnoteResult>(result.data);
+        const auto it = std::find_if(currentPageFootnotes.begin(), currentPageFootnotes.end(),
+                                     [&](const FootnoteEntry& e) { return selected.href == e.href; });
+        if (it == currentPageFootnotes.end()) {
+          openDictionaryWordSelect(mode);
+          return;
+        }
+        const int index = static_cast<int>(std::distance(currentPageFootnotes.begin(), it));
+        openSearchFootnotePopup(mode, sourceSpineIndex, index);
+      });
+}
+
+void EpubReaderActivity::openSearchFootnoteOrWordSelect(const WordSelectionMode mode) {
+  if (currentPageFootnotes.empty()) {
+    openDictionaryWordSelect(mode);
+    return;
+  }
+
+  const int sourceSpine = currentSpineIndex;
+  // CPHUN-144 shortcut UX: for any non-empty page, open the first footnote
+  // immediately. Sibling footnotes remain reachable with front buttons 3/4.
+  openSearchFootnotePopup(mode, sourceSpine, 0);
 }
 
 namespace {
@@ -456,6 +1213,12 @@ bool EpubReaderActivity::handleIndexErrorDialogInput() {
 }
 
 void EpubReaderActivity::loop() {
+  if (pendingEditSelection) {
+    HighlightResult selection = std::move(*pendingEditSelection);
+    pendingEditSelection.reset();
+    openEditKeyboard(std::move(selection));
+    return;
+  }
   if (handleIndexErrorDialogInput()) return;
   if (!epub) {
     finish();
@@ -565,33 +1328,45 @@ void EpubReaderActivity::loop() {
   };
 
   const auto cphun36OpenSettings = [this]() {
+    const auto before = captureReaderLayout(buildViewportWidth, buildViewportHeight);
     startActivityForResult(std::make_unique<SettingsActivity>(renderer, mappedInput),
-                           [this](const ActivityResult&) {
-                             RenderLock lock;
-                             if (section) {
-                               rememberCurrentContentOffset();
-                               cachedSpineIndex = currentSpineIndex;
-                               cachedChapterTotalPageCount = section->pageCount;
-                               nextPageNumber = section->currentPage;
+                           [this, before](const ActivityResult&) {
+                             if (!readerLayoutMatches(before, buildViewportWidth, buildViewportHeight)) {
+                               RenderLock lock;
+                               if (section) {
+                                 rememberCurrentContentOffset();
+                                 cachedSpineIndex = currentSpineIndex;
+                                 cachedChapterTotalPageCount = section->pageCount;
+                                 nextPageNumber = section->currentPage;
+                               }
+                               section.reset();
+                               LOG_INF("ERS", "CPHUN-150: settings changed layout; refreshing section");
+                             } else {
+                               LOG_DBG("ERS", "CPHUN-150: settings unchanged; retaining section");
                              }
-                             section.reset();
                              requestUpdate();
                            });
   };
 
   const auto cphun36OpenLayout = [this]() {
+    const auto before = captureReaderLayout(buildViewportWidth, buildViewportHeight);
     startActivityForResult(
         std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                TextSettingsActivity::Tab::Layout),
-        [this](const ActivityResult&) {
-          RenderLock lock;
-          if (section) {
-            rememberCurrentContentOffset();
-            cachedSpineIndex = currentSpineIndex;
-            cachedChapterTotalPageCount = section->pageCount;
-            nextPageNumber = section->currentPage;
+        [this, before](const ActivityResult&) {
+          if (!readerLayoutMatches(before, buildViewportWidth, buildViewportHeight)) {
+            RenderLock lock;
+            if (section) {
+              rememberCurrentContentOffset();
+              cachedSpineIndex = currentSpineIndex;
+              cachedChapterTotalPageCount = section->pageCount;
+              nextPageNumber = section->currentPage;
+            }
+            section.reset();
+            LOG_INF("ERS", "CPHUN-150: layout changed; refreshing section");
+          } else {
+            LOG_DBG("ERS", "CPHUN-150: layout unchanged; retaining section");
           }
-          section.reset();
           requestUpdate();
         });
   };
@@ -644,7 +1419,18 @@ void EpubReaderActivity::loop() {
       requestUpdate();
       return true;
     }
-    if (configured == ReaderAction::OpenDictionary) { openDictionaryWordSelect(); return true; }
+    if (configured == ReaderAction::OpenDictionary) {
+      WordSelectionMode mode = WordSelectionMode::Dictionary;
+      if (SETTINGS.wordSelectionMode == 1) mode = WordSelectionMode::Highlight;
+      else if (SETTINGS.wordSelectionMode == 2) mode = WordSelectionMode::Edit;
+      openSearchFootnoteOrWordSelect(mode);
+      return true;
+    }
+    if (configured == ReaderAction::OpenHighlight) { openDictionaryWordSelect(WordSelectionMode::Highlight); return true; }
+    if (configured == ReaderAction::OpenManualDictionarySearch) {
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::MANUAL_DICTIONARY_SEARCH);
+      return true;
+    }
     if (configured == ReaderAction::OpenSettings) { cphun36OpenSettings(); return true; }
     if (configured == ReaderAction::OpenChapterSelection) {
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER);
@@ -669,15 +1455,90 @@ void EpubReaderActivity::loop() {
       return true;
     }
     if (configured == ReaderAction::LineSpacingNext || configured == ReaderAction::LineSpacingPrevious) {
-      constexpr uint8_t kLineSpacingCount = 4;
-      const uint8_t current = SETTINGS.lineSpacing < kLineSpacingCount ? SETTINGS.lineSpacing : 1;
-      SETTINGS.lineSpacing = configured == ReaderAction::LineSpacingNext
-                                 ? static_cast<uint8_t>((current + 1) % kLineSpacingCount)
-                                 : static_cast<uint8_t>((current + kLineSpacingCount - 1) % kLineSpacingCount);
+      constexpr uint8_t kLineSpacingValues[] = {
+          CrossPointSettings::TIGHT, CrossPointSettings::NORMAL, CrossPointSettings::NORMAL_PLUS,
+          CrossPointSettings::WIDE, CrossPointSettings::WIDE_PLUS, CrossPointSettings::EXTRA_WIDE};
+      int idx = 1;
+      for (int i = 0; i < static_cast<int>(std::size(kLineSpacingValues)); ++i) {
+        if (kLineSpacingValues[i] == SETTINGS.lineSpacing) { idx = i; break; }
+      }
+      if (configured == ReaderAction::LineSpacingNext && idx + 1 < static_cast<int>(std::size(kLineSpacingValues))) ++idx;
+      if (configured == ReaderAction::LineSpacingPrevious && idx > 0) --idx;
+      SETTINGS.lineSpacing = kLineSpacingValues[idx];
       SETTINGS.saveToFile();
       cphun36RebuildReader();
       return true;
     }
+    if (configured == ReaderAction::LetterSpacingCorrectionUp ||
+        configured == ReaderAction::LetterSpacingCorrectionDown) {
+      // CPHUN-113/128 UI order: KI,10,20,...70% maps to 0,360,340,...240.
+      constexpr uint16_t values[] = {0, 360, 340, 320, 300, 280, 260, 240};
+      int idx = 0;
+      for (int i = 0; i < static_cast<int>(std::size(values)); ++i) {
+        if (values[i] == SETTINGS.letterSpacingLimitPercent) { idx = i; break; }
+      }
+      if (configured == ReaderAction::LetterSpacingCorrectionUp && idx + 1 < static_cast<int>(std::size(values))) ++idx;
+      if (configured == ReaderAction::LetterSpacingCorrectionDown && idx > 0) --idx;
+      SETTINGS.letterSpacingLimitPercent = values[idx];
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::LetterSpacingOptimizationUp ||
+        configured == ReaderAction::LetterSpacingOptimizationDown) {
+      SETTINGS.letterSpacingOptimization =
+          configured == ReaderAction::LetterSpacingOptimizationUp ? 4 : 0;
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::ExtraParagraphSpacingUp ||
+        configured == ReaderAction::ExtraParagraphSpacingDown) {
+      // Six UI states: KI, 0, 25, 50, 75, 100%.
+      int idx = !SETTINGS.extraParagraphSpacingEnabled
+                    ? 0
+                    : (SETTINGS.extraParagraphSpacing == 0
+                           ? 1
+                           : std::clamp<int>(SETTINGS.extraParagraphSpacing / 25 + 1, 2, 5));
+      if (configured == ReaderAction::ExtraParagraphSpacingUp && idx < 5) ++idx;
+      if (configured == ReaderAction::ExtraParagraphSpacingDown && idx > 0) --idx;
+      SETTINGS.extraParagraphSpacingEnabled = idx == 0 ? 0 : 1;
+      SETTINGS.extraParagraphSpacing = idx <= 1 ? 0 : static_cast<uint8_t>((idx - 1) * 25);
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::MinimumSpaceUp || configured == ReaderAction::MinimumSpaceDown) {
+      int value = std::clamp<int>(SETTINGS.minimumSpacePercent, 50, 100);
+      value = ((value - 50) / 10) * 10 + 50;
+      if (configured == ReaderAction::MinimumSpaceUp && value < 100) value += 10;
+      if (configured == ReaderAction::MinimumSpaceDown && value > 50) value -= 10;
+      SETTINGS.minimumSpacePercent = static_cast<uint8_t>(value);
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::TestLetterSpacingCorrectionMinMax) {
+      // 10% <-> 70%; any non-minimum state returns to minimum for deterministic A/B tests.
+      SETTINGS.letterSpacingLimitPercent = SETTINGS.letterSpacingLimitPercent == 360 ? 240 : 360;
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::TestLetterSpacingOptimizationOff100) {
+      SETTINGS.letterSpacingOptimization = SETTINGS.letterSpacingOptimization == 0 ? 4 : 0;
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::TestLineSpacingMinMax) {
+      SETTINGS.lineSpacing = SETTINGS.lineSpacing == CrossPointSettings::TIGHT
+                                 ? CrossPointSettings::EXTRA_WIDE
+                                 : CrossPointSettings::TIGHT;
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::TestExtraParagraphSpacingOffMax) {
+      if (!SETTINGS.extraParagraphSpacingEnabled) {
+        SETTINGS.extraParagraphSpacingEnabled = 1;
+        SETTINGS.extraParagraphSpacing = 100;
+      } else {
+        SETTINGS.extraParagraphSpacingEnabled = 0;
+      }
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+    if (configured == ReaderAction::TestMinimumSpaceMinMax) {
+      SETTINGS.minimumSpacePercent = SETTINGS.minimumSpacePercent == 50 ? 100 : 50;
+      SETTINGS.saveToFile(); cphun36RebuildReader(); return true;
+    }
+
     if (configured == ReaderAction::ToggleBookmark) { addBookmark(); return true; }
     if (configured == ReaderAction::OpenBookmarks) {
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKMARKS);
@@ -690,16 +1551,32 @@ void EpubReaderActivity::loop() {
     if (configured == ReaderAction::OpenTextSettings) { cphun36OpenLayout(); return true; }
     if (configured == ReaderAction::OpenLayoutMenu) { cphun36OpenLayout(); return true; }
     if (configured == ReaderAction::ScreenMarginDown) {
-      if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
-        SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN, SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
-        SETTINGS.saveToFile(); cphun36RebuildReader();
+      constexpr uint8_t kMargins[] = {5, 10, 12, 14, 16, 18, 20, 25};
+      uint8_t next = kMargins[0];
+      for (const uint8_t value : kMargins) {
+        if (value >= SETTINGS.screenMargin) break;
+        next = value;
+      }
+      if (next != SETTINGS.screenMargin) {
+        SETTINGS.screenMargin = next;
+        SETTINGS.saveToFile();
+        cphun36RebuildReader();
       }
       return true;
     }
     if (configured == ReaderAction::ScreenMarginUp) {
-      if (SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
-        SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX, SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
-        SETTINGS.saveToFile(); cphun36RebuildReader();
+      constexpr uint8_t kMargins[] = {5, 10, 12, 14, 16, 18, 20, 25};
+      uint8_t next = kMargins[7];
+      for (const uint8_t value : kMargins) {
+        if (value > SETTINGS.screenMargin) {
+          next = value;
+          break;
+        }
+      }
+      if (next != SETTINGS.screenMargin) {
+        SETTINGS.screenMargin = next;
+        SETTINGS.saveToFile();
+        cphun36RebuildReader();
       }
       return true;
     }
@@ -719,19 +1596,33 @@ void EpubReaderActivity::loop() {
       return true;
     }
     if (raw == HalGPIO::BTN_LEFT) {
-      if (SETTINGS.screenMargin > CrossPointSettings::SCREEN_MARGIN_MIN) {
-        SETTINGS.screenMargin = std::max<int>(CrossPointSettings::SCREEN_MARGIN_MIN,
-                                              SETTINGS.screenMargin - CrossPointSettings::SCREEN_MARGIN_STEP);
+      constexpr uint8_t kMargins[] = {5, 10, 12, 14, 16, 18, 20, 25};
+      uint8_t next = kMargins[0];
+      for (const uint8_t value : kMargins) {
+        if (value >= SETTINGS.screenMargin) break;
+        next = value;
+      }
+      if (next != SETTINGS.screenMargin) {
+        SETTINGS.screenMargin = next;
         SETTINGS.saveToFile();
         cphun36RebuildReader();
       }
       return true;
     }
-    if (raw == HalGPIO::BTN_RIGHT && SETTINGS.screenMargin < CrossPointSettings::SCREEN_MARGIN_MAX) {
-      SETTINGS.screenMargin = std::min<int>(CrossPointSettings::SCREEN_MARGIN_MAX,
-                                            SETTINGS.screenMargin + CrossPointSettings::SCREEN_MARGIN_STEP);
-      SETTINGS.saveToFile();
-      cphun36RebuildReader();
+    if (raw == HalGPIO::BTN_RIGHT) {
+      constexpr uint8_t kMargins[] = {5, 10, 12, 14, 16, 18, 20, 25};
+      uint8_t next = kMargins[7];
+      for (const uint8_t value : kMargins) {
+        if (value > SETTINGS.screenMargin) {
+          next = value;
+          break;
+        }
+      }
+      if (next != SETTINGS.screenMargin) {
+        SETTINGS.screenMargin = next;
+        SETTINGS.saveToFile();
+        cphun36RebuildReader();
+      }
     }
     return true;
   };
@@ -857,6 +1748,10 @@ void EpubReaderActivity::loop() {
     showDictionaryMessage = false;
     requestUpdate();
   }
+  if (showExportSuccess && millis() - exportSuccessTime >= 2000UL) {
+    showExportSuccess = false;
+    requestUpdate();
+  }
 
   const bool confirmReleased = !cphun36ConsumeFrontShort && mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   if (confirmReleased) {
@@ -944,17 +1839,9 @@ void EpubReaderActivity::loop() {
       restoreSavedPosition();
     } else {
       if (currentPageFootnotes.size() == 1) {
-        navigateToHref(currentPageFootnotes[0].href, true);
+        openFootnotePopup(currentPageFootnotes[0], currentSpineIndex);
       } else if (currentPageFootnotes.size() > 1) {
-        startActivityForResult(
-            std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                navigateToHref(footnoteResult.href, true);
-              }
-              requestUpdate();
-            });
+        openFootnotesList(false, false);
       }
     }
     return;
@@ -1077,6 +1964,139 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   requestUpdate();
 }
 
+
+bool EpubReaderActivity::exportEditsTsv() {
+  if (!epub) return false;
+
+  constexpr const char* EXPORT_DIR = "/edits";
+  if (!Storage.exists(EXPORT_DIR) && !Storage.mkdir(EXPORT_DIR)) {
+    LOG_ERR("ERS", "Failed to create edits export directory");
+    return false;
+  }
+
+  const std::string bookPath = epub->getPath();
+  const size_t slash = bookPath.find_last_of("/\\");
+  const std::string bookFile = slash == std::string::npos ? bookPath : bookPath.substr(slash + 1);
+
+  // Filename uses the full SD path so same-title test EPUBs in different
+  // directories remain distinct:
+  // /BOOX/test_v3/Michelangelo.epub -> /edits/BOOX_test_v3_Michelangelo.tsv
+  std::string exportBase = bookPath;
+  while (!exportBase.empty() && (exportBase.front() == '/' || exportBase.front() == '\\')) exportBase.erase(0, 1);
+  const size_t dot = exportBase.find_last_of('.');
+  if (dot != std::string::npos) exportBase.erase(dot);
+  for (char& c : exportBase) {
+    const unsigned char u = static_cast<unsigned char>(c);
+    if (c == '/' || c == '\\' || c == '<' || c == '>' || c == ':' || c == '"' || c == '|' || c == '?' ||
+        c == '*' || u < 32) {
+      c = '_';
+    }
+  }
+  if (exportBase.empty()) exportBase = "book";
+  if (exportBase.size() > 180) exportBase.erase(0, exportBase.size() - 180);
+  const std::string exportPath = std::string(EXPORT_DIR) + "/" + exportBase + ".tsv";
+
+  auto field = [](std::string value) {
+    for (char& c : value) {
+      if (c == '\t' || c == '\r' || c == '\n') c = ' ';
+    }
+    return value;
+  };
+
+  auto xhtmlForSpine = [this](const int spine) -> std::string {
+    if (!epub || spine < 0 || spine >= epub->getSpineItemsCount()) return {};
+    return epub->getSpineItem(spine).href;
+  };
+
+  Storage.remove(exportPath.c_str());
+  HalFile out;
+  if (!Storage.openFileForWrite("ERS", exportPath, out)) {
+    LOG_ERR("ERS", "Failed to open TSV export: %s", exportPath.c_str());
+    return false;
+  }
+
+  auto writeText = [&](const std::string& text) -> bool {
+    return text.empty() ||
+           out.write(reinterpret_cast<const uint8_t*>(text.data()), text.size()) == static_cast<int>(text.size());
+  };
+
+  auto writeRow = [&](const uint32_t id, const char* type, const int spine, const uint32_t offset,
+                      const uint16_t length, const std::string& original, const std::string& replacement) -> bool {
+    std::string row;
+    row.reserve(512 + original.size() + replacement.size());
+    row += "1\t";
+    row += std::to_string(id);
+    row += "\t";
+    row += type;
+    row += "\t";
+    row += field(bookPath);
+    row += "\t";
+    row += field(bookFile);
+    row += "\t";
+    row += field(epub->getTitle());
+    row += "\t";
+    row += field(epub->getAuthor());
+    row += "\t";
+    row += field(xhtmlForSpine(spine));
+    row += "\t";
+    row += std::to_string(spine);
+    row += "\t";
+    row += std::to_string(offset);
+    row += "\t";
+    row += std::to_string(length);
+    row += "\t";
+    row += field(original);
+    row += "\t";
+    row += field(replacement);
+    // Reserved for later Calibre-assisted context verification. Intentionally
+    // blank on-device to avoid rereading/inflating full XHTML only for export.
+    row += "\t\t\n";
+    return writeText(row);
+  };
+
+  // UTF-8 BOM: Windows Excel otherwise often opens a .tsv using the
+  // current ANSI code page and displays Hungarian accented characters incorrectly.
+  const uint8_t utf8Bom[] = {0xEF, 0xBB, 0xBF};
+  bool ok = out.write(utf8Bom, sizeof(utf8Bom)) == static_cast<int>(sizeof(utf8Bom));
+
+  const std::string header =
+      "version\tid\ttype\tbook_path\tbook_file\tbook_title\tbook_author\txhtml\tspine\tvisible_offset\tlength\t"
+      "original\treplacement\tcontext_before\tcontext_after\n";
+  if (ok) ok = writeText(header);
+  uint32_t id = 1;
+
+  if (ok && highlightStore) {
+    for (const auto& mark : highlightStore->items()) {
+      if (!writeRow(id++, "MARK", mark.spineIndex, mark.visibleTextOffset, mark.length, mark.text, "")) {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  if (ok && textEditStore) {
+    for (const auto& edit : textEditStore->items()) {
+      if (!writeRow(id++, "EDIT", edit.spineIndex, edit.visibleTextOffset, edit.length, edit.originalText,
+                    edit.replacementText)) {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  out.flush();
+  out.close();
+  if (!ok) {
+    Storage.remove(exportPath.c_str());
+    LOG_ERR("ERS", "TSV export failed: %s", exportPath.c_str());
+    return false;
+  }
+
+  LOG_INF("ERS", "TSV edits exported to %s (%lu records)", exportPath.c_str(),
+          static_cast<unsigned long>(id - 1));
+  return true;
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     loadCachedBookmarks();
@@ -1136,6 +2156,51 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
+      std::vector<EpubReaderChapterSelectionActivity::VirtualChapter> virtualChapters;
+
+      // CPHUN-135r4k2: virtual chapter rows must not depend on the small
+      // incremental-build watermark (section->pageCount). Use the Section's
+      // estimated total instead, and store each target as relative progress.
+      // The selected target is resolved after the normal full-build percent path,
+      // then snapped to a real paragraph boundary.
+      size_t spineBytes = 0;
+      const auto spineItemForSplit = epub->getSpineItem(spineIdx);
+      const bool oversizedSpine =
+          epub->getItemSize(spineItemForSplit.href, &spineBytes) && spineBytes >= (128u * 1024u);
+
+      if (section && oversizedSpine) {
+        const uint16_t estimatedPages = section->estimatedTotalPages();
+        if (estimatedPages >= 24) {
+          int tocIndex = epub->getTocIndexForSpineIndex(spineIdx);
+          std::string parentTitle = "Fejezet";
+          if (tocIndex >= 0 && tocIndex < epub->getTocItemsCount()) {
+            parentTitle = epub->getTocItem(tocIndex).title;
+            if (parentTitle.empty()) parentTitle = "Fejezet";
+          }
+
+          constexpr uint16_t TARGET_PAGES = 12;
+          constexpr uint16_t MIN_TAIL_PAGES = 6;
+          uint16_t lastPermille = 0;
+          int part = 2;
+
+          for (uint16_t target = TARGET_PAGES;
+               target + MIN_TAIL_PAGES < estimatedPages;
+               target = static_cast<uint16_t>(target + TARGET_PAGES)) {
+            uint16_t permille =
+                static_cast<uint16_t>((static_cast<uint32_t>(target) * 1000u) / estimatedPages);
+            permille = std::max<uint16_t>(1, std::min<uint16_t>(999, permille));
+            if (permille <= lastPermille + 20) continue;
+
+            EpubReaderChapterSelectionActivity::VirtualChapter v;
+            v.title = parentTitle + " – " + std::to_string(part++);
+            v.spineIndex = spineIdx;
+            v.progressPermille = permille;
+            virtualChapters.push_back(std::move(v));
+            lastPermille = permille;
+          }
+        }
+      }
+
       // Release the section while the chapter list is up (mirrors the
       // TEXT_SETTINGS path): picking a chapter resets it anyway, and its
       // tens-of-KB footprint is the difference between the chapter list
@@ -1153,7 +2218,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         section.reset();
       }
       startActivityForResult(
-          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx),
+          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, spineIdx,
+                                                                std::move(virtualChapters)),
           [this](const ActivityResult& result) {
             if (result.isCancelled) {
               openReaderMenu();
@@ -1163,24 +2229,62 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             RenderLock lock;
             clearDeferredReposition();
             currentSpineIndex = chapterResult.spineIndex;
-            pendingAnchor = chapterResult.anchor;
-            nextPageNumber = 0;
+            constexpr const char* VIRTUAL_PERCENT_PREFIX = "__cphun_pct_";
+            constexpr const char* VIRTUAL_PAGE_PREFIX = "__cphun_page_";
+            if (chapterResult.anchor.rfind(VIRTUAL_PERCENT_PREFIX, 0) == 0) {
+              const int permille =
+                  std::clamp(atoi(chapterResult.anchor.c_str() + strlen(VIRTUAL_PERCENT_PREFIX)), 1, 999);
+              pendingAnchor.clear();
+              pendingPageJump.reset();
+              pendingSpineProgress = static_cast<float>(permille) / 1000.0f;
+              pendingPercentJump = true;
+              pendingVirtualChapterJump = true;
+              nextPageNumber = 0;
+            } else if (chapterResult.anchor.rfind(VIRTUAL_PAGE_PREFIX, 0) == 0) {
+              const int page = std::max(0, atoi(chapterResult.anchor.c_str() + strlen(VIRTUAL_PAGE_PREFIX)));
+              pendingAnchor.clear();
+              pendingPageJump = static_cast<uint16_t>(std::min(page, static_cast<int>(UINT16_MAX - 1)));
+              pendingVirtualChapterJump = false;
+              nextPageNumber = page;
+            } else {
+              pendingPageJump.reset();
+              pendingVirtualChapterJump = false;
+              pendingAnchor = chapterResult.anchor;
+              nextPageNumber = 0;
+            }
             section.reset();
             requestUpdate();
           });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
-      startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-                             [this](const ActivityResult& result) {
-                               if (result.isCancelled) {
-                                 openReaderMenu();
-                                 return;
-                               }
-                               const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                               navigateToHref(footnoteResult.href, true);
-                               requestUpdate();
-                             });
+      // CPHUN-135r4k2f5 SAFE: current-page data only. Do not start a
+      // current-spine or whole-book XHTML scan from an interactive menu.
+      if (currentPageFootnotes.empty()) {
+        constexpr const char* LOG_DIR = "/logfiles";
+        if (Storage.ensureDirectoryExists(LOG_DIR)) {
+          const std::string path =
+              std::string(LOG_DIR) + "/footnote_index_error_" + std::to_string(millis()) + ".txt";
+          HalFile logFile;
+          if (Storage.openFileForWrite("ERS", path, logFile)) {
+            std::string log = "CrossPoint Footnote Index Diagnostic\nFormat version: 1\n\n";
+            log += "Firmware: CPHUN-135R4K2F5-SAFE\n";
+            log += "Book: " + epub->getTitle() + "\n";
+            log += "EPUB: " + epub->getPath() + "\n";
+            log += "Source spine: " + std::to_string(currentSpineIndex) + "\n";
+            if (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) {
+              log += "Source XHTML: " + epub->getSpineItem(currentSpineIndex).href + "\n";
+            }
+            log += "Rendered page: " + std::to_string(section ? section->currentPage : 0) + "\n";
+            log += "Current-page indexed footnotes: 0\n\n";
+            log += "Error: CURRENT_PAGE_FOOTNOTE_INDEX_EMPTY\n";
+            logFile.write(reinterpret_cast<const uint8_t*>(log.data()), log.size());
+            logFile.flush();
+            logFile.close();
+          }
+        }
+      }
+      openFootnotesList(false, true);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_DESCRIPTION: {
@@ -1195,9 +2299,21 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           [this](const ActivityResult&) { openReaderMenu(true); });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::EXPORT_EDITS: {
+      // Direct export: no confirmation popup.
+      if (exportEditsTsv()) {
+        showExportSuccess = true;
+        exportSuccessTime = millis();
+      }
+      requestUpdate();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::BOOK_COVER: {
-      std::string coverPath = epub->getCoverBmpPath(false);
-      if (!Storage.exists(coverPath.c_str())) epub->generateCoverBmp(false);
+      // CPHUN-111: dedicated 4-gray Floyd-Steinberg cover, prescaled with aspect
+      // ratio preserved so neither dimension exceeds the physical X4 screen.
+      // The generated bitmap is then shown 1:1; no post-dither downscale is needed.
+      std::string coverPath = epub->getBookCoverViewBmpPath();
+      if (!Storage.exists(coverPath.c_str())) epub->generateBookCoverViewBmp();
       if (Storage.exists(coverPath.c_str())) {
         startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
                                [this](const ActivityResult&) { openReaderMenu(true); });
@@ -1207,10 +2323,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
+      const auto before = captureReaderLayout(buildViewportWidth, buildViewportHeight);
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                     TextSettingsActivity::Tab::Family),
-                             [this](const ActivityResult&) {
-                               {
+                             [this, before](const ActivityResult&) {
+                               if (!readerLayoutMatches(before, buildViewportWidth, buildViewportHeight)) {
                                  RenderLock lock;
                                  if (section) {
                                    rememberCurrentContentOffset();
@@ -1219,6 +2336,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                    nextPageNumber = section->currentPage;
                                  }
                                  section.reset();
+                                 LOG_INF("ERS", "CPHUN-150: text settings changed; refreshing section");
+                               } else {
+                                 LOG_DBG("ERS", "CPHUN-150: text settings unchanged; retaining section");
                                }
                                openReaderMenu();
                              });
@@ -1250,7 +2370,15 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
-      openDictionaryWordSelect();
+      openDictionaryWordSelect(WordSelectionMode::Dictionary);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHT: {
+      openDictionaryWordSelect(WordSelectionMode::Highlight);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::EDIT: {
+      openDictionaryWordSelect(WordSelectionMode::Edit);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::MANUAL_DICTIONARY_SEARCH: {
@@ -1279,6 +2407,46 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
       return;
+    }
+    case EpubReaderMenuActivity::MenuAction::REINDEX_CHAPTER: {
+      if (!epub || currentSpineIndex < 0 || currentSpineIndex >= epub->getSpineItemsCount()) {
+        break;
+      }
+
+      bool cleared = false;
+      {
+        RenderLock lock;
+        if (section) {
+          rememberCurrentContentOffset();
+          cachedSpineIndex = currentSpineIndex;
+          cachedChapterTotalPageCount = section->pageCount;
+          nextPageNumber = section->currentPage;
+          section->abandonBuild();
+          cleared = section->clearCache();
+          section.reset();
+        } else {
+          // A chapter may be temporarily unloaded when this action is invoked.
+          Section chapterCache(epub, currentSpineIndex, renderer);
+          cleared = chapterCache.clearCache();
+        }
+
+        if (cleared) {
+          // Always rebuild the entire current chapter, even if the existing
+          // HTML cache permits a very fast, normally invisible reflow.
+          forceChapterReindex = true;
+          buildPopupPending = false;
+          pendingPercentJump = false;
+        }
+      }
+      if (!cleared) {
+        LOG_ERR("ERS", "CPHUN-151: failed to remove chapter page cache");
+        showIndexBuildError();
+        break;
+      }
+
+      LOG_INF("ERS", "CPHUN-151: reindexing current chapter %d", currentSpineIndex);
+      requestUpdate();
+      break;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
       {
@@ -1526,10 +2694,9 @@ void EpubReaderActivity::renderBook() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  const int verticalScreenMargin = std::max(0, static_cast<int>(SETTINGS.screenMargin) - 4);
+  const int verticalScreenMargin =
+      SETTINGS.screenMargin == 5 ? 4 : std::max(0, static_cast<int>(SETTINGS.screenMargin) - 6);
   orientedMarginTop += verticalScreenMargin;
-  // CPHUN-57: move the visible top text boundary 6 px upward relative to CPHUN-54.
-  orientedMarginTop = std::max(0, orientedMarginTop - 6);
   orientedMarginLeft += SETTINGS.screenMargin;
   orientedMarginRight += SETTINGS.screenMargin;
 
@@ -1543,9 +2710,6 @@ void EpubReaderActivity::renderBook() {
   } else {
     orientedMarginBottom += std::max(verticalScreenMargin, static_cast<int>(statusBarHeight));
   }
-  // CPHUN-57: move the visible bottom text boundary 6 px downward relative to CPHUN-54.
-  // Apply this after status-bar constraints so the 6 px expansion remains observable.
-  orientedMarginBottom = std::max(0, orientedMarginBottom - 6);
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -1579,7 +2743,7 @@ void EpubReaderActivity::renderBook() {
         LOG_DBG("ERS", "Cache not found, building...");
       }
 
-      const bool needsFullBuild = pendingPercentJump;
+      const bool needsFullBuild = pendingPercentJump || forceChapterReindex;
       if (needsFullBuild) {
         GUI.drawPopup(renderer, tr(STR_INDEXING));
         pagesUntilFullRefresh = 1;
@@ -1595,6 +2759,7 @@ void EpubReaderActivity::renderBook() {
           return;
         }
         loan.end();
+        forceChapterReindex = false;
       } else {
         const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
         const bool anchorJump = !pendingAnchor.empty();
@@ -1687,8 +2852,24 @@ void EpubReaderActivity::renderBook() {
     if (pendingPercentJump && section->pageCount > 0) {
       int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
       if (newPage >= section->pageCount) newPage = section->pageCount - 1;
+
+      if (pendingVirtualChapterJump && newPage > 0) {
+        constexpr int PARAGRAPH_SEARCH_PAGES = 12;
+        const int searchEnd =
+            std::min<int>(section->pageCount - 1, newPage + PARAGRAPH_SEARCH_PAGES);
+        for (int page = newPage; page <= searchEnd; ++page) {
+          const auto here = section->getParagraphIndexForPage(static_cast<uint16_t>(page));
+          const auto prev = section->getParagraphIndexForPage(static_cast<uint16_t>(page - 1));
+          if (here && prev && *here != *prev) {
+            newPage = page;
+            break;
+          }
+        }
+      }
+
       section->currentPage = newPage;
       pendingPercentJump = false;
+      pendingVirtualChapterJump = false;
     }
   }
 
@@ -1780,6 +2961,12 @@ void EpubReaderActivity::renderBook() {
 
     currentPageVisibleOffset = p->visibleTextOffset;
     currentPageFootnotes = std::move(p->footnotes);
+    if (footnoteTextCacheSpine_ != currentSpineIndex || footnoteTextCachePage_ != section->currentPage) {
+      footnoteTextCacheIndexes_.fill(-1);
+      for (auto& text : footnoteTextCacheTexts_) text.clear();
+      footnoteTextCacheSpine_ = currentSpineIndex;
+      footnoteTextCachePage_ = section->currentPage;
+    }
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -1809,6 +2996,9 @@ void EpubReaderActivity::renderBook() {
 
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+  }
+  if (showExportSuccess) {
+    GUI.drawPopup(renderer, "Sikeres exportálás.");
   }
 }
 
@@ -1931,9 +3121,18 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
+  if (textEditStore) {
+    TextEditRenderer::renderBackground(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop,
+                                       currentSpineIndex, *textEditStore);
+  }
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   const auto tBwRender = millis();
+  if (highlightStore) {
+    HighlightRenderer::render(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop,
+                              currentSpineIndex, *highlightStore);
+  }
+
 
   if (absoluteImagePage) {
     // CPHUN-182 intentionally does NOT refresh the B/W base here. The complete

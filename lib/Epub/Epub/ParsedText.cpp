@@ -1,4 +1,6 @@
 #include "ParsedText.h"
+#include "LetterSpacingOptimization.h"
+#include "OpticalLineCorrection.h"
 
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
@@ -13,6 +15,7 @@
 #include <vector>
 
 #include "TokenBoundary.h"
+#include "ShortHyphenGlyph.h"
 #include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
 
@@ -28,7 +31,7 @@ constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
 // UTF-8 for U+2011 NON-BREAKING HYPHEN. Used only as the visible glyph
 // for a synthetic hyphenation break when the Short Hyphen option is enabled.
-constexpr char SHORT_HYPHEN_UTF8[] = "\xE2\x80\x91";
+// CPHUN-152: synthetic glyph is selected per font/style via short_hyphen::select().
 // Paragraph-level direction: scan the first N words to find base direction.
 constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
@@ -201,7 +204,7 @@ bool isHangingPunctuation(const uint32_t cp) {
   // CPHUN approved optical-margin set: hyphen, period, comma, colon, semicolon.
   // U+2011 participates only when Short Hyphen is enabled.
   return cp == '-' || cp == '.' || cp == ',' || cp == ':' || cp == ';' ||
-         (ParsedText::isShortHyphenEnabled() && cp == 0x2011);
+         (ParsedText::isShortHyphenEnabled() && (cp == 0x2011 || cp == 0x2010));
 }
 
 struct HangingAdvanceCacheEntry {
@@ -245,12 +248,80 @@ int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, c
   // The final word width already includes pair kerning; subtracting the standalone
   // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the
   // logical right margin, so every rendered short hyphen starts at the same X.
-  if (punctuation == 0x2011 && ParsedText::isShortHyphenEnabled()) {
-    punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, SHORT_HYPHEN_UTF8);
+  if (ParsedText::isShortHyphenEnabled()) {
+    const auto glyph = short_hyphen::select(renderer, fontId, style);
+    if (punctuation == glyph.codepoint) {
+      punctuationAdvance = cachedHangingPunctuationAdvance(renderer, fontId, style, punctuation, glyph.utf8);
+    }
   }
   // Optikai margó is a simple OFF/ON control. ON allows 100% of the
   // punctuation contribution to hang, capped by screenMargin - 1.
   return std::min<int>(pixelLimit, punctuationAdvance);
+}
+
+// CPHUN-123: optical right-edge closure for ordinary final glyphs.
+// Justification is advance-based, while the reader sees the glyph's actual ink.
+// For a line-ending letter with a positive right-side ink inset, let justified
+// word gaps absorb that inset so the last strong black pixel reaches the same
+// optical margin. Existing hanging-punctuation handling remains authoritative.
+int trailingStrongInkInset(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                           const EpdFontFamily::Style style) {
+  if (word.empty()) return 0;
+  const uint32_t cp = lastCodepoint(word);
+  if (cp == 0 || isHangingPunctuation(cp)) return 0;
+
+  const auto fontIt = renderer.getFontMap().find(fontId);
+  if (fontIt == renderer.getFontMap().end()) return 0;
+  const EpdFontFamily& font = fontIt->second;
+  const EpdGlyph* glyph = font.getGlyph(cp, style);
+  const EpdFontData* fontData = font.getData(style);
+  if (!glyph || !fontData || glyph->width == 0 || glyph->height == 0) return 0;
+
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (!bitmap) return 0;
+
+  int rightmostStrong = -1;
+  int rightmostAny = -1;
+  const int width = glyph->width;
+  const int height = glyph->height;
+
+  if (fontData->is2Bit) {
+    // 2-bit font packing is MSB-first, 4 pixels per byte:
+    // 0=white, 1=light gray, 2=dark gray, 3=black.
+    // CPHUN-124: for optical right-edge purposes, dark gray (2) and
+    // black (3) count equally as visible ink; light gray (1) is treated
+    // as white. This keeps the calculation binary and ignores faint
+    // anti-aliased fringe pixels.
+    int pixelPos = 0;
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x, ++pixelPos) {
+        const uint8_t packed = bitmap[pixelPos >> 2];
+        const int shift = 6 - ((pixelPos & 3) << 1);
+        const uint8_t value = static_cast<uint8_t>((packed >> shift) & 0x03u);
+        if (value != 0 && x > rightmostAny) rightmostAny = x;
+        if (value >= 2 && x > rightmostStrong) rightmostStrong = x;
+      }
+    }
+  } else {
+    int pixelPos = 0;
+    for (int y = 0; y < height; ++y) {
+      for (int x = 0; x < width; ++x, ++pixelPos) {
+        const uint8_t packed = bitmap[pixelPos >> 3];
+        const uint8_t mask = static_cast<uint8_t>(0x80u >> (pixelPos & 7));
+        if ((packed & mask) != 0 && x > rightmostStrong) rightmostStrong = x;
+      }
+    }
+    rightmostAny = rightmostStrong;
+  }
+
+  const int rightmostInk = rightmostStrong >= 0 ? rightmostStrong : rightmostAny;
+  if (rightmostInk < 0) return 0;
+
+  const int advancePx = fp4::toPixel(static_cast<int32_t>(glyph->advanceX));
+  const int inkRightExclusive = static_cast<int>(glyph->left) + rightmostInk + 1;
+  // Report the actual final-glyph ink inset, capped at five pixels.
+  return std::clamp(advancePx - inkRightExclusive, 0,
+                    OpticalLineCorrection::MAX_INK_CORRECTION_PX);
 }
 
 int scaledNormalSpaceAdvance(const int natural, const uint8_t percent) {
@@ -360,8 +431,8 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
     // then substitute U+2011 only for rendering. This keeps Short Hyphen from
     // changing pagination in optical-margin mode. With Optical margin OFF the
     // shorter U+2011 width is intentionally allowed to affect line breaking.
-    if (ParsedText::isShortHyphenEnabled() && !ParsedText::isOpticalMarginEnabled()) {
-      sanitized += SHORT_HYPHEN_UTF8;
+    if (ParsedText::isShortHyphenEnabled()) {
+      sanitized += short_hyphen::select(renderer, fontId, style).utf8;
     } else {
       sanitized.push_back('-');
     }
@@ -885,7 +956,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
     renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
     if (hyphenationEnabled && shortHyphenEnabled_) {
-      renderer.ensureSdCardFontReady(fontId, SHORT_HYPHEN_UTF8, styleMask);
+      renderer.ensureSdCardFontReady(fontId, "\xE2\x80\x91\xE2\x80\x90-", styleMask);
     }
   }
 
@@ -1415,7 +1486,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   }
   if (chosenNeedsHyphen) {
     if (shortHyphenEnabled_) {
-      words[wordIndex] += SHORT_HYPHEN_UTF8;
+      words[wordIndex] += short_hyphen::select(renderer, fontId, style).utf8;
     } else {
       words[wordIndex].push_back('-');
     }
@@ -1504,6 +1575,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   lineWords.reserve(lineWordCount);
   std::vector<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.reserve(lineWordCount);
+  std::vector<uint32_t> lineWordVisibleOffsets;
+  lineWordVisibleOffsets.reserve(lineWordCount);
 
   for (size_t i = 0; i < lineWordCount; ++i) {
     std::string word = std::move(words[lastBreakAt + i]);
@@ -1512,6 +1585,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
     lineWords.push_back(std::move(word));
     lineWordStyles.push_back(wordStyles[lastBreakAt + i]);
+    lineWordVisibleOffsets.push_back(visibleOffsetAt(lastBreakAt + i));
   }
 
   // Calculate total word width for this line, count actual word gaps,
@@ -1588,7 +1662,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                                                  lineWordStyles.back(), hangingPunctuationLimitPx)
                                    : 0;
   const int spareSpace =
-      effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+      effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset -
+      lineWordWidthSum - totalNaturalGaps;
 
   // CPHUN-44/45: independent render-only microspacing on justified LTR non-last lines.
   // Explicit ASCII hyphen: up to +6 px at each adjacent token boundary.
@@ -1630,11 +1705,73 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       const int finalAverageGap = (totalNaturalGaps + std::max(0, spareSpace)) / static_cast<int>(actualGapCount);
       const int naturalAverageGap = natural100Gaps / static_cast<int>(normalGapCount);
       if (finalAverageGap * 100 > naturalAverageGap * letterSpacingLimitPercent) {
-        for (const auto& w : lineWords) {
-          const uint32_t cps = countCodepoints(w);
-          if (cps > 1) trackingExtraTotal += static_cast<int>(cps - 1);
+        if (letterSpacingOptimizationThresholdCode > 0 && spareSpace > 1) {
+          const auto& optProfile =
+              LetterSpacingOptimization::profile(LetterSpacingOptimization::FIXED_PROFILE_LEVEL);
+          const uint8_t availableBudget = static_cast<uint8_t>(
+              std::min<int>(optProfile.maxPxPerLine, spareSpace - 1));
+          const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+          const auto fontIt = renderer.getFontMap().find(fontId);
+          const uint8_t pointSize = fontIt == renderer.getFontMap().end()
+                                        ? 16
+                                        : LetterSpacingOptimization::pointSizeForFont(
+                                              fontIt->second, pairTable);
+          LetterSpacingOptimization::Accumulator optAcc(
+              letterSpacingOptimizationThresholdCode, availableBudget, pairTable, pointSize);
+          for (size_t i = 0; i < lineWords.size(); ++i) {
+            trackingExtraTotal += LetterSpacingOptimization::consumeWord(
+                lineWords[i].c_str(), lineWordStyles[i], optAcc);
+          }
+          if (trackingExtraTotal > 0) {
+            letterSpacingPx = LetterSpacingOptimization::packConfig(
+                letterSpacingOptimizationThresholdCode,
+                static_cast<uint8_t>(trackingExtraTotal));
+          }
+        } else {
+          for (const auto& w : lineWords) {
+            const uint32_t cps = countCodepoints(w);
+            if (cps > 1) trackingExtraTotal += static_cast<int>(cps - 1);
+          }
+          if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) letterSpacingPx = 1;
         }
-        if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) letterSpacingPx = 1;
+      }
+    }
+  }
+  // CPHUN-164: the ordinary threshold calculation needs word spaces.
+  // A single long word alone on a justified line has none, so offer it the
+  // available space through its internal letter pairs instead.
+  if (letterSpacingPx == 0 && letterSpacingLimitPercent > 0 && spareSpace > 0 &&
+      effectiveAlignment == CssTextAlign::Justify && !isLastLine && !blockStyle.isRtl &&
+      !hasRtlWord && !focusReadingEnabled && !lineHasRubyAnnotation &&
+      actualGapCount == 0 && lineWordCount == 1 &&
+      lineWordStyles[0] == EpdFontFamily::REGULAR &&
+      LetterSpacingOptimization::isLatinLetter(lastCodepoint(lineWords[0]))) {
+    const int pairs = static_cast<int>(countCodepoints(lineWords[0])) - 1;
+    if (pairs >= 5) {
+      if (letterSpacingOptimizationThresholdCode > 0) {
+        const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+        const auto fontIt = renderer.getFontMap().find(fontId);
+        const uint8_t pointSize = fontIt == renderer.getFontMap().end()
+            ? 16 : LetterSpacingOptimization::pointSizeForFont(fontIt->second, pairTable);
+        const auto& profile = LetterSpacingOptimization::profile(
+            LetterSpacingOptimization::FIXED_PROFILE_LEVEL);
+        LetterSpacingOptimization::Accumulator optAcc(
+            letterSpacingOptimizationThresholdCode,
+            static_cast<uint8_t>(std::min<int>(spareSpace, profile.maxPxPerLine)),
+            pairTable, pointSize);
+        const int extra = LetterSpacingOptimization::consumeWord(
+            lineWords[0].c_str(), lineWordStyles[0], optAcc);
+        if (extra > 0) {
+          trackingExtraTotal = extra;
+          letterSpacingPx = LetterSpacingOptimization::packConfig(
+              letterSpacingOptimizationThresholdCode, static_cast<uint8_t>(extra));
+        }
+      } else {
+        const int extra = std::min<int>({30, spareSpace, pairs});
+        if (extra > 0) {
+          trackingExtraTotal = extra;
+          letterSpacingPx = OpticalLineCorrection::encodeStandaloneBudget(extra);
+        }
       }
     }
   }
@@ -1659,6 +1796,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
+  int lastWordTrackingExtra = 0;
 
   if (willReorder) {
     reorderedWordsScratch.clear();
@@ -1673,9 +1811,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     reorderedContinuesScratch.reserve(visualOrderScratch.size());
     reorderedNoSpaceBeforeScratch.reserve(visualOrderScratch.size());
     reorderedFocusBoundaryScratch.reserve(visualOrderScratch.size());
+    std::vector<uint32_t> reorderedVisibleOffsets;
+    reorderedVisibleOffsets.reserve(visualOrderScratch.size());
 
     for (size_t i = 0; i < visualOrderScratch.size(); ++i) {
       const uint16_t src = visualOrderScratch[i];
+      reorderedVisibleOffsets.push_back(lineWordVisibleOffsets[src]);
       reorderedWordsScratch.push_back(std::move(lineWords[src]));
       reorderedStylesScratch.push_back(lineWordStyles[src]);
       reorderedWidthsScratch.push_back(wordWidths[lastBreakAt + src]);
@@ -1801,6 +1942,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     lineWords.swap(reorderedWordsScratch);
     lineWordStyles.swap(reorderedStylesScratch);
+    lineWordVisibleOffsets.swap(reorderedVisibleOffsets);
   } else {
     // Standard LTR/RTL positioning loop when no visual reordering is needed
     if (blockStyle.isRtl) {
@@ -1865,7 +2007,29 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       size_t justifyGapIndex = 0;
       int hyphenMicroRemaining = hyphenMicroTotal;
       int punctuationMicroRemaining = punctuationMicroTotal;
+      const auto positionPairTable = LetterSpacingOptimization::tableForFontId(fontId);
+      const auto positionFontIt = renderer.getFontMap().find(fontId);
+      const uint8_t positionPointSize = positionFontIt == renderer.getFontMap().end()
+                                            ? 16
+                                            : LetterSpacingOptimization::pointSizeForFont(
+                                                  positionFontIt->second, positionPairTable);
+      LetterSpacingOptimization::Accumulator optPositionAcc(
+          LetterSpacingOptimization::unpackThresholdCode(letterSpacingPx),
+          LetterSpacingOptimization::unpackBudget(letterSpacingPx),
+          positionPairTable, positionPointSize);
       for (size_t wordIdx = 0; wordIdx < lineWordCount; wordIdx++) {
+        const int wordTrackingExtra =
+            LetterSpacingOptimization::isPackedConfig(letterSpacingPx)
+                ? LetterSpacingOptimization::consumeWord(
+                      lineWords[wordIdx].c_str(), lineWordStyles[wordIdx], optPositionAcc)
+                : (OpticalLineCorrection::isStandaloneWordSpacing(letterSpacingPx)
+                       ? OpticalLineCorrection::standaloneBudget(letterSpacingPx)
+                       : (letterSpacingPx
+                            ? static_cast<int>(
+                                  std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) *
+                                  letterSpacingPx
+                            : 0));
+        if (wordIdx + 1 == lineWordCount) lastWordTrackingExtra = wordTrackingExtra;
         if (wordIdx > 0 && hyphenMicroRemaining > 0 &&
             (isStandaloneExplicitHyphenToken(lineWords[wordIdx]) ||
              isStandaloneExplicitHyphenToken(lineWords[wordIdx - 1]))) {
@@ -1884,7 +2048,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          int advance = wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) * letterSpacingPx : 0);
+          int advance = wordWidths[lastBreakAt + wordIdx] + wordTrackingExtra;
           if (fixedDialogueSpacing && lastBreakAt == 0 && isFixedLeadingMarkerBoundary(lineWords, wordIdx + 1)) {
             advance += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
                                          lineWordStyles[0]);
@@ -1915,9 +2079,47 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap += justifyExtra + (static_cast<int>(justifyGapIndex) < justifyRemainder ? 1 : 0);
             justifyGapIndex++;
           }
-          xpos += wordWidths[lastBreakAt + wordIdx] + (letterSpacingPx ? static_cast<int>(std::max<uint32_t>(1, countCodepoints(lineWords[wordIdx])) - 1) * letterSpacingPx : 0) + gap;
+          xpos += wordWidths[lastBreakAt + wordIdx] + wordTrackingExtra + gap;
         }
       }
+    }
+  }
+
+  // CPHUN-165: final-glyph bitmap inspection must happen AFTER glyph prewarm
+  // in TextBlock::render(), never during metadata-only layout.
+  uint16_t opticalTargetRightX = 0;
+  uint16_t opticalLastWordAdvance = 0;
+  std::vector<uint8_t> opticalGaps;
+  if (!willReorder && !isLastLine && effectiveAlignment == CssTextAlign::Justify &&
+      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled &&
+      !lineHasRubyAnnotation && hangingAllowance == 0 &&
+      actualGapCount > 0 && !lineWords.empty() &&
+      lineXPos.size() == lineWords.size() &&
+      LetterSpacingOptimization::isLatinLetter(lastCodepoint(lineWords.back()))) {
+    const auto fontIt = renderer.getFontMap().find(fontId);
+    if (fontIt != renderer.getFontMap().end() &&
+        fontIt->second.hasCodepoint(lastCodepoint(lineWords.back()),
+                                    lineWordStyles.back())) {
+      opticalGaps.assign(lineWordCount, 0);
+      unsigned eligible = 0;
+      for (size_t i = 1; i < lineWordCount; ++i) {
+        if (TokenBoundary::isJustifiableGap(
+                continuesVec[lastBreakAt + i], noSpaceBeforeVec[lastBreakAt + i],
+                lineWords[i] == " ")) {
+          opticalGaps[i] = 1;
+          ++eligible;
+        }
+      }
+      if (eligible > 0) {
+        const int advance = static_cast<int>(
+            wordWidths[lastBreakAt + lineWordCount - 1]) + lastWordTrackingExtra;
+        if (pageWidth > 0 && pageWidth <= UINT16_MAX &&
+            advance > 0 && advance <= UINT16_MAX) {
+          opticalTargetRightX = static_cast<uint16_t>(pageWidth);
+          opticalLastWordAdvance = static_cast<uint16_t>(advance);
+        }
+      }
+      if (opticalTargetRightX == 0) opticalGaps.clear();
     }
   }
 
@@ -1937,8 +2139,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
-    auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                             std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts), letterSpacingPx);
+    auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, lineWordVisibleOffsets,
+                                             std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle,
+                                             std::move(lineRubyTexts), letterSpacingPx,
+                                              opticalTargetRightX, opticalLastWordAdvance, opticalGaps);
     if (!block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;
@@ -1960,8 +2164,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         boundary == 0 ? 0 : measureFocusPrefixAdvance(renderer, fontId, lineWords[i], lineWordStyles[i], boundary));
   }
 
-  auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
-                                           std::move(lineRubyTexts));
+  auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, lineWordVisibleOffsets,
+                                           outBoundaries, outSuffixX, blockStyle, std::move(lineRubyTexts));
   if (!block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return;

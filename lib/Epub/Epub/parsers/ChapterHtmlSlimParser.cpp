@@ -995,7 +995,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Flush buffer before style change
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
-        self->nextWordContinues = true;
+      // CPHUN-135r4b: a following noteref must not suppress hyphenation of
+      // the lexical word immediately before the separate <a> node.
+      self->nextWordContinues = false;
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
@@ -1878,14 +1880,54 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
   }
   setCurrentPageVisibleOffset(visibleOffset);
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
+  // CPHUN-135r4j: assign a noteref to the page where its marker is actually
+  // rendered. A hyphenated source word can split into fragments across pages,
+  // making rendered-word counting advance before the following {N}/[N] marker.
+  // Exact visible-marker matching wins; word-index remains a fallback for EPUBs
+  // whose noteref label is not preserved as a standalone rendered token.
+  auto markerOnLine = [&](const FootnoteEntry& fn) {
+    if (fn.number[0] == '\0') return false;
+    const std::string marker(fn.number);
+    for (uint16_t i = 0; i < line->wordCount(); ++i) {
+      const std::string renderedToken(line->wordText(i));
+      if (renderedToken == marker || renderedToken == ("{" + marker + "}") || renderedToken == ("[" + marker + "]") ||
+          renderedToken == ("(" + marker + ")")) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  for (auto it = pendingFootnotes.begin(); it != pendingFootnotes.end();) {
+    if (markerOnLine(it->second)) {
+      currentPage->addFootnote(it->second.number, it->second.href);
+      it = pendingFootnotes.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
   wordsExtractedInBlock += line->wordCount();
   auto footnoteIt = pendingFootnotes.begin();
-  while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
+  while (footnoteIt != pendingFootnotes.end()) {
+    // Do not let the fallback steal an ordinary numeric/bracketed marker from
+    // the following page merely because a hyphenated word produced two visual
+    // fragments. Numeric marker links wait for markerOnLine().
+    std::string label(footnoteIt->second.number);
+    bool markerLike = !label.empty();
+    for (char c : label) {
+      if (!(c >= '0' && c <= '9') && c != '{' && c != '}' && c != '[' && c != ']' && c != '(' && c != ')') {
+        markerLike = false;
+        break;
+      }
+    }
+    if (markerLike || footnoteIt->first > wordsExtractedInBlock) {
+      ++footnoteIt;
+      continue;
+    }
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
-    ++footnoteIt;
+    footnoteIt = pendingFootnotes.erase(footnoteIt);
   }
-  pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();

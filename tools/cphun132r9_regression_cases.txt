@@ -1,0 +1,6 @@
+CPHUN-132r9 reported regression cases:
+influenszer. -> lookup must return or show NotFound/Error, never hang
+biszex -> lookup must return or show NotFound/Error, never hang
+fürdőga- -> fragment lookup must return, never hang
+tyában -> fragment lookup must return, never hang
+fürdőga-tyában -> page-boundary reconstruction tested separately

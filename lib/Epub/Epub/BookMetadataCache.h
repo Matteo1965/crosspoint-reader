@@ -109,6 +109,7 @@ class BookMetadataCache {
   bool beginTocPass();
   void createTocEntry(const std::string& title, const std::string& href, const std::string& anchor, uint8_t level);
   bool replaceTocWithSpineFiles();
+  bool supplementTocWithMissingSpineFiles();
   bool endTocPass();
   bool endWrite();
   bool cleanupTmpFiles() const;

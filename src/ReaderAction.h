@@ -54,6 +54,25 @@ enum class ReaderAction : uint8_t {
   GoHome = 32,
   OpenSettings = 33,
 
+  // CPHUN-133: direct reader controls. Append-only: values are persisted.
+  LetterSpacingCorrectionUp = 34,
+  LetterSpacingCorrectionDown = 35,
+  LetterSpacingOptimizationUp = 36,
+  LetterSpacingOptimizationDown = 37,
+  ExtraParagraphSpacingUp = 38,
+  ExtraParagraphSpacingDown = 39,
+  MinimumSpaceUp = 40,
+  MinimumSpaceDown = 41,
+  OpenHighlight = 42,
+  OpenManualDictionarySearch = 43,
+
+  // Fast A/B test actions kept in their own picker category.
+  TestLetterSpacingCorrectionMinMax = 44,
+  TestLetterSpacingOptimizationOff100 = 45,
+  TestLineSpacingMinMax = 46,
+  TestExtraParagraphSpacingOffMax = 47,
+  TestMinimumSpaceMinMax = 48,
+
   COUNT
 };
 
@@ -75,6 +94,8 @@ constexpr ReaderActionGroup readerActionGroup(const ReaderAction action) {
 
     case ReaderAction::OpenReaderMenu:
     case ReaderAction::OpenDictionary:
+    case ReaderAction::OpenHighlight:
+    case ReaderAction::OpenManualDictionarySearch:
     case ReaderAction::OpenBookmarks:
     case ReaderAction::OpenChapterSelection:
     case ReaderAction::OpenGoToPercent:

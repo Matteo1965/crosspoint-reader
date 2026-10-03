@@ -141,6 +141,7 @@ void KeyboardEntryActivity::onEnter() {
   touchRouter.holdMs = TOUCH_LONG_PRESS_MS;
   touchRouter.overrideHoldMs = TOUCH_DEL_LONG_PRESS_MS;
   interactionsReady = false;
+  if (title == "Szerkesztés") syncSelectionToValue(fui::QWERTY_KEY_BACKSPACE);
   requestUpdate();
 }
 
@@ -253,6 +254,13 @@ bool KeyboardEntryActivity::backspaceUtf8() {
   return true;
 }
 
+bool KeyboardEntryActivity::deleteForwardUtf8() {
+  if (text.empty() || cursorPos >= text.length()) return false;
+  const size_t next = utf8Next(text, cursorPos);
+  text.erase(cursorPos, next - cursorPos);
+  return true;
+}
+
 bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPress) {
   switch (value) {
     case fui::QWERTY_KEY_SHIFT:
@@ -299,6 +307,10 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
     case fui::QWERTY_KEY_ENTER:
       onComplete(text);
       return false;
+    case keyboard_layouts::hu_keyboard::FORWARD_DELETE_KEY:
+      delPressCount = 0;
+      hintVisible = false;
+      return deleteForwardUtf8();
     case fui::QWERTY_KEY_BACKSPACE:
       if (longPress) {
         text.clear();
@@ -913,7 +925,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
   }
 
-  if (tipCount > 0) {
+  if (title == "Szerkesztés") {
+    int y = (underlineBottom + kbRect.y) / 2 - 5 * tipsLh / 2 + 60;
+    drawTip("Tippek:", y);
+    y += tipsLh;
+    drawTip("KIJELÖLÉS: aktuális gomb használata", y);
+    y += tipsLh;
+    drawTip("SHIFT: billentyűsor váltása", y);
+    y += tipsLh;
+    drawTip("FEL HOSSZAN: kurzor mód", y);
+    y += tipsLh;
+    drawTip("LE: billentyűzet mód", y);
+    y += tipsLh;
+    drawTip("TÖRLÉS HOSSZAN: teljes szó törlése", y);
+  } else if (tipCount > 0) {
     int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
     drawTip(tr(STR_KB_TIPS), y);
     y += tipsLh;

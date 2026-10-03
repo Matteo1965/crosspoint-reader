@@ -13,6 +13,16 @@
 
 namespace fui = freeink::ui;
 
+namespace {
+constexpr Language UI_LANGUAGES[] = {
+    Language::HU, Language::EN, Language::DE, Language::ES,
+    Language::IT, Language::FR, Language::P2, Language::PL,
+    Language::FI, Language::RU, Language::SV, Language::UK,
+};
+static_assert(std::size(UI_LANGUAGES) == 12);
+}  // namespace
+
+
 LanguageSelectActivity::LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("LanguageSelect", renderer, mappedInput) {}
 
@@ -21,19 +31,22 @@ void LanguageSelectActivity::onEnter() {
 
   // Open on the current language, which may sit past the first page; the first
   // screen build pulls the viewport to it (ListNav follow-on-build).
-  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
-  const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
-  const auto* end = std::end(SORTED_LANGUAGE_INDICES);
-  const auto* it = std::find(begin, end, currentLang);
-  nav.selected = (it != end) ? static_cast<int>(std::distance(begin, it)) : 0;
+  const Language currentLang = I18N.getLanguage();
+  nav.selected = 0;
+  for (int i = 0; i < totalItems; ++i) {
+    if (UI_LANGUAGES[i] == currentLang) {
+      nav.selected = i;
+      break;
+    }
+  }
 
   // Built once here rather than every buildScreen() call: labels are static,
   // and the "Selected" marker can't go stale mid-visit since activateIndex()
   // finishes the activity immediately on selection.
   for (int i = 0; i < totalItems; ++i) {
     fui::ListItem item;
-    item.label = I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[i]));
-    if (SORTED_LANGUAGE_INDICES[i] == currentLang) {
+    item.label = I18N.getLanguageName(UI_LANGUAGES[i]);
+    if (UI_LANGUAGES[i] == currentLang) {
       item.value = tr(STR_SELECTED);
     }
     item.actionValue = static_cast<int16_t>(i);
@@ -48,7 +61,7 @@ void LanguageSelectActivity::activateIndex(const int index) {
   // unrelated element on the next render.
   app.clearTapFlash();
   nav.selected = index;
-  const uint8_t langIndex = SORTED_LANGUAGE_INDICES[index];
+  const uint8_t langIndex = static_cast<uint8_t>(UI_LANGUAGES[index]);
 
   {
     RenderLock lock(*this);

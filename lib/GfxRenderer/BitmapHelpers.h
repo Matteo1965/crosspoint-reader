@@ -11,6 +11,17 @@ uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
 
+struct GrayPlanePixel {
+  bool write;
+  bool black;
+};
+
+// level: 0 black, 1 dark, 2 light, 3 white.
+constexpr GrayPlanePixel grayPlanePixel(uint8_t level, bool msb, bool absolute) {
+  if (absolute) return {true, !(level == 3 || level == (msb ? 2 : 1))};
+  return {msb ? (level == 1 || level == 2) : level == 1, false};
+}
+
 enum class BmpRowOrder { BottomUp, TopDown };
 
 // Populates a 1-bit BMP header in the provided memory.
@@ -103,8 +114,9 @@ class Atkinson1BitDitherer {
 //     1/8
 // Less error buildup = fewer artifacts than Floyd-Steinberg
 class AtkinsonDitherer {
+  const bool originalThresholds;
  public:
-  explicit AtkinsonDitherer(int width) : width(width) {
+  explicit AtkinsonDitherer(int width, bool originalThresholds = false) : width(width), originalThresholds(originalThresholds) {
     errorRow0 = new int16_t[width + 4]();  // Current row
     errorRow1 = new int16_t[width + 4]();  // Next row
     errorRow2 = new int16_t[width + 4]();  // Row after next
@@ -130,7 +142,7 @@ class AtkinsonDitherer {
     // Quantize to 4 levels
     uint8_t quantized;
     int quantizedValue;
-    if (false) {  // original thresholds
+    if (originalThresholds) {  // CrossPoint 1.6.5 original thresholds
       if (adjusted < 43) {
         quantized = 0;
         quantizedValue = 0;

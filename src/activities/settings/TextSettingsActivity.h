@@ -35,13 +35,15 @@ class TextSettingsActivity final : public UiTabListActivity {
     Alignment,
     MinimumSpace,
     LetterSpacingCorrection,
+    LetterSpacingOptimization,
+    LetterSpacingOptimizationThreshold,
     ScreenMargin,
     HangingPunctuation,
     ShortHyphen,
     FixedDialogueSpacing,
     Count
   };
-  enum class StyleRow { FocusReading, Hyphenation, SoftHyphen, EmbeddedStyle, AntiAliasing, Count };
+  enum class StyleRow { FocusReading, Hyphenation, HyphenationThreshold, SoftHyphen, EmbeddedStyle, AntiAliasing, Count };
 
   // --- UiTabListActivity contract ---
   int listCount() const override;

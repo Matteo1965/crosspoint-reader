@@ -21,3 +21,5 @@ moon = moon
 upload = upload
 download = download
 bookmark = bookmark
+blocks = blocks
+refresh-cw = refresh-cw

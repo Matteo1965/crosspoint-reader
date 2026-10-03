@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -16,12 +17,14 @@ class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string headword,
                                         std::string definition, bool htmlDefinition = false,
-                                        bool manualSearchMode = false)
+                                        bool manualSearchMode = false,
+                                        std::optional<HighlightResult> highlight = std::nullopt)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
         htmlDefinition(htmlDefinition),
-        manualSearchMode(manualSearchMode) {}
+        manualSearchMode(manualSearchMode),
+        highlight(std::move(highlight)) {}
 
   void onEnter() override;
   void onExit() override;
@@ -57,6 +60,7 @@ class DictionaryDefinitionActivity final : public Activity {
   std::string definition;
   const bool htmlDefinition;
   const bool manualSearchMode;
+  const std::optional<HighlightResult> highlight;
   std::vector<std::unique_ptr<Page>> pages;
   std::vector<Line> lines;
   int currentPage = 0;

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "highlights/HighlightMode.h"
 #include "util/Dictionary.h"
 
 // Word selection over the current reader page: Left/Right step through words
@@ -16,15 +17,22 @@
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
+                                        int spineIndex, WordSelectionMode mode = WordSelectionMode::Dictionary,
+                                        std::vector<uint32_t> highlightedOffsets = {})
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
-        marginTop(marginTop) {}
+        marginTop(marginTop),
+        spineIndex(spineIndex),
+        mode(mode),
+        highlightedOffsets(std::move(highlightedOffsets)) {}
 
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  void setPreviousBoundaryPage(std::unique_ptr<Page> previousPage);
+  void setNextBoundaryPage(std::unique_ptr<Page> nextPage);
   // Redraws the reader's page (word boxes over it), so it follows the reading
   // surface's night-mode polarity; a normal-polarity flash mid-lookup jars.
   bool appliesNightMode() const override { return true; }
@@ -50,16 +58,32 @@ class DictionaryWordSelectActivity final : public Activity {
   int wordAt(int x, int y) const;
   void moveVertical(int direction);
   void performLookup();
+  bool syntheticHyphenPair(int first, int second) const;
+  int logicalWordFirst(int index) const;
+  int logicalWordSecond(int first) const;
+  std::string logicalWordText(int index) const;
+  HighlightResult makeHighlightResult() const;
+  void finishWithHighlight();
+  void showHighlightPrompt(bool noDictionary);
+  void queueHighlightPrompt(bool noDictionary);
   bool drawHighlightWithSnapshot();
   void drawHints() const;
+  void drawStoredHighlights() const;
 
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
+  const int spineIndex;
+  const WordSelectionMode mode;
+  const std::vector<uint32_t> highlightedOffsets;
   int fontId = 0;
   int lineHeight = 0;
 
   std::vector<WordBox> words;
+  std::string previousBoundaryText;
+  uint32_t previousBoundaryOffset = 0;
+  std::string nextBoundaryText;
+  uint32_t nextBoundaryOffset = 0;
   int selected = 0;
   uint16_t rowCount = 0;
   unsigned long lastHorizontalMoveTime = 0;
@@ -72,6 +96,8 @@ class DictionaryWordSelectActivity final : public Activity {
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;
   unsigned long popupTime = 0;
+  bool pendingHighlightPrompt = false;
+  bool pendingHighlightPromptNoDictionary = false;
 
   // Differential highlight repaint: the pixels under the current highlight
   // box, so a cursor move restores them and repaints only the two affected

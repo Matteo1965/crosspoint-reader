@@ -76,11 +76,6 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     rect.width = 462;
   }
 
-  if (!keyboard_layouts::hu_keyboard::isHungarianLetterLayout(*props.layout)) {
-    keyboard(frame, rect, props);
-    return;
-  }
-
   KeyboardProps huProps = props;
   huProps.shiftLabel = nullptr;
   huProps.modeLabel = "fn";
@@ -142,8 +137,10 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     }
 
     if (key.kind == KeyKind::Delete) {
-      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}),
-                            keyboard_layouts::hu_keyboard::backspaceIcon63x36(), BitmapMode::Contain, ink);
+      const auto icon = key.value == keyboard_layouts::hu_keyboard::FORWARD_DELETE_KEY
+                            ? keyboard_layouts::hu_keyboard::forwardDeleteIcon63x36()
+                            : keyboard_layouts::hu_keyboard::backspaceIcon63x36();
+      frame.target().bitmap(centeredRect(keyRect, Size{63, 36}), icon, BitmapMode::Contain, ink);
       return;
     }
 
@@ -187,7 +184,11 @@ void keyboardCphun(Frame<MaxInteractions>& frame, Rect rect, const KeyboardProps
     auto effectiveUnits = [&](const KeyboardKey& key) -> uint8_t {
       if (bottomRow) {
         if (key.kind == KeyKind::Mode || key.kind == KeyKind::Ok) return 3;
-        if (key.kind == KeyKind::Space) return layoutRow.count == 7 ? 8 : 6;
+        if (key.kind == KeyKind::Space) {
+          if (layoutRow.count == 7) return 8;
+          if (layoutRow.count == 9) return 4;
+          return 6;
+        }
       }
       return key.widthUnits ? key.widthUnits : 1;
     };

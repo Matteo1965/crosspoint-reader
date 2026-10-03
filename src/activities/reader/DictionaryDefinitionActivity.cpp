@@ -290,9 +290,16 @@ void DictionaryDefinitionActivity::loop() {
     finish();
     return;
   }
-  if (manualSearchMode && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    finish();
-    return;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (manualSearchMode) {
+      finish();
+      return;
+    }
+    if (highlight.has_value()) {
+      setResult(*highlight);
+      finish();
+      return;
+    }
   }
 
   // Same tap zones as the reader page turns: left third = previous page,
@@ -460,8 +467,8 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY, bodyWidth);
 
   const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), manualSearchMode ? "Billentyűzet" : "", (currentPage > 0 ? "<" : ""),
-      (currentPage + 1 < totalPages ? ">" : ""));
+      tr(STR_BACK), manualSearchMode ? "Billentyűzet" : (highlight.has_value() ? "Megjelölés" : ""),
+      (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

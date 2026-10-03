@@ -25,16 +25,22 @@ class UiTabListActivity : public UiListActivity {
   static constexpr freeink::ui::ActionId ACTION_TAB = ACTION_USER;
   static constexpr freeink::ui::ActionId ACTION_TAB_USER = ACTION_USER + 1;
 
-  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
+  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                    bool wantsTouchLongPress = false);
 
   // --- subclass contract (in addition to UiListActivity's) ------------------
   virtual int tabCount() const = 0;
   virtual int activeTab() const = 0;
   virtual const char* tabLabel(int index) const = 0;
+  virtual freeink::ui::TabIndicator tabIndicator(int) const { return freeink::ui::TabIndicator::None; }
   virtual int tabWidthPercent(int index) const {
     (void)index;
     return 0;
   }
+  virtual int tabSideMarginPx() const { return 0; }
+  virtual int tabGapPx() const { return 0; }
+  virtual int tabHorizontalInsetPx() const { return -1; }
+  virtual int tabBottomSpacingPx() const { return -1; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;
   // Advance the active tab by direction (continuous-hold navigation; also what
@@ -70,6 +76,9 @@ class UiTabListActivity : public UiListActivity {
   // Per-tab selection/viewport state, sized in onEnter. Protected so subclass
   // tab-switch code can seed the target tab's ring/viewport.
   std::vector<freeink::ui::ListNav> tabNavs;
+      // Optional tighter tab pills on the Library screen; other screens retain
+      // their tested Hungarian proportional widths.
+      int16_t tabPillMaxPad = 0;
 
  private:
   static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);

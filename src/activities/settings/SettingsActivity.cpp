@@ -3,6 +3,7 @@
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -173,7 +174,9 @@ void SettingsActivity::rebuildRowItems() {
   rowItems_.reserve(settings.size());
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
-    item.label = I18N.get(settings[i].nameId);
+    item.label = settings[i].nameId == StrId::STR_DICTIONARY && I18N.getLanguage() == Language::HU
+                     ? "Szótár:"
+                     : I18N.get(settings[i].nameId);
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
@@ -493,6 +496,8 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   for (size_t i = 0; i < settings.size(); i++) {
     rowValues_[i] = settingValueText(settings[i]);
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    rowItems_[i].valueOffsetX =
+        (I18N.getLanguage() == Language::HU && rowValues_[i] == tr(STR_STATE_ON)) ? 2 : 0;
   }
 
   fui::ListProps props;
@@ -501,6 +506,7 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
+  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF) props.rowGap = 4;
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (an all-default smallText

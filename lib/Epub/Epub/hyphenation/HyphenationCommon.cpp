@@ -184,7 +184,7 @@ void trimSurroundingPunctuationAndFootnote(std::vector<CodepointInfo>& cps) {
       while (pos >= 0 && isAsciiDigit(cps[pos].value)) {
         --pos;
       }
-      if (pos >= 0 && cps[pos].value == '[' && end - pos > 1) {
+      if (pos >= 0 && (cps[pos].value == '[' || cps[pos].value == '{') && end - pos > 1) {
         cps.erase(cps.begin() + pos, cps.end());
       }
     }

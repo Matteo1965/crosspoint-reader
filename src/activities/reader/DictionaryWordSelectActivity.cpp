@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
+#include <Utf8.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -13,6 +14,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "DictionaryHighlightPromptActivity.h"
 #include "DictionaryDefinitionActivity.h"
 #include "DictionaryMatchSelectActivity.h"
 #include "components/UITheme.h"
@@ -53,6 +55,40 @@ void appendUnique(std::vector<std::string>& items, std::string value) {
 
 void indexBuildYield(void*) { vTaskDelay(1); }
 
+uint16_t visibleCodepointLength(const char* text) {
+  if (!text) return 0;
+  const auto* p = reinterpret_cast<const uint8_t*>(text);
+  uint16_t count = 0;
+  while (*p && count != UINT16_MAX) {
+    utf8NextCodepoint(&p);
+    ++count;
+  }
+  return count;
+}
+
+void trimSelectionTrailingAnnotation(std::string& text) {
+  const auto trimSentencePunctuation = [&]() {
+    while (!text.empty()) {
+      const char c = text.back();
+      if (c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':')
+        text.pop_back();
+      else
+        break;
+    }
+  };
+
+  trimSentencePunctuation();
+  if (!text.empty() && (text.back() == '}' || text.back() == ']')) {
+    const char close = text.back();
+    const char open = close == '}' ? '{' : '[';
+    size_t p = text.size() - 1;
+    const size_t digitsEnd = p;
+    while (p > 0 && text[p - 1] >= '0' && text[p - 1] <= '9') --p;
+    if (p < digitsEnd && p > 0 && text[p - 1] == open) text.resize(p - 1);
+  }
+  trimSentencePunctuation();
+}
+
 }  // namespace
 
 void DictionaryWordSelectActivity::onEnter() {
@@ -71,6 +107,68 @@ void DictionaryWordSelectActivity::onEnter() {
     if (initial >= 0) selected = initial;
   }
   requestUpdate();
+}
+
+namespace {
+
+bool pageBoundaryWord(const Page& page, const bool last, std::string& textOut, uint32_t& offsetOut) {
+  if (!last) {
+    for (const auto& element : page.elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto* line = static_cast<const PageLine*>(element.get());
+      const auto& block = line->getBlock();
+      if (!block || !block->valid()) continue;
+      for (uint16_t i = 0; i < block->wordCount(); ++i) {
+        const char* text = block->wordText(i);
+        if (!isSelectableToken(text)) continue;
+        textOut = text ? text : "";
+        offsetOut = block->wordVisibleTextOffset(i);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (auto eit = page.elements.rbegin(); eit != page.elements.rend(); ++eit) {
+    if ((*eit)->getTag() != TAG_PageLine) continue;
+    const auto* line = static_cast<const PageLine*>((*eit).get());
+    const auto& block = line->getBlock();
+    if (!block || !block->valid()) continue;
+    for (int i = static_cast<int>(block->wordCount()) - 1; i >= 0; --i) {
+      const char* text = block->wordText(static_cast<uint16_t>(i));
+      if (!isSelectableToken(text)) continue;
+      textOut = text ? text : "";
+      offsetOut = block->wordVisibleTextOffset(static_cast<uint16_t>(i));
+      return true;
+    }
+  }
+  return false;
+}
+
+bool stripSyntheticLineEndHyphen(std::string& text) {
+  if (!text.empty() && text.back() == '-') {
+    text.pop_back();
+    return true;
+  }
+  if (text.size() >= 3 && text.compare(text.size() - 3, 3, "\xE2\x80\x91") == 0) {
+    text.resize(text.size() - 3);
+    return true;
+  }
+  return false;
+}
+
+}  // namespace
+
+void DictionaryWordSelectActivity::setPreviousBoundaryPage(std::unique_ptr<Page> previousPage) {
+  previousBoundaryText.clear();
+  previousBoundaryOffset = 0;
+  if (previousPage) pageBoundaryWord(*previousPage, true, previousBoundaryText, previousBoundaryOffset);
+}
+
+void DictionaryWordSelectActivity::setNextBoundaryPage(std::unique_ptr<Page> nextPage) {
+  nextBoundaryText.clear();
+  nextBoundaryOffset = 0;
+  if (nextPage) pageBoundaryWord(*nextPage, false, nextBoundaryText, nextBoundaryOffset);
 }
 
 void DictionaryWordSelectActivity::extractWords() {
@@ -168,7 +266,150 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
   }
 }
 
+bool DictionaryWordSelectActivity::syntheticHyphenPair(const int first, const int second) const {
+  if (first < 0 || second != first + 1 || second >= static_cast<int>(words.size())) return false;
+  const WordBox& a = words[first];
+  const WordBox& b = words[second];
+  if (!a.block || !b.block || b.row != a.row + 1 || !a.text || !b.text) return false;
+  const std::string left(a.text);
+  size_t hyphenBytes = 0;
+  if (!left.empty() && left.back() == '-') hyphenBytes = 1;
+  else if (left.size() >= 3 && left.compare(left.size() - 3, 3, "\xE2\x80\x91") == 0) hyphenBytes = 3;
+  if (hyphenBytes == 0) return false;
+
+  const std::string prefix = left.substr(0, left.size() - hyphenBytes);
+  const uint32_t aOffset = a.block->wordVisibleTextOffset(a.tokenIndex);
+  const uint32_t bOffset = b.block->wordVisibleTextOffset(b.tokenIndex);
+  if (bOffset < aOffset) return false;
+  const uint32_t renderedPrefixLength = visibleCodepointLength(prefix.c_str());
+  const uint32_t sourcePrefixLength = bOffset - aOffset;
+  // Ordinary synthetic hyphenation: rendered == source.
+  // Extended Hungarian split: rendered has 1 replacement codepoint, or 2 for ddzs.
+  // A real source hyphen makes the source length larger and is therefore rejected.
+  return sourcePrefixLength <= renderedPrefixLength && renderedPrefixLength - sourcePrefixLength <= 2;
+}
+
+int DictionaryWordSelectActivity::logicalWordFirst(const int index) const {
+  if (syntheticHyphenPair(index, index + 1)) return index;
+  if (syntheticHyphenPair(index - 1, index)) return index - 1;
+  return index;
+}
+
+int DictionaryWordSelectActivity::logicalWordSecond(const int first) const {
+  return syntheticHyphenPair(first, first + 1) ? first + 1 : first;
+}
+
+std::string DictionaryWordSelectActivity::logicalWordText(const int index) const {
+  if (words.empty() || index < 0 || index >= static_cast<int>(words.size())) return {};
+
+  const auto trimSyntheticReplacement = [](std::string& prefix, const uint32_t prefixOffset,
+                                           const uint32_t secondOffset) {
+    if (secondOffset < prefixOffset) return false;
+    const uint32_t renderedLength = visibleCodepointLength(prefix.c_str());
+    const uint32_t sourceLength = secondOffset - prefixOffset;
+    if (sourceLength > renderedLength || renderedLength - sourceLength > 2) return false;
+    uint32_t syntheticCodepoints = renderedLength - sourceLength;
+    while (syntheticCodepoints-- > 0 && !prefix.empty()) {
+      size_t cut = prefix.size() - 1;
+      while (cut > 0 && (static_cast<unsigned char>(prefix[cut]) & 0xC0) == 0x80) --cut;
+      prefix.resize(cut);
+    }
+    return true;
+  };
+
+  const int first = logicalWordFirst(index);
+  const int second = logicalWordSecond(first);
+  if (first != second) {
+    std::string text = words[first].text ? words[first].text : "";
+    if (!stripSyntheticLineEndHyphen(text)) return words[index].text ? words[index].text : "";
+    const WordBox& a = words[first];
+    const WordBox& b = words[second];
+    const uint32_t aOffset = a.block ? a.block->wordVisibleTextOffset(a.tokenIndex) : 0;
+    const uint32_t bOffset = b.block ? b.block->wordVisibleTextOffset(b.tokenIndex) : 0;
+    if (!a.block || !b.block || !trimSyntheticReplacement(text, aOffset, bOffset))
+      return words[index].text ? words[index].text : "";
+    if (words[second].text) text += words[second].text;
+    return text;
+  }
+
+  const WordBox& current = words[index];
+  const uint32_t currentOffset = current.block ? current.block->wordVisibleTextOffset(current.tokenIndex) : 0;
+
+  // Current page begins with the second half of a synthetic page-boundary split.
+  if (index == 0 && !previousBoundaryText.empty()) {
+    std::string prefix = previousBoundaryText;
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        trimSyntheticReplacement(prefix, previousBoundaryOffset, currentOffset)) {
+      if (current.text) prefix += current.text;
+      return prefix;
+    }
+  }
+
+  // Current page ends with the first half of a synthetic page-boundary split.
+  if (index == static_cast<int>(words.size()) - 1 && !nextBoundaryText.empty()) {
+    std::string prefix = current.text ? current.text : "";
+    if (stripSyntheticLineEndHyphen(prefix) &&
+        trimSyntheticReplacement(prefix, currentOffset, nextBoundaryOffset)) {
+      prefix += nextBoundaryText;
+      return prefix;
+    }
+  }
+
+  return current.text ? current.text : "";
+}
+
+HighlightResult DictionaryWordSelectActivity::makeHighlightResult() const {
+  if (words.empty()) return {};
+  const int first = logicalWordFirst(selected);
+  const WordBox& word = words[first];
+  HighlightResult result;
+  result.spineIndex = spineIndex;
+  result.visibleTextOffset = word.block ? word.block->wordVisibleTextOffset(word.tokenIndex) : page->visibleTextOffset;
+  result.text = logicalWordText(selected);
+  trimSelectionTrailingAnnotation(result.text);
+  result.length = visibleCodepointLength(result.text.c_str());
+  return result;
+}
+
+void DictionaryWordSelectActivity::finishWithHighlight() {
+  setResult(makeHighlightResult());
+  finish();
+}
+
+void DictionaryWordSelectActivity::queueHighlightPrompt(const bool noDictionary) {
+  pendingHighlightPrompt = true;
+  pendingHighlightPromptNoDictionary = noDictionary;
+  popup = Popup::None;
+  snapshotIdx = -1;
+  requestUpdate();
+}
+
+void DictionaryWordSelectActivity::showHighlightPrompt(const bool noDictionary) {
+  popup = Popup::None;
+  snapshotIdx = -1;
+  startActivityForResult(
+      std::make_unique<DictionaryHighlightPromptActivity>(
+          renderer, mappedInput, noDictionary ? "Nincs szótár beállítva." : "Nincs találat a szótárban.",
+          makeHighlightResult()),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          if (const auto* highlight = std::get_if<HighlightResult>(&result.data)) {
+            setResult(*highlight);
+            finish();
+            return;
+          }
+        }
+        requestUpdate();
+      });
+}
+
 void DictionaryWordSelectActivity::performLookup() {
+  snapshot.reset();
+  snapshotIdx = -1;
+  if (SETTINGS.dictionaryName[0] == '\0') {
+    queueHighlightPrompt(true);
+    return;
+  }
   popup = Popup::Busy;
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
@@ -193,7 +434,10 @@ void DictionaryWordSelectActivity::performLookup() {
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
 
   // CPHUN-89: selected word first. Exact context headwords are alternatives.
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  // CPHUN-89/132r5: look up the complete logical word, including both
+  // halves of an automatically hyphenated line-break word.
+  const std::string lookupWord = logicalWordText(selected);
+  const bool found = ok && dict.lookup(lookupWord.c_str(), definition, headword, &result);
 
   if (found) {
     std::vector<std::string> candidates;
@@ -257,8 +501,18 @@ void DictionaryWordSelectActivity::performLookup() {
     if (choices.size() == 1) {
       startActivityForResult(
           std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                         std::move(definition), dict.definitionsAreHtml()),
-          [this](const ActivityResult&) { requestUpdate(); });
+                                                         std::move(definition), dict.definitionsAreHtml(), false,
+                                                         makeHighlightResult()),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled) {
+              if (const auto* highlight = std::get_if<HighlightResult>(&result.data)) {
+                setResult(*highlight);
+                finish();
+                return;
+              }
+            }
+            requestUpdate();
+          });
       return;
     }
 
@@ -298,8 +552,18 @@ void DictionaryWordSelectActivity::performLookup() {
 
           startActivityForResult(
               std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(chosenHeadword),
-                                                             std::move(chosenDefinition), dict.definitionsAreHtml()),
-              [this](const ActivityResult&) { requestUpdate(); });
+                                                             std::move(chosenDefinition), dict.definitionsAreHtml(),
+                                                             false, makeHighlightResult()),
+              [this](const ActivityResult& result) {
+                if (!result.isCancelled) {
+                  if (const auto* highlight = std::get_if<HighlightResult>(&result.data)) {
+                    setResult(*highlight);
+                    finish();
+                    return;
+                  }
+                }
+                requestUpdate();
+              });
         });
     return;
   }
@@ -338,9 +602,8 @@ void DictionaryWordSelectActivity::performLookup() {
         break;
       case Dictionary::LookupResult::NotFound:
       default:
-        popup = Popup::NotFound;
-        popupMsg = StrId::STR_DICT_NOT_FOUND;
-        break;
+        queueHighlightPrompt(false);
+        return;
     }
   }
   popupTime = millis();
@@ -348,6 +611,13 @@ void DictionaryWordSelectActivity::performLookup() {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  if (pendingHighlightPrompt) {
+    const bool noDictionary = pendingHighlightPromptNoDictionary;
+    pendingHighlightPrompt = false;
+    pendingHighlightPromptNoDictionary = false;
+    showHighlightPrompt(noDictionary);
+    return;
+  }
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
       popup = Popup::None;
@@ -361,7 +631,10 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !words.empty()) {
-    performLookup();
+    if (mode == WordSelectionMode::Highlight || mode == WordSelectionMode::Edit)
+      finishWithHighlight();
+    else
+      performLookup();
     return;
   }
 
@@ -383,7 +656,10 @@ void DictionaryWordSelectActivity::loop() {
     const int hit = wordAt(tx, ty);
     if (hit >= 0) {
       selected = hit;
-      performLookup();
+      if (mode == WordSelectionMode::Highlight || mode == WordSelectionMode::Edit)
+        finishWithHighlight();
+      else
+        performLookup();
     }
     return;
   }
@@ -415,7 +691,33 @@ void DictionaryWordSelectActivity::loop() {
 // highlight over them. Returns false when the pixels could not be saved
 // (no buffer / oversize box) — the highlight is drawn regardless, but the
 // next cursor move must do a full repaint.
+void DictionaryWordSelectActivity::drawStoredHighlights() const {
+  if (highlightedOffsets.empty()) return;
+  for (const auto& word : words) {
+    if (!word.block) continue;
+    const uint32_t offset = word.block->wordVisibleTextOffset(word.tokenIndex);
+    if (std::find(highlightedOffsets.begin(), highlightedOffsets.end(), offset) == highlightedOffsets.end()) continue;
+    const int y = word.y + lineHeight - 2;
+    renderer.drawLine(word.x, y, word.x + word.width, y, 2, true);
+  }
+}
+
 bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
+  const int first = logicalWordFirst(selected);
+  const int second = logicalWordSecond(first);
+  if (first != second) {
+    for (const int idx : {first, second}) {
+      const WordBox& part = words[idx];
+      const int hx = std::max(0, static_cast<int>(part.x) - 2);
+      const int hy = std::max(0, static_cast<int>(part.y) - 2);
+      const int hw = part.width + 4;
+      const int hh = lineHeight + 4;
+      renderer.fillRect(hx, hy, hw, hh, true);
+      renderer.drawText(fontId, part.x, part.y, part.text, false, part.style);
+    }
+    snapshotIdx = -1;
+    return false;
+  }
   const WordBox& word = words[selected];
   int hx = word.x - 2;
   int hy = word.y - 2;
@@ -460,8 +762,11 @@ void DictionaryWordSelectActivity::drawHints() const {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
-  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT),
-                                                       tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* confirmLabel = mode == WordSelectionMode::Highlight
+                                 ? "Megjelölés"
+                                 : (mode == WordSelectionMode::Edit ? "Szerkesztés" : "Keresés");
+  const auto labels = mappedInput.mapDirectionalLabels(
+      tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
@@ -493,7 +798,9 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   page->render(renderer, fontId, marginLeft, marginTop);
   scope.endScanAndPrewarm();
   page->render(renderer, fontId, marginLeft, marginTop);
+  drawStoredHighlights();
 
+  if (!snapshot) snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
   if (!words.empty()) {
     drawHighlightWithSnapshot();
   }

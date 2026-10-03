@@ -95,6 +95,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["shortHyphen"] = shortHyphen;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
   doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
+  doc["letterSpacingOptimization"] = letterSpacingOptimization;
+  doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;
+  doc["hyphenationThreshold"] = hyphenationThreshold;
   doc["softHyphenEnabled"] = softHyphenEnabled;
   doc["minimumSpacePercent"] = minimumSpacePercent;
   doc["extraParagraphSpacingEnabled"] = extraParagraphSpacingEnabled;
@@ -106,6 +109,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
+  doc["wordSelectionMode"] = wordSelectionMode;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -240,14 +244,63 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fontPointSize = storedFontSize;
   shortHyphen = (doc["shortHyphen"] | (uint8_t)0) ? 1 : 0;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | (uint8_t)0) ? 1 : 0;
-  softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
-  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
-  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 200 && letterSpacingLimitPercent != 250 &&
-      letterSpacingLimitPercent != 300 && letterSpacingLimitPercent != 350 && letterSpacingLimitPercent != 400 &&
-      letterSpacingLimitPercent != 450 && letterSpacingLimitPercent != 500) {
-    letterSpacingLimitPercent = 0;
+  hyphenationThreshold = doc["hyphenationThreshold"] | (uint8_t)2;
+  if (hyphenationThreshold > 4) {
+    hyphenationThreshold = 2;
     needsResave = true;
   }
+  softHyphenEnabled = (doc["softHyphenEnabled"] | (uint8_t)0) ? 1 : 0;
+  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | (uint16_t)0;
+  // CPHUN-191: preserve the canonical CPHUN-184 UI values across
+  // restart/deep-sleep wake: 0=Off, 10=Weak, 40=Medium, 70=Strong.
+  if (letterSpacingLimitPercent == 550) {
+    letterSpacingLimitPercent = 10;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent == 460) {
+    letterSpacingLimitPercent = 40;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent == 280) {
+    letterSpacingLimitPercent = 70;
+    needsResave = true;
+  } else if (letterSpacingLimitPercent != 0 &&
+             letterSpacingLimitPercent != 10 &&
+             letterSpacingLimitPercent != 40 &&
+             letterSpacingLimitPercent != 70) {
+    // One-time migration for other historical physical threshold values.
+    constexpr uint16_t legacyPhysical[] = {550, 460, 280};
+    constexpr uint16_t canonical[] = {10, 40, 70};
+    int bestIndex = 0;
+    uint16_t bestDiff = letterSpacingLimitPercent > legacyPhysical[0]
+                            ? letterSpacingLimitPercent - legacyPhysical[0]
+                            : legacyPhysical[0] - letterSpacingLimitPercent;
+    for (int i = 1; i < 3; ++i) {
+      const uint16_t d = letterSpacingLimitPercent > legacyPhysical[i]
+                             ? letterSpacingLimitPercent - legacyPhysical[i]
+                             : legacyPhysical[i] - letterSpacingLimitPercent;
+      if (d < bestDiff) {
+        bestDiff = d;
+        bestIndex = i;
+      }
+    }
+    letterSpacingLimitPercent = canonical[bestIndex];
+    needsResave = true;
+  }
+
+  // Persist optimizer ON/OFF independently from the correction level.
+  letterSpacingOptimization =
+      (doc["letterSpacingOptimization"] | (uint8_t)0) ? 4 : 0;
+
+  // CPHUN-183/184 semantics: Off / Weak / Medium / Strong = 0/50/60/70.
+  letterSpacingOptimizationThreshold =
+      doc["letterSpacingOptimizationThreshold"] | (uint8_t)60;
+  if (letterSpacingOptimizationThreshold != 0 &&
+      letterSpacingOptimizationThreshold != 50 &&
+      letterSpacingOptimizationThreshold != 60 &&
+      letterSpacingOptimizationThreshold != 70) {
+    letterSpacingOptimizationThreshold = 60;
+    needsResave = true;
+  }
+
   minimumSpacePercent = doc["minimumSpacePercent"] | (uint8_t)100;
   if (minimumSpacePercent < 50 || minimumSpacePercent > 100 || minimumSpacePercent % 10 != 0) {
     minimumSpacePercent = 100;
@@ -274,10 +327,39 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  const uint8_t storedWordSelectionMode = doc["wordSelectionMode"] | (uint8_t)0;
+  if (storedWordSelectionMode <= 2) {
+    wordSelectionMode = storedWordSelectionMode;
+  } else {
+    wordSelectionMode = 0;
+    needsResave = true;
+  }
 
   // Language -- stored as code string for stability across enum reorders.
+  // Hungarian Edition deliberately exposes only the 12 tested reading/UI
+  // languages. Any older saved choice outside this set falls back to Magyar.
   if (doc["language"].is<const char*>()) {
-    language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
+    const Language loadedLanguage = I18n::languageFromCode(doc["language"].as<const char*>());
+    switch (loadedLanguage) {
+      case Language::HU:
+      case Language::EN:
+      case Language::DE:
+      case Language::ES:
+      case Language::IT:
+      case Language::FR:
+      case Language::P2:
+      case Language::PL:
+      case Language::FI:
+      case Language::RU:
+      case Language::SV:
+      case Language::UK:
+        language = static_cast<uint8_t>(loadedLanguage);
+        break;
+      default:
+        language = static_cast<uint8_t>(Language::HU);
+        needsResave = true;
+        break;
+    }
   }
 
   // Absent means unconfigured, which is the default.
@@ -323,13 +405,47 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
+  static constexpr uint8_t kHyphenMinPrefix[] = {1, 1, 2, 2, 3};
+  static constexpr uint8_t kHyphenMinSuffix[] = {1, 2, 2, 3, 3};
+  const uint8_t threshold = hyphenationThreshold <= 4 ? hyphenationThreshold : 2;
+  spec.hungarianMinPrefix = kHyphenMinPrefix[threshold];
+  spec.hungarianMinSuffix = kHyphenMinSuffix[threshold];
   // Optical margin is OFF/ON. ON permits the eligible end punctuation to hang
   // into the physical right margin, capped just inside the selected screen margin.
   spec.hangingPunctuationLimitPx =
       hangingPunctuation ? static_cast<uint8_t>(screenMargin > 1 ? screenMargin - 1 : 0) : 0;
   spec.shortHyphen = shortHyphen != 0;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
-  spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
+  const bool isBitterExperimentalSize =
+      (fontPointSize == 12 || fontPointSize == 14 || fontPointSize == 16 ||
+       fontPointSize == 18) &&
+      strcmp(sdFontFamilyName, "Bitter") == 0;
+  const bool isBuiltinSerif =
+      sdFontFamilyName[0] == '\0' && fontFamily == NOTOSERIF;
+  const bool isNotoSerif16 = isBuiltinSerif && fontPointSize == 16;
+  const bool knownSdSerif =
+      sdFontFamilyName[0] != '\0' &&
+      (strstr(sdFontFamilyName, "Serif") || strstr(sdFontFamilyName, "Bitter") ||
+       strstr(sdFontFamilyName, "Bookerly") || strstr(sdFontFamilyName, "Georgia") ||
+       strstr(sdFontFamilyName, "Garamond") || strstr(sdFontFamilyName, "Palatino") ||
+       strstr(sdFontFamilyName, "Literata") || strstr(sdFontFamilyName, "Merriweather") ||
+       strstr(sdFontFamilyName, "Cambria") || strstr(sdFontFamilyName, "Times")) &&
+      !strstr(sdFontFamilyName, "Sans");
+  const bool supportedSerifSize =
+      fontPointSize == 12 || fontPointSize == 14 ||
+      fontPointSize == 16 || fontPointSize == 18;
+  const bool useSerifProfile =
+      supportedSerifSize && (isBuiltinSerif || knownSdSerif || isBitterExperimentalSize);
+  const uint8_t optimizationThresholdCode =
+      letterSpacingLimitPercent > 0 && letterSpacingOptimization && useSerifProfile &&
+              letterSpacingOptimizationThreshold >= 50
+          ? static_cast<uint8_t>((letterSpacingOptimizationThreshold - 45u) / 5u)
+          : 0;
+  // Bits 13..15 carry 0=off or threshold code 1..6 (50..75) to ParsedText.
+  // Noto Serif 16 keeps its dedicated fixed pair table; the score cutoff applies to Bitter.
+  spec.letterSpacingLimitPercent = static_cast<uint16_t>(
+      (letterSpacingLimitPercent & 0x1FFFu) |
+      (static_cast<uint16_t>(optimizationThresholdCode) << 13));
   spec.minimumSpacePercent = minimumSpacePercent;
   spec.embeddedStyle = embeddedStyle != 0;
   // Updated and Standard differ only in the panel refresh pipeline. Both use

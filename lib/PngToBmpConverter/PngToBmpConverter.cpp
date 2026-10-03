@@ -400,7 +400,7 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop) {
+                                                   bool oneBit, bool crop, bool forceFloyd, bool originalThresholds) {
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
@@ -588,8 +588,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
     }
 
-    outWidth = static_cast<int>(width * scale);
-    outHeight = static_cast<int>(height * scale);
+    outWidth = static_cast<int>(width * scale + (forceFloyd ? 0.5f : 0.0f));
+    outHeight = static_cast<int>(height * scale + (forceFloyd ? 0.5f : 0.0f));
     if (outWidth < 1) outWidth = 1;
     if (outHeight < 1) outHeight = 1;
 
@@ -631,10 +631,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   if (oneBit) {
     atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
   } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(outWidth);
-    } else if (USE_FLOYD_STEINBERG) {
+    if (forceFloyd || (!USE_ATKINSON && USE_FLOYD_STEINBERG)) {
       fsDitherer = new FloydSteinbergDitherer(outWidth);
+    } else if (USE_ATKINSON) {
+      atkinsonDitherer = new AtkinsonDitherer(outWidth, originalThresholds);
     }
   }
 
@@ -827,16 +827,22 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   return success;
 }
 
-bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop) {
+bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop, bool originalThresholds) {
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop, false, originalThresholds);
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
                                                    int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+}
+
+bool PngToBmpConverter::pngFileToFloydSteinbergBmpStream(HalFile& pngFile, Print& bmpOut) {
+  const int targetWidth = display.getDisplayHeight();
+  const int targetHeight = display.getDisplayWidth();
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, false, true);
 }
 
 bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,

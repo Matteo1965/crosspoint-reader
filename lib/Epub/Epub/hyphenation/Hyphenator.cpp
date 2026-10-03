@@ -564,4 +564,8 @@ void Hyphenator::setPreferredLanguage(const std::string& lang) {
 }
 
 void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }
+
+void Hyphenator::setHungarianMinima(const size_t minPrefix, const size_t minSuffix) {
+  setHungarianHyphenationMinima(minPrefix, minSuffix);
+}
 void Hyphenator::setSoftHyphenEnabled(const bool enabled) { softHyphenEnabled_ = enabled; }

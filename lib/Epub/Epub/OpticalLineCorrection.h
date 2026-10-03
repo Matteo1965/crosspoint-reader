@@ -40,6 +40,30 @@ inline bool isProtectedPair(uint32_t beforeLeft, uint32_t left,
 // The normal letter-spacing mode uses 0 or 1. Values 2..31 are reserved for
 // single-word, no-space lines and encode a total budget of 1..30 pixels.
 // Packed font-score optimization (threshold code 1..7) uses values >= 32.
+// Reject missing-bitmaps (-1); never count them as a zero-pixel ink inset.
+inline int missingFinalInkPixels(int targetRight, int finalWordX,
+                                 int measuredAdvance, int renderedInkInset) {
+  if (targetRight <= 0 || renderedInkInset < 0) return 0;
+  return std::clamp(targetRight - finalWordX - measuredAdvance + renderedInkInset,
+                    0, MAX_INK_CORRECTION_PX);
+}
+
+// The measured layout advance (SD glyph advance table) can differ from
+// the renderer's true pair-kerned native advance. The final glyph's own right
+// bearing alone is NOT enough: 'kerestek' was measured 137px wide but drew
+// three pixels narrower even though the last 'k' ink inset was zero.
+// alreadyReservedTracking is included in plannedAdvance and is applied by
+// the separate tracked renderer; do not account for it twice.
+inline int effectiveFinalInkInset(int plannedAdvance, int layoutBaseAdvance,
+                                 int actualNativeAdvance, int finalGlyphInkInset) {
+  if (plannedAdvance < 0 || layoutBaseAdvance < 0 ||
+      actualNativeAdvance < 0 || finalGlyphInkInset < 0) return -1;
+  const int tracking = plannedAdvance - layoutBaseAdvance;
+  if (tracking < 0) return -1;
+  const int trueInkRight = actualNativeAdvance + tracking - finalGlyphInkInset;
+  return std::max(0, plannedAdvance - trueInkRight);
+}
+
 inline bool isStandaloneWordSpacing(uint8_t value) { return value >= 2 && value <= 31; }
 inline uint8_t encodeStandaloneBudget(int budget) {
   return budget > 0 ? static_cast<uint8_t>(std::min(budget, 30) + 1) : 0;

@@ -3,12 +3,24 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "activities/UiListActivity.h"
 
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
+ public:
+  struct VirtualChapter {
+    std::string title;
+    int spineIndex = 0;
+    uint16_t page = 0;
+    uint16_t progressPermille = 0;
+  };
+
+ private:
   std::shared_ptr<Epub> epub;
   int currentSpineIndex = 0;
+  std::vector<VirtualChapter> virtualChapters;
+  int virtualInsertAfter = -1;
 
   // Windowed row buffers: TOC entries are SD-backed (BookMetadataCache LUT
   // reads), so only the rows around the viewport are materialized. A
@@ -25,8 +37,13 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
   int windowCount = 0;
   void refreshTocWindow(int start);
 
-  // Total TOC items count
-  int listCount() const override { return epub ? epub->getTocItemsCount() : 0; }
+  // Total TOC items count, plus non-destructive virtual subdivisions for the
+  // current oversized spine.
+  int listCount() const override {
+    return epub ? epub->getTocItemsCount() + static_cast<int>(virtualChapters.size()) : 0;
+  }
+  int realTocIndexForRow(int row) const;
+  int virtualIndexForRow(int row) const;
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   // Back cancels with a result and Confirm activates on RELEASE here, and a
@@ -37,6 +54,7 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const std::shared_ptr<Epub>& epub, int currentSpineIndex);
+                                              const std::shared_ptr<Epub>& epub, int currentSpineIndex,
+                                              std::vector<VirtualChapter> virtualChapters = {});
   void onEnter() override;
 };

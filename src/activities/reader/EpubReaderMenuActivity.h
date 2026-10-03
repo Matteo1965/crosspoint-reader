@@ -3,9 +3,11 @@
 #include <I18n.h>
 
 #include <array>
+#include <functional>
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
@@ -14,6 +16,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   enum class MenuAction {
     SELECT_CHAPTER,
     FOOTNOTES,
+    EXPORT_EDITS,
     TEXT_SETTINGS,
     NIGHT_MODE,
     FRONTLIGHT,
@@ -27,8 +30,13 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
     GO_HOME,
     SYNC,
     DELETE_CACHE,
+    REINDEX_CHAPTER,
+    WORD_SELECTION_MODE,
     DICTIONARY,
+    HIGHLIGHT,
+    EDIT,
     MANUAL_DICTIONARY_SEARCH,
+    DICTIONARY_SETTINGS,
     BOOK_DESCRIPTION,
     BOOK_METADATA,
     BOOK_COVER
@@ -55,7 +63,7 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   const std::vector<MenuItem>& activeItems() const;
   void rebuildMenuRowItems();
 
-  static constexpr size_t MAX_MENU_ITEMS = 12;
+  static constexpr size_t MAX_MENU_ITEMS = 16;
   std::array<freeink::ui::ListItem, MAX_MENU_ITEMS> menuRowItems{};
 
   int listCount() const override { return static_cast<int>(activeItems().size()); }
@@ -63,6 +71,9 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   int activeTab() const override { return static_cast<int>(tab_); }
   const char* tabLabel(int index) const override;
   int tabWidthPercent(int index) const override;
+  int tabBottomSpacingPx() const override {
+    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 8 : -1;
+  }
   void onTabAction(int index) override;
   void stepTab(int direction) override;
 
@@ -84,6 +95,12 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
+  std::vector<std::string> dictionaryOptionLabels;
+  std::string dictionaryRowLabel;
+  std::vector<const char*> dictionaryOptionPointers;
+  std::string dictionaryDisplayValue;
+  std::function<void(uint8_t)> dictionarySetter;
+  uint8_t selectedDictionaryOption = 0;
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

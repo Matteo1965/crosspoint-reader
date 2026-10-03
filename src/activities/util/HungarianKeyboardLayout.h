@@ -7,6 +7,9 @@ namespace hu_keyboard {
 
 namespace fui = freeink::ui;
 
+// CPHUN-135r2: separate forward-delete key used only by the Hungarian layout.
+inline constexpr int16_t FORWARD_DELETE_KEY = -100;
+
 #define HUK(label, output, value) \
   fui::KeyboardKey { label, output, fui::KeyKind::Normal, fui::StateNormal, value, 2, true, nullptr }
 #define HUKW(label, output, value, units) \
@@ -19,22 +22,23 @@ namespace fui = freeink::ui;
 inline const fui::KeyboardKey NUM_ROW[] = {
     HUK("0", "0", '0'), HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'),
     HUK("4", "4", '4'), HUK("5", "5", '5'), HUK("6", "6", '6'), HUK("7", "7", '7'),
-    HUK("8", "8", '8'), HUK("9", "9", '9'), HUK("-", "-", '-')};
+    HUK("8", "8", '8'), HUK("9", "9", '9'),
+    HUKS(nullptr, fui::KeyKind::Delete, FORWARD_DELETE_KEY, 2)};
 
 inline const fui::KeyboardKey ROW1[] = {
-    HUK("Q", "q", 'q'), HUK("W", "w", 'w'), HUK("E", "e", 'e'), HUK("R", "r", 'r'),
-    HUK("T", "t", 't'), HUK("Z", "z", 'z'), HUK("U", "u", 'u'), HUK("I", "i", 'i'),
-    HUK("O", "o", 'o'), HUK("P", "p", 'p'), HUK("Ö", "ö", 1303)};
+    HUK("q", "q", 'q'), HUK("w", "w", 'w'), HUK("e", "e", 'e'), HUK("r", "r", 'r'),
+    HUK("t", "t", 't'), HUK("z", "z", 'z'), HUK("u", "u", 'u'), HUK("i", "i", 'i'),
+    HUK("o", "o", 'o'), HUK("p", "p", 'p'), HUK("ö", "ö", 1303)};
 
 inline const fui::KeyboardKey ROW2[] = {
-    HUK("A", "a", 'a'), HUK("S", "s", 's'), HUK("D", "d", 'd'), HUK("F", "f", 'f'),
-    HUK("G", "g", 'g'), HUK("H", "h", 'h'), HUK("J", "j", 'j'), HUK("K", "k", 'k'),
-    HUK("L", "l", 'l'), HUK("É", "é", 1301), HUK("Á", "á", 1302)};
+    HUK("a", "a", 'a'), HUK("s", "s", 's'), HUK("d", "d", 'd'), HUK("f", "f", 'f'),
+    HUK("g", "g", 'g'), HUK("h", "h", 'h'), HUK("j", "j", 'j'), HUK("k", "k", 'k'),
+    HUK("l", "l", 'l'), HUK("é", "é", 1301), HUK("á", "á", 1302)};
 
 inline const fui::KeyboardKey ROW3[] = {
     HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
-    HUK("Y", "y", 'y'), HUK("X", "x", 'x'), HUK("C", "c", 'c'), HUK("V", "v", 'v'),
-    HUK("B", "b", 'b'), HUK("N", "n", 'n'), HUK("M", "m", 'm'), HUK("Ü", "ü", 1304),
+    HUK("y", "y", 'y'), HUK("x", "x", 'x'), HUK("c", "c", 'c'), HUK("v", "v", 'v'),
+    HUK("b", "b", 'b'), HUK("n", "n", 'n'), HUK("m", "m", 'm'), HUK("ü", "ü", 1304),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SHIFT_ROW1[] = {
@@ -59,7 +63,7 @@ inline const fui::KeyboardKey BOTTOM[] = {
     HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
-    HUK(",", ",", ','), HUK(".", ".", '.'),
+    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("-", "-", '-'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
 inline const fui::KeyboardKey BOTTOM_LANG[] = {
@@ -67,21 +71,30 @@ inline const fui::KeyboardKey BOTTOM_LANG[] = {
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
     HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
-    HUK(",", ",", ','), HUK(".", ".", '.'),
+    HUK(",", ",", ','), HUK(".", ".", '.'), HUK("-", "-", '-'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
 inline const fui::KeyboardKey SYMBOL_ROW1[] = {
     HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'), HUK("4", "4", '4'),
     HUK("5", "5", '5'), HUK("6", "6", '6'), HUK("7", "7", '7'), HUK("8", "8", '8'),
-    HUK("9", "9", '9'), HUK("0", "0", '0'), HUK("-", "-", '-')};
+    HUK("9", "9", '9'), HUK("0", "0", '0'),
+    HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
 inline const fui::KeyboardKey SYMBOL_ROW2[] = {
-    HUK("/", "/", '/'), HUK(":", ":", ':'), HUK(";", ";", ';'), HUK("(", "(", '('), HUK(")", ")", ')'),
+    HUK("\\", "\\", '\\'), HUK(":", ":", ':'), HUK(";", ";", ';'), HUK("(", "(", '('), HUK(")", ")", ')'),
     HUK("€", "€", 1401), HUK("$", "$", '$'), HUK("&", "&", '&'), HUK("@", "@", '@'),
-    HUK("„", "„", 1402), HUK("”", "”", 1403)};
+    HUK("„", "„", 1402), HUK("”", "”", 1403)
+};
+inline const fui::KeyboardKey SYMBOL_EXTRA_ROW[] = {
+    HUK("[", "[", '['), HUK("]", "]", ']'), HUK("{", "{", '{'), HUK("}", "}", '}'),
+    HUK("–", "–", 1410), HUK("+", "+", '+'), HUK("*", "*", '*'), HUK("§", "§", 1413),
+    HUK("°", "°", 1414), HUK("«", "«", 1415), HUK("»", "»", 1416)
+};
 inline const fui::KeyboardKey SYMBOL_ROW3[] = {
-    HUKS("#+=", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 4), HUK(".", ".", '.'), HUK(",", ",", ','),
-    HUK("?", "?", '?'), HUK("!", "!", '!'), HUK("'", "'", '\''), HUK("\"", "\"", '"'),
-    HUK("#", "#", '#'), HUK("…", "…", 1404), HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 4)};
+    HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
+    HUK("=", "=", '='), HUK("!", "!", '!'), HUK("'", "'", '\''), HUK("\"", "\"", '"'),
+    HUK("#", "#", '#'), HUKW("…", "…", 1404, 3), HUK("<", "<", '<'), HUK(">", ">", '>'),
+    HUKS(nullptr, fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)
+};
 
 inline const fui::KeyboardKey SYMBOL2_ROW1[] = {
     HUK("[", "[", '['), HUK("]", "]", ']'), HUK("{", "{", '{'), HUK("}", "}", '}'), HUK("<", "<", '<'),
@@ -92,33 +105,38 @@ inline const fui::KeyboardKey SYMBOL2_ROW2[] = {
     HUK("–", "–", 1410), HUK("—", "—", 1411), HUK("±", "±", 1412), HUK("§", "§", 1413),
     HUK("°", "°", 1414), HUK("#", "#", '#')};
 inline const fui::KeyboardKey SYMBOL2_ROW3[] = {
-    HUKS("123", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 4), HUK(".", ".", '.'), HUK(",", ",", ','),
+    HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
     HUK("?", "?", '?'), HUK("!", "!", '!'), HUK("'", "'", '\''), HUK("\"", "\"", '"'),
-    HUK(":", ":", ':'), HUK(";", ";", ';'), HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 4)};
+    HUK(":", ":", ':'), HUK(";", ";", ';'),
+    HUKS(nullptr, fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SYMBOL_BOTTOM[] = {
-    HUKS("ABC", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 4), HUK(",", ",", ','),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10), HUK(".", ".", '.'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 4)};
+    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+    HUK("/", "/", '/'), HUK("?", "?", '?'),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
+    HUK(",", ",", ','), HUK(".", ".", '.'),
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
-inline const fui::KeyboardRow ROWS[] = {{NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM, 7, 0}};
+inline const fui::KeyboardRow ROWS[] = {{NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM, 8, 0}};
 inline const fui::KeyboardRow ROWS_LANG[] = {
-    {NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM_LANG, 8, 0}};
+    {NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM_LANG, 9, 0}};
 inline const fui::KeyboardRow SHIFT_ROWS[] = {
-    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM, 7, 0}};
+    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM, 8, 0}};
 inline const fui::KeyboardRow SHIFT_ROWS_LANG[] = {
-    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM_LANG, 8, 0}};
+    {NUM_ROW, 11, 0}, {SHIFT_ROW1, 11, 0}, {SHIFT_ROW2, 11, 0}, {SHIFT_ROW3, 10, 0}, {BOTTOM_LANG, 9, 0}};
 inline const fui::KeyboardRow SYMBOL_ROWS[] = {
-    {SYMBOL_ROW1, 11, 0}, {SYMBOL_ROW2, 11, 0}, {SYMBOL_ROW3, 10, 0}, {SYMBOL_BOTTOM, 5, 0}};
+    {NUM_ROW, 11, 0}, {SYMBOL_ROW2, 11, 0}, {SYMBOL_EXTRA_ROW, 11, 0}, {SYMBOL_ROW3, 10, 0},
+    {SYMBOL_BOTTOM, 7, 0}};
 inline const fui::KeyboardRow SYMBOL2_ROWS[] = {
-    {SYMBOL2_ROW1, 11, 0}, {SYMBOL2_ROW2, 11, 0}, {SYMBOL2_ROW3, 10, 0}, {SYMBOL_BOTTOM, 5, 0}};
+    {NUM_ROW, 11, 0}, {SYMBOL2_ROW1, 11, 0}, {SYMBOL2_ROW2, 11, 0}, {SYMBOL2_ROW3, 10, 0},
+    {SYMBOL_BOTTOM, 7, 0}};
 
 inline const fui::KeyboardLayout LAYOUT{ROWS, 5};
 inline const fui::KeyboardLayout LAYOUT_LANG{ROWS_LANG, 5};
 inline const fui::KeyboardLayout SHIFT_LAYOUT{SHIFT_ROWS, 5};
 inline const fui::KeyboardLayout SHIFT_LAYOUT_LANG{SHIFT_ROWS_LANG, 5};
-inline const fui::KeyboardLayout SYMBOL_LAYOUT{SYMBOL_ROWS, 4};
-inline const fui::KeyboardLayout SYMBOL2_LAYOUT{SYMBOL2_ROWS, 4};
+inline const fui::KeyboardLayout SYMBOL_LAYOUT{SYMBOL_ROWS, 5};
+inline const fui::KeyboardLayout SYMBOL2_LAYOUT{SYMBOL2_ROWS, 5};
 
 inline const fui::KeyboardLayout& layout(const bool shifted, const bool symbols, const bool langKey) {
   if (symbols) return shifted ? SYMBOL2_LAYOUT : SYMBOL_LAYOUT;

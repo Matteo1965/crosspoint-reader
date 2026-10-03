@@ -33,6 +33,7 @@ void ReleaseJsonParser::reset() {
   tagName[0] = '\0';
   firmwareUrl[0] = '\0';
   firmwareSize = 0;
+  hungarianEditionBuild = 0;
   tagFound = false;
   firmwareFound = false;
   currentAssetName[0] = '\0';
@@ -47,8 +48,25 @@ bool ReleaseJsonParser::foundFirmware() const { return firmwareFound; }
 const char* ReleaseJsonParser::getTagName() const { return tagName; }
 const char* ReleaseJsonParser::getFirmwareUrl() const { return firmwareUrl; }
 size_t ReleaseJsonParser::getFirmwareSize() const { return firmwareSize; }
+int ReleaseJsonParser::getHungarianEditionBuild() const { return hungarianEditionBuild; }
 
 void ReleaseJsonParser::commitAsset() {
+  constexpr char BUILD_PREFIX[] = "cphun-build-";
+  constexpr char BUILD_SUFFIX[] = ".json";
+  const size_t nameLen = strlen(currentAssetName);
+  const size_t prefixLen = sizeof(BUILD_PREFIX) - 1;
+  const size_t suffixLen = sizeof(BUILD_SUFFIX) - 1;
+
+  if (nameLen > prefixLen + suffixLen &&
+      strncmp(currentAssetName, BUILD_PREFIX, prefixLen) == 0 &&
+      strcmp(currentAssetName + nameLen - suffixLen, BUILD_SUFFIX) == 0) {
+    char* end = nullptr;
+    const long parsed = strtol(currentAssetName + prefixLen, &end, 10);
+    if (parsed > 0 && end == currentAssetName + nameLen - suffixLen) {
+      hungarianEditionBuild = static_cast<int>(parsed);
+    }
+  }
+
   if (strcmp(currentAssetName, firmwareAssetName) == 0) {
     memcpy(firmwareUrl, currentAssetUrl, sizeof(firmwareUrl));
     firmwareSize = currentAssetSize;
