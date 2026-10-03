@@ -11,6 +11,7 @@
 #include "components/OptionPopup.h"
 
 class Epub;
+struct Rect;
 
 class CoverGridBrowserActivity final : public Activity {
  public:
