@@ -23,6 +23,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "CoverGridBrowserActivity.h"
 #include "components/icons/folder.h"
 #include "components/icons/recent.h"
 #include "components/icons/library.h"
@@ -168,10 +169,18 @@ int HomeActivity::gridThumbHeight(int index) const {
 
 int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
   if (useLibraryHomeMenu()) {
+    if (coverGridActive()) {
+      if (item == HomeMenuItem::LIBRARY) return 0;
+      if (item == HomeMenuItem::FILE_BROWSER) return 1;
+      if (item == HomeMenuItem::FILE_TRANSFER) return 2;
+      if (item == HomeMenuItem::SETTINGS_MENU) return 3;
+      return 0;
+    }
     if (item == HomeMenuItem::LIBRARY) return 0;
-    if (item == HomeMenuItem::FILE_BROWSER) return 1;
-    if (item == HomeMenuItem::FILE_TRANSFER) return 2;
-    if (item == HomeMenuItem::SETTINGS_MENU) return 3;
+    if (item == HomeMenuItem::COVER_GRID_BROWSER) return 1;
+    if (item == HomeMenuItem::FILE_BROWSER) return 2;
+    if (item == HomeMenuItem::FILE_TRANSFER) return 3;
+    if (item == HomeMenuItem::SETTINGS_MENU) return 4;
     return 0;
   }
   int i = 0;
@@ -189,10 +198,18 @@ int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
 
 HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
   if (useLibraryHomeMenu()) {
+    if (coverGridActive()) {
+      if (idx == 0) return HomeMenuItem::LIBRARY;
+      if (idx == 1) return HomeMenuItem::FILE_BROWSER;
+      if (idx == 2) return HomeMenuItem::FILE_TRANSFER;
+      if (idx == 3) return HomeMenuItem::SETTINGS_MENU;
+      return HomeMenuItem::NONE;
+    }
     if (idx == 0) return HomeMenuItem::LIBRARY;
-    if (idx == 1) return HomeMenuItem::FILE_BROWSER;
-    if (idx == 2) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == 3) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == 1) return HomeMenuItem::COVER_GRID_BROWSER;
+    if (idx == 2) return HomeMenuItem::FILE_BROWSER;
+    if (idx == 3) return HomeMenuItem::FILE_TRANSFER;
+    if (idx == 4) return HomeMenuItem::SETTINGS_MENU;
     return HomeMenuItem::NONE;
   }
   int i = 0;
@@ -205,7 +222,7 @@ HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = useLibraryHomeMenu() ? 4 : 4 + (hasOpdsServers ? 1 : 0);
+  int count = useLibraryHomeMenu() ? (coverGridActive() ? 4 : 5) : 4 + (hasOpdsServers ? 1 : 0);
   count += static_cast<int>(recentBooks.size());
   return count;
 }
@@ -507,6 +524,9 @@ void HomeActivity::loop() {
       case HomeMenuItem::LIBRARY:
         onLibraryOpen();
         break;
+      case HomeMenuItem::COVER_GRID_BROWSER:
+        onCoverGridOpen();
+        break;
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -652,8 +672,14 @@ void HomeActivity::render(RenderLock&&) {
   std::vector<UIIcon> menuIcons;
   const bool includeContinueReading = metrics.homeContinueReadingInMenu && !useLibraryHomeMenu();
   if (useLibraryHomeMenu()) {
-    menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
-    menuIcons = {Library, Folder, Transfer, Settings};
+    if (coverGridActive()) {
+      menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+      menuIcons = {Library, Folder, Transfer, Settings};
+    } else {
+      const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
+      menuItems = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+      menuIcons = {Library, Recent, Folder, Transfer, Settings};
+    }
   } else {
     menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
     menuIcons = {Folder, Recent, Transfer, Settings};
@@ -695,6 +721,11 @@ void HomeActivity::render(RenderLock&&) {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onLibraryOpen() { activityManager.goToLibrary(); }
+
+void HomeActivity::onCoverGridOpen() {
+  startActivityForResult(std::make_unique<CoverGridBrowserActivity>(renderer, mappedInput),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
