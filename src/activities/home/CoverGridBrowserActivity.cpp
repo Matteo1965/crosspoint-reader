@@ -23,25 +23,25 @@
 
 namespace {
 
-constexpr int HEADER_TITLE_Y = 8;
 constexpr int TAB_Y = 36;
 constexpr int TAB_H = 34;
 
 constexpr int FEATURED_X = 24;
-constexpr int FEATURED_Y = 82;
-constexpr int FEATURED_W = 126;
-constexpr int FEATURED_H = 196;
+constexpr int FEATURED_Y = 92;
+constexpr int FEATURED_W = 132;
+constexpr int FEATURED_H = 174;
 constexpr int FEATURED_TEXT_X = 170;
 
 constexpr int GRID_LEFT = 28;
-constexpr int GRID_TOP = 316;
+constexpr int GRID_TOP = 284;
 constexpr int GRID_W = 132;
 constexpr int GRID_H = 174;
 constexpr int GRID_GAP_X = 14;
 constexpr int GRID_GAP_Y = 18;
 constexpr int GRID_COLS = 3;
 
-constexpr int PAGE_READOUT_Y = 704;
+constexpr int PAGE_READOUT_Y = 700;
+constexpr int HELP_Y = 724;
 constexpr unsigned long LONG_PRESS_MS = 700;
 
 bool validBmpFile(const std::string& path) {
@@ -52,10 +52,6 @@ bool validBmpFile(const std::string& path) {
   const bool ok = bmp.parseHeaders() == BmpReaderError::Ok && bmp.getWidth() > 0 && bmp.getHeight() > 0;
   file.close();
   return ok;
-}
-
-const char* gridTitle() {
-  return I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
 }
 
 const char* bookWord() {
@@ -512,7 +508,7 @@ void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect,
     const auto title = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), rect.width - 12);
     renderer.drawText(UI_10_FONT_ID, rect.x + 6, rect.y + rect.height / 2, title.c_str());
   }
-  if (selectedFrame) renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, true);
+  if (selectedFrame) renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 3, true);
 }
 
 void CoverGridBrowserActivity::render(RenderLock&&) {
@@ -520,8 +516,6 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   const int height = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  drawCenteredIn(renderer, UI_12_FONT_ID, 0, width, HEADER_TITLE_Y, gridTitle(), EpdFontFamily::BOLD);
-
   static constexpr const char* HU_TABS[] = {"Legutóbbi", "Cím", "Szerző"};
   static constexpr const char* EN_TABS[] = {"Recent", "Title", "Author"};
   const char* const* tabs = I18N.getLanguage() == Language::HU ? HU_TABS : EN_TABS;
@@ -557,10 +551,6 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       }
     }
 
-    char position[48];
-    snprintf(position, sizeof(position), "%d / %d %s", globalSelection() + 1, totalBooks(), bookWord());
-    renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, FEATURED_Y + FEATURED_H - 20, position);
-
     for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
       const int col = i % GRID_COLS;
       const int row = i / GRID_COLS;
@@ -582,9 +572,9 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   const char* hint = I18N.getLanguage() == Language::HU
-                         ? "Hosszan OK: Infó · Hosszan Vissza: Fordított rendezés"
-                         : "Hold OK: Info · Hold Back: Reverse sort";
-  drawCenteredIn(renderer, UI_10_FONT_ID, 8, width - 16, PAGE_READOUT_Y + 22,
+                         ? "Hosszú OK: Infó · Hosszú Vissza: Fordított"
+                         : "Hold OK: Info · Hold Back: Reverse";
+  drawCenteredIn(renderer, UI_10_FONT_ID, 8, width - 16, HELP_Y,
                  renderer.truncatedText(UI_10_FONT_ID, hint, width - 16).c_str());
 
   const auto labels = mappedInput.mapLabels(I18N.getLanguage() == Language::HU ? "Vissza" : "Back",
