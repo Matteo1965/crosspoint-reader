@@ -18,8 +18,8 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "reader/BookInfoActivity.h"
-#include "util/BmpViewerActivity.h"
+#include "../reader/BookInfoActivity.h"
+#include "../util/BmpViewerActivity.h"
 
 namespace {
 
