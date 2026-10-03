@@ -23,6 +23,8 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "activities/reader/BookInfoActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "CoverGridBrowserActivity.h"
 #include "components/icons/folder.h"
 #include "components/icons/recent.h"
@@ -460,6 +462,7 @@ void HomeActivity::onEnter() {
 }
 
 void HomeActivity::onExit() {
+  optionPopup_.dismiss();
   Activity::onExit();
 
   // Free the stored cover buffer if any
@@ -509,6 +512,10 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  if (optionPopup_.isActive()) {
+    optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); });
+    return;
+  }
   if (coverGridActive()) {
     loopCoverGrid();
     return;
@@ -548,6 +555,29 @@ void HomeActivity::loop() {
         break;
     }
   };
+
+  int selectedBook = -1;
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, 700) && selectedHomeBookIndex(selectedBook)) {
+    showHomeBookOptions(selectedBook);
+    return;
+  }
+
+  int longX = -1;
+  int longY = -1;
+  if (mappedInput.wasScreenLongPress(longX, longY) && !recentBooks.empty()) {
+    const int coverColumnCount = std::max(1, metrics.homeRecentBooksCount);
+    const int recentCount = std::min(static_cast<int>(recentBooks.size()), coverColumnCount);
+    const int coverColumnWidth = (renderer.getScreenWidth() - 2 * metrics.contentSidePadding) / std::max(1, recentCount);
+    for (int i = 0; i < recentCount; ++i) {
+      const int x = metrics.contentSidePadding + i * coverColumnWidth;
+      if (longX >= x && longX < x + coverColumnWidth &&
+          longY >= metrics.homeTopPadding && longY < metrics.homeTopPadding + metrics.homeCoverTileHeight) {
+        selectorIndex = i;
+        showHomeBookOptions(i);
+        return;
+      }
+    }
+  }
 
   // Home navigation uses the logical mapped hardware buttons directly.
   // Keep the same mapping/orientation semantics as ButtonNavigator without
@@ -709,6 +739,11 @@ void HomeActivity::render(RenderLock&&) {
                                             tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
+  if (optionPopup_.isActive()) {
+    optionPopup_.processRender(renderer, mappedInput);
+    return;
+  }
+
   renderer.displayBuffer();
 
   if (!firstRenderDone) {
@@ -718,6 +753,72 @@ void HomeActivity::render(RenderLock&&) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);
   }
+}
+
+bool HomeActivity::selectedHomeBookIndex(int& index) const {
+  const int bookCount = static_cast<int>(recentBooks.size());
+  if (selectorIndex < 0 || selectorIndex >= bookCount) return false;
+  index = selectorIndex;
+  return true;
+}
+
+std::shared_ptr<Epub> HomeActivity::loadHomeBookEpub(const int index) {
+  if (index < 0 || index >= static_cast<int>(recentBooks.size())) return {};
+  if (!FsHelpers::hasEpubExtension(recentBooks[index].path)) return {};
+  auto epub = std::make_shared<Epub>(recentBooks[index].path, "/.crosspoint");
+  bool loaded = epub->load(false, true);
+  if (!loaded) loaded = epub->load(true, true);
+  return loaded ? epub : std::shared_ptr<Epub>{};
+}
+
+void HomeActivity::reopenHomeAfterChild() {
+  gridFrameValid = false;
+  coverRendered = false;
+  coverBufferStored = false;
+  requestUpdate();
+}
+
+void HomeActivity::openHomeBookInfo(const int index, const bool metadata) {
+  auto epub = loadHomeBookEpub(index);
+  if (!epub) {
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(
+      std::make_unique<BookInfoActivity>(renderer, mappedInput, epub,
+                                         metadata ? BookInfoActivity::Page::Metadata
+                                                  : BookInfoActivity::Page::Description),
+      [this](const ActivityResult&) { reopenHomeAfterChild(); });
+}
+
+void HomeActivity::openHomeBookCover(const int index) {
+  auto epub = loadHomeBookEpub(index);
+  if (!epub) {
+    requestUpdate();
+    return;
+  }
+  std::string coverPath = epub->getBookCoverViewBmpPath();
+  if (!Storage.exists(coverPath.c_str())) epub->generateBookCoverViewBmp();
+  if (!Storage.exists(coverPath.c_str())) {
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
+                         [this](const ActivityResult&) { reopenHomeAfterChild(); });
+}
+
+void HomeActivity::showHomeBookOptions(const int index) {
+  if (index < 0 || index >= static_cast<int>(recentBooks.size())) return;
+  static constexpr const char* OPTIONS_HU[] = {"Fülszöveg", "Metaadatok", "Borító megjelenítése", "Megnyitás"};
+  static constexpr const char* OPTIONS_EN[] = {"Description", "Metadata", "Show cover", "Open"};
+  const char* const* options = I18N.getLanguage() == Language::HU ? OPTIONS_HU : OPTIONS_EN;
+  optionPopup_.showMultilineTitle(recentBooks[index].title.c_str(), options, 4, 0, [this, index](const int choice) {
+    if (choice == 0) openHomeBookInfo(index, false);
+    else if (choice == 1) openHomeBookInfo(index, true);
+    else if (choice == 2) openHomeBookCover(index);
+    else if (choice == 3) onSelectBook(recentBooks[index].path);
+  });
+  requestUpdate();
 }
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
@@ -840,6 +941,27 @@ void HomeActivity::loopCoverGrid() {
       default: break;
     }
   };
+
+  int gridSelectedBook = -1;
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, 700) && selectedHomeBookIndex(gridSelectedBook)) {
+    showHomeBookOptions(gridSelectedBook);
+    return;
+  }
+
+  int longX = -1;
+  int longY = -1;
+  if (mappedInput.wasScreenLongPress(longX, longY)) {
+    for (int i = 0; i < bookCount; ++i) {
+      const int x = i == 0 ? layout.left
+                           : layout.left + ((i - 1) % layout.columns) * (layout.coverW + layout.gapX);
+      const int y = i == 0 ? layout.featuredY : layout.gridY;
+      if (longX >= x && longX < x + layout.coverW && longY >= y && longY < y + layout.coverH) {
+        selectorIndex = i;
+        showHomeBookOptions(i);
+        return;
+      }
+    }
+  }
 
   // Cover Grid handles the four front buttons directly through the logical
   // mappings. This avoids depending on ButtonNavigator's shared/static state
@@ -1027,6 +1149,11 @@ void HomeActivity::renderCoverGrid() {
   const auto buttonLabels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT),
                                                   tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, buttonLabels.btn1, buttonLabels.btn2, buttonLabels.btn3, buttonLabels.btn4);
+
+  if (optionPopup_.isActive()) {
+    optionPopup_.processRender(renderer, mappedInput);
+    return;
+  }
 
   renderer.displayBuffer();
   gridFrameValid = true;
