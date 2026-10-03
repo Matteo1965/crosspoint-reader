@@ -171,9 +171,10 @@ int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
   if (useLibraryHomeMenu()) {
     if (coverGridActive()) {
       if (item == HomeMenuItem::LIBRARY) return 0;
-      if (item == HomeMenuItem::FILE_BROWSER) return 1;
-      if (item == HomeMenuItem::FILE_TRANSFER) return 2;
-      if (item == HomeMenuItem::SETTINGS_MENU) return 3;
+      if (item == HomeMenuItem::COVER_GRID_BROWSER) return 1;
+      if (item == HomeMenuItem::FILE_BROWSER) return 2;
+      if (item == HomeMenuItem::FILE_TRANSFER) return 3;
+      if (item == HomeMenuItem::SETTINGS_MENU) return 4;
       return 0;
     }
     if (item == HomeMenuItem::LIBRARY) return 0;
@@ -200,9 +201,10 @@ HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
   if (useLibraryHomeMenu()) {
     if (coverGridActive()) {
       if (idx == 0) return HomeMenuItem::LIBRARY;
-      if (idx == 1) return HomeMenuItem::FILE_BROWSER;
-      if (idx == 2) return HomeMenuItem::FILE_TRANSFER;
-      if (idx == 3) return HomeMenuItem::SETTINGS_MENU;
+      if (idx == 1) return HomeMenuItem::COVER_GRID_BROWSER;
+      if (idx == 2) return HomeMenuItem::FILE_BROWSER;
+      if (idx == 3) return HomeMenuItem::FILE_TRANSFER;
+      if (idx == 4) return HomeMenuItem::SETTINGS_MENU;
       return HomeMenuItem::NONE;
     }
     if (idx == 0) return HomeMenuItem::LIBRARY;
@@ -222,7 +224,7 @@ HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = useLibraryHomeMenu() ? (coverGridActive() ? 4 : 5) : 4 + (hasOpdsServers ? 1 : 0);
+  int count = useLibraryHomeMenu() ? 5 : 4 + (hasOpdsServers ? 1 : 0);
   count += static_cast<int>(recentBooks.size());
   return count;
 }
