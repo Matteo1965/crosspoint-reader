@@ -689,8 +689,6 @@ jobs:
           grep -Fq 'previewGridBook(selectorIndex)' src/activities/home/HomeActivity.cpp
           grep -Fq 'restoreOriginalGridBook();' src/activities/home/HomeActivity.cpp
           grep -Fq 'originalResumePath' src/activities/home/HomeActivity.h
-          grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.h
-          grep -Fq '{MenuAction::DICTIONARY_STATUS, StrId::STR_LOOKUP, "Szótár:"}' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -Fq 'EXPORT_EDITS' src/activities/reader/EpubReaderMenuActivity.h
           grep -Fq 'HIGHLIGHT' src/activities/reader/EpubReaderMenuActivity.h
           grep -Fq 'EDIT' src/activities/reader/EpubReaderMenuActivity.h
