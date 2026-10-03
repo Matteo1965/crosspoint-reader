@@ -1,4 +1,4 @@
-name: CPHUN-192 Source Snapshot
+name: CPHUN-192 Consolidate Source
 # CPHUN-192 source materialization snapshot
 
 on:
@@ -8,10 +8,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
+    if: ${{ !contains(github.event.head_commit.message || '', 'consolidate tested Hungarian Edition source baseline') }}
     name: Build ${{ matrix.label }}
     runs-on: ubuntu-24.04
     timeout-minutes: 150
@@ -869,45 +870,87 @@ jobs:
           grep -Fq '{MenuAction::DICTIONARY, StrId::STR_LOOKUP, "Szótári keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
           grep -Fq '{MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP, "Kézi keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
 
-      - name: Materialize CPHUN-192 source snapshot
+      - name: Consolidate final CPHUN-192 source
+        if: matrix.env == 'default'
         run: |
           set -euo pipefail
+
+          # Keep the exact tested application source produced above, but restore
+          # development tooling/workflows from the branch head rather than the
+          # temporary CPHUN-152 reconstruction checkout.
+          git checkout "$GITHUB_SHA" -- .github tools scripts
 
           cat > src/CPHUNBuildId.h <<'EOF'
           #pragma once
 
-          #define CPHUN_BUILD_ID "CPHUN-261003-192-SNAPSHOT"
+          #define CPHUN_BUILD_ID "CPHUN-261003-192-CONSOLIDATED"
           #define CPHUN_BUILD_DATE "Oct-3 2026"
           EOF
 
-          echo "=== superproject tracked changes ==="
-          git status --short
-          echo "=== freeink-sdk tracked changes ==="
-          git -C freeink-sdk status --short
+          # The release-sync SDK revision already contains the accepted X4
+          # absolute-grayscale driver. CPHUN-174 changes only FreeInkUI's list
+          # row value offset. Make that modified library first-class source in
+          # this repository instead of relying on a build-time SDK patch.
+          git -C freeink-sdk submodule update --init --recursive
+          test -f freeink-sdk/libs/ui/FreeInkUI/include/components/lists/list.h
+          grep -Fq 'int16_t valueOffsetX = 0;' freeink-sdk/libs/ui/FreeInkUI/include/components/lists/list.h
+          grep -Fq 'item.valueOffsetX' freeink-sdk/libs/ui/FreeInkUI/include/components/lists/list.h
 
-          rm -rf /tmp/cphun192-source
-          mkdir -p /tmp/cphun192-source
-          git ls-files -z | while IFS= read -r -d '' path; do
-            case "$path" in
-              freeink-sdk) continue ;;
-            esac
-            mkdir -p "/tmp/cphun192-source/$(dirname "$path")"
-            cp -a "$path" "/tmp/cphun192-source/$path"
-          done
+          sdk_other="$(git -C freeink-sdk diff --name-only -- . ':(exclude)libs/ui/FreeInkUI/include/components/lists/list.h')"
+          if test -n "$sdk_other"; then
+            echo "::error::Unexpected additional dirty FreeInk SDK files:"
+            printf '%s\n' "$sdk_other"
+            exit 1
+          fi
 
-          # Snapshot the actual SDK working tree, not only the gitlink.
-          mkdir -p /tmp/cphun192-source/freeink-sdk
-          rsync -a --delete --exclude='.git' freeink-sdk/ /tmp/cphun192-source/freeink-sdk/
+          rm -rf vendor/FreeInkUI
+          mkdir -p vendor/FreeInkUI
+          rsync -a --delete freeink-sdk/libs/ui/FreeInkUI/ vendor/FreeInkUI/
 
-          tar -C /tmp/cphun192-source -czf CPHUN-192-source-snapshot.tar.gz .
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("platformio.ini")
+          s=p.read_text(encoding="utf-8")
+          old="  FreeInkUI=symlink://freeink-sdk/libs/ui/FreeInkUI"
+          new="  FreeInkUI=symlink://vendor/FreeInkUI"
+          if old not in s:
+              raise SystemExit("CPHUN-192: FreeInkUI lib_deps anchor missing")
+          p.write_text(s.replace(old,new,1),encoding="utf-8")
+          PY
 
-      - name: Upload CPHUN-192 source snapshot
-        uses: actions/upload-artifact@v4
-        with:
-          name: CPHUN-192-source-${{ matrix.label }}-${{ github.run_id }}
-          path: CPHUN-192-source-snapshot.tar.gz
-          if-no-files-found: error
-          retention-days: 30
+          # Return the SDK worktree to its clean pinned release-sync commit.
+          # The modified UI implementation now lives in vendor/FreeInkUI.
+          git -C freeink-sdk reset --hard HEAD
+          git -C freeink-sdk submodule update --init --recursive
+          test -z "$(git -C freeink-sdk status --porcelain)"
+
+          # Verify the consolidated source itself contains the late features
+          # that used to depend on workflow patches.
+          grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 40' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 70' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimization"] = letterSpacingOptimization;' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;' src/CrossPointSettings.cpp
+          grep -Fq 'calibre:user_metadata:#pages' lib/Epub/Epub/parsers/ContentOpfParser.cpp
+          grep -Fq 'scaledCalibrePageCount' src/activities/home/HomeActivity.cpp
+          grep -Fq 'previewGridBook(selectorIndex)' src/activities/home/HomeActivity.cpp
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'valueOffsetX' vendor/FreeInkUI/include/components/lists/list.h
+          grep -Fq 'FreeInkUI=symlink://vendor/FreeInkUI' platformio.ini
+
+          # Create one clean commit whose parent is the pre-consolidation branch
+          # head. This preserves the development history while replacing the
+          # generated/patch-dependent tree with the actual tested source tree.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          tree="$(git write-tree)"
+          commit="$(printf '%s\n' 'CPHUN-192: consolidate tested Hungarian Edition source baseline' | git commit-tree "$tree" -p "$GITHUB_SHA")"
+          git reset --hard "$commit"
+          git push origin "$commit:refs/heads/agent/cphun-192-source-consolidation"
+
+          echo "Consolidated source commit: $commit"
 
       - name: Build ${{ matrix.label }} Hungarian Edition firmware
         run: |
