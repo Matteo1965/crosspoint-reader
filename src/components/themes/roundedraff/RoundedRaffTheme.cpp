@@ -20,7 +20,7 @@ constexpr int kMenuRadius = 30;
 constexpr int kBottomRadius = 15;
 constexpr int kRowRadius = 20;
 constexpr int kInteractiveInsetX = 20;
-constexpr int kSelectableRowGap = 2;
+constexpr int kSelectableRowGap = 1;
 constexpr int kTitleFontId = UI_12_FONT_ID;  // Requested main title size: 12px
 constexpr int kGuideFontId = SMALL_FONT_ID;  // Closest available to requested 6px
 
