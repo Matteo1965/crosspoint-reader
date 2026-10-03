@@ -1,11 +1,14 @@
 #pragma once
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "./FileBrowserActivity.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
+class Epub;
 struct RecentBook;
 struct Rect;
 
@@ -38,6 +41,7 @@ class HomeActivity final : public Activity {
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
   std::string originalResumePath;
+  OptionPopup optionPopup_;
   const HomeMenuItem initialMenuItem;
 
   bool useLibraryHomeMenu() const;
@@ -52,6 +56,13 @@ class HomeActivity final : public Activity {
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
+
+  bool selectedHomeBookIndex(int& index) const;
+  std::shared_ptr<Epub> loadHomeBookEpub(int index);
+  void showHomeBookOptions(int index);
+  void openHomeBookInfo(int index, bool metadata);
+  void openHomeBookCover(int index);
+  void reopenHomeAfterChild();
 
   int getMenuItemCount() const;
   bool coverGridActive() const;
