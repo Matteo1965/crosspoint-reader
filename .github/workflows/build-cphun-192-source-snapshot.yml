@@ -1,10 +1,7 @@
-name: CPHUN-192 Consolidate Source
+name: CPHUN-192 Historical Source Materializer
 # CPHUN-192 source materialization snapshot
 
 on:
-  push:
-    branches:
-      - agent/cphun-192-source-consolidation
   workflow_dispatch:
 
 permissions:
