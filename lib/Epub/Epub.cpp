@@ -1065,6 +1065,56 @@ bool Epub::generateThumbBmp(int height) const {
   return false;
 }
 
+
+std::string Epub::getGridThumbBmpPath(int height) const {
+  return cachePath + "/thumb_4gray_" + std::to_string(height) + ".bmp";
+}
+
+bool Epub::generateGridThumbBmp(int height) const {
+  const std::string outputPath = getGridThumbBmpPath(height);
+  if (Storage.exists(outputPath.c_str())) return true;
+
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    LOG_ERR("EBP", "Cannot generate 4-gray grid thumb, cache not loaded");
+    return false;
+  }
+
+  const auto coverImageHref = bookMetadataCache->coreMetadata.coverItemHref;
+  if (coverImageHref.empty()) return false;
+
+  const bool isJpg = FsHelpers::hasJpgExtension(coverImageHref);
+  const bool isPng = FsHelpers::hasPngExtension(coverImageHref);
+  if (!isJpg && !isPng) return false;
+
+  const std::string tempPath = getCachePath() + (isJpg ? "/.grid_thumb.jpg" : "/.grid_thumb.png");
+  HalFile source;
+  if (!Storage.openFileForWrite("EBP", tempPath, source)) return false;
+  readItemContentsToStream(coverImageHref, source, 1024);
+  source.close();
+  if (!Storage.openFileForRead("EBP", tempPath, source)) {
+    Storage.remove(tempPath.c_str());
+    return false;
+  }
+
+  HalFile out;
+  if (!Storage.openFileForWrite("EBP", outputPath, out)) {
+    source.close();
+    Storage.remove(tempPath.c_str());
+    return false;
+  }
+
+  const int targetWidth = static_cast<int>(height * 0.6f);
+  const bool success =
+      isJpg ? JpegToBmpConverter::jpegFileToBmpStreamWithSize(source, out, targetWidth, height, true)
+            : PngToBmpConverter::pngFileToBmpStreamWithSize(source, out, targetWidth, height, true);
+
+  source.close();
+  out.close();
+  Storage.remove(tempPath.c_str());
+  if (!success) Storage.remove(outputPath.c_str());
+  return success;
+}
+
 uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
   if (itemHref.empty()) {
     LOG_DBG("EBP", "Failed to read item, empty href");
