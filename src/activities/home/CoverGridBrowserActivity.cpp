@@ -2,6 +2,7 @@
 
 #include <Bitmap.h>
 #include <Epub.h>
+#include <Epub/Section.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -58,6 +59,66 @@ const char* bookWord() {
   return I18N.getLanguage() == Language::HU ? "könyv" : "books";
 }
 
+std::string trimCopy(std::string value) {
+  const auto first = value.find_first_not_of(" \t\r\n-_");
+  if (first == std::string::npos) return {};
+  const auto last = value.find_last_not_of(" \t\r\n-_");
+  return value.substr(first, last - first + 1);
+}
+
+std::string asciiLowerCopy(std::string value) {
+  for (char& c : value) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+  }
+  return value;
+}
+
+bool isTechnicalPartTitle(const std::string& lower) {
+  if (lower.rfind("part", 0) != 0 || lower.size() <= 4) return false;
+  for (size_t i = 4; i < lower.size(); ++i) {
+    if (lower[i] < '0' || lower[i] > '9') return false;
+  }
+  return true;
+}
+
+bool isHiddenChapterTitle(const std::string& lower) {
+  static constexpr const char* hidden[] = {
+      "tartalom", "tartalomjegyzék", "borító", "impresszum",
+      "címlap", "címoldal", "copyright", "index"};
+  for (const char* item : hidden) {
+    if (lower == item) return true;
+  }
+  return false;
+}
+
+bool chapterTitleNeedsSuffix(const std::string& lower) {
+  if (lower.find("fejezet") != std::string::npos || lower.find("chapter") != std::string::npos) return false;
+  static constexpr const char* noSuffix[] = {"előszó", "prológus", "epilógus", "szószedet", "bevezető"};
+  for (const char* item : noSuffix) {
+    if (lower.rfind(item, 0) == 0) return false;
+  }
+  return true;
+}
+
+int scaledCalibrePageCount(const int referencePages, const GfxRenderer& renderer) {
+  if (referencePages <= 0) return 0;
+  constexpr float REFERENCE_FONT_PT = 16.0f;
+  constexpr int REFERENCE_MARGIN_PX = 10;
+  const float fontScale = static_cast<float>(SETTINGS.fontPointSize) / REFERENCE_FONT_PT;
+  const float lineScale = SETTINGS.getReaderLineCompression();
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const int statusBar = UITheme::getStatusBarHeight();
+  const int margin = SETTINGS.screenMargin;
+  const float refW = static_cast<float>(std::max(1, screenW - 2 * REFERENCE_MARGIN_PX));
+  const float curW = static_cast<float>(std::max(1, screenW - 2 * margin));
+  const float refH = static_cast<float>(std::max(1, screenH - statusBar - 2 * REFERENCE_MARGIN_PX));
+  const float curH = static_cast<float>(std::max(1, screenH - statusBar - 2 * margin));
+  const float areaScale = (refW * refH) / (curW * curH);
+  const float scale = fontScale * fontScale * lineScale * areaScale;
+  return std::max(1, static_cast<int>(std::lround(static_cast<float>(referencePages) * scale)));
+}
+
 void drawCenteredIn(GfxRenderer& renderer, const int fontId, const int x, const int width, const int y,
                     const char* text, const EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
   const int textW = renderer.getTextAdvanceX(fontId, text, style);
@@ -88,6 +149,7 @@ void CoverGridBrowserActivity::onEnter() {
   loadPage();
   index_.close();
   ensurePageThumbs();
+  loadSelectedDetails();
   requestUpdate();
 }
 
@@ -223,11 +285,118 @@ bool CoverGridBrowserActivity::ensurePageThumbs() {
   return ok;
 }
 
+void CoverGridBrowserActivity::clearSelectedDetails() {
+  featuredProgressTenths_ = -1;
+  featuredCurrentPage_ = 0;
+  featuredTotalPages_ = 0;
+  featuredSeries_.clear();
+  featuredChapterTitle_.clear();
+}
+
+void CoverGridBrowserActivity::loadSelectedDetails() {
+  clearSelectedDetails();
+  if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
+
+  auto epub = std::make_shared<Epub>(books_[selected_].path, "/.crosspoint");
+  if (!epub->load(false, true) || epub->getBookSize() == 0) return;
+
+  Epub::BookInfo info;
+  int calibrePageCount = 0;
+  if (epub->readBookInfo(info)) {
+    calibrePageCount = info.calibrePageCount;
+    if (!info.series.empty()) {
+      featuredSeries_ = info.series;
+      if (!info.seriesIndex.empty()) {
+        std::string seriesIndex = info.seriesIndex;
+        const size_t decimalPos = seriesIndex.find_first_of(".,");
+        if (decimalPos != std::string::npos && decimalPos + 1 < seriesIndex.size()) {
+          bool fractionalPartIsZero = true;
+          for (size_t i = decimalPos + 1; i < seriesIndex.size(); ++i) {
+            if (seriesIndex[i] != '0') {
+              fractionalPartIsZero = false;
+              break;
+            }
+          }
+          if (fractionalPartIsZero) seriesIndex.erase(decimalPos);
+        }
+        featuredSeries_ += " #" + seriesIndex;
+      }
+    }
+  }
+
+  HalFile progressFile;
+  if (!Storage.openFileForRead("GRID", epub->getCachePath() + "/progress.bin", progressFile)) return;
+  uint8_t data[10] = {};
+  const int dataSize = progressFile.read(data, sizeof(data));
+  progressFile.close();
+  if (dataSize != 4 && dataSize != 6 && dataSize != 10) return;
+
+  const int spineIndex = data[0] + (data[1] << 8);
+  int pageIndex = data[2] + (data[3] << 8);
+  const int chapterPages = dataSize >= 6 ? data[4] + (data[5] << 8) : 0;
+  if (pageIndex == UINT16_MAX) pageIndex = 0;
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return;
+
+  float intra = 0.0f;
+  if (chapterPages > 1) {
+    intra = std::clamp(static_cast<float>(pageIndex) / static_cast<float>(chapterPages - 1), 0.0f, 1.0f);
+  }
+  const float progress = std::clamp(epub->calculateProgress(spineIndex, intra), 0.0f, 1.0f);
+  featuredProgressTenths_ = static_cast<int>(progress * 1000.0f + 0.5f);
+
+  const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  if (tocIndex >= 0 && tocIndex < epub->getTocItemsCount()) {
+    featuredChapterTitle_ = trimCopy(epub->getTocItem(tocIndex).title);
+    std::string foldedChapter = asciiLowerCopy(featuredChapterTitle_);
+    const size_t splitPos = foldedChapter.find("split");
+    if (splitPos != std::string::npos) {
+      featuredChapterTitle_ = trimCopy(featuredChapterTitle_.substr(0, splitPos));
+      foldedChapter = asciiLowerCopy(featuredChapterTitle_);
+    }
+    if (featuredChapterTitle_.empty() ||
+        foldedChapter.rfind("index split", 0) == 0 ||
+        foldedChapter.rfind("index_split", 0) == 0 ||
+        isTechnicalPartTitle(foldedChapter) ||
+        isHiddenChapterTitle(foldedChapter)) {
+      featuredChapterTitle_.clear();
+    }
+  }
+
+  if (calibrePageCount > 0) {
+    featuredTotalPages_ = scaledCalibrePageCount(calibrePageCount, renderer);
+    if (featuredTotalPages_ > 0) {
+      featuredCurrentPage_ = std::clamp(
+          1 + static_cast<int>(std::lround(progress * static_cast<float>(featuredTotalPages_ - 1))),
+          1, featuredTotalPages_);
+    }
+    return;
+  }
+
+  int pagesBefore = 0;
+  int total = 0;
+  bool complete = true;
+  for (int i = 0; i < epub->getSpineItemsCount(); ++i) {
+    Section section(epub, i, renderer);
+    const auto count = section.getCachedPageCount();
+    if (!count.has_value() || *count <= 0) {
+      complete = false;
+      break;
+    }
+    if (i < spineIndex) pagesBefore += *count;
+    total += *count;
+  }
+  if (complete && total > 0) {
+    featuredCurrentPage_ = std::min(total, pagesBefore + std::max(0, pageIndex) + 1);
+    featuredTotalPages_ = total;
+  }
+}
+
 bool CoverGridBrowserActivity::reopenAfterChild() {
   // The page metadata and six thumbnail paths stay resident while the child
   // activity is open. Keep the Library index closed so cover/info file access
   // never competes for the SD reader handle.
   thumbnailsReady_ = true;
+  loadSelectedDetails();
   requestUpdate();
   return true;
 }
@@ -245,6 +414,7 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   loadPage();
   index_.close();
   ensurePageThumbs();
+  loadSelectedDetails();
   requestUpdate();
 }
 
@@ -256,6 +426,7 @@ void CoverGridBrowserActivity::toggleSortDirection() {
   loadPage();
   index_.close();
   ensurePageThumbs();
+  loadSelectedDetails();
   requestUpdate();
 }
 
@@ -282,6 +453,7 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
   } else {
     selected_ = next - pageStart_;
   }
+  loadSelectedDetails();
   requestUpdate();
 }
 
@@ -297,6 +469,7 @@ void CoverGridBrowserActivity::stepPage(const int delta) {
   loadPage();
   index_.close();
   ensurePageThumbs();
+  loadSelectedDetails();
   requestUpdate();
 }
 
@@ -459,6 +632,7 @@ void CoverGridBrowserActivity::loop() {
       if (selected_ == hit) openSelectedBook();
       else {
         selected_ = hit;
+        loadSelectedDetails();
         requestUpdate();
       }
       return;
@@ -536,18 +710,64 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     paintCover(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H}, false);
 
     const int textW = std::max(40, width - FEATURED_TEXT_X - 22);
-    const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, selectedBook.title.c_str(), textW, 4);
-    int y = FEATURED_Y + 8;
+    const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, selectedBook.title.c_str(), textW, 3);
+    int y = FEATURED_Y + 4;
     for (const auto& line : titleLines) {
       renderer.drawText(UI_12_FONT_ID, FEATURED_TEXT_X, y, line.c_str(), true, EpdFontFamily::BOLD);
       y += renderer.getLineHeight(UI_12_FONT_ID);
     }
     if (!selectedBook.author.empty()) {
-      y += 8;
-      const auto authorLines = renderer.wrappedText(UI_10_FONT_ID, selectedBook.author.c_str(), textW, 3);
-      for (const auto& line : authorLines) {
-        renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, line.c_str());
-        y += renderer.getLineHeight(UI_10_FONT_ID);
+      y += 4;
+      std::string author = selectedBook.author;
+      if (I18N.getLanguage() == Language::HU) {
+        const size_t comma = author.find(',');
+        if (comma != std::string::npos) {
+          author.erase(comma, 1);
+          while (comma < author.size() && author[comma] == ' ') author.erase(comma, 1);
+          author.insert(comma, " ");
+        }
+      }
+      author = renderer.truncatedText(UI_10_FONT_ID, author.c_str(), textW);
+      renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, author.c_str());
+      y += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+    }
+    if (!featuredSeries_.empty()) {
+      const auto series = renderer.truncatedText(UI_10_FONT_ID, featuredSeries_.c_str(), textW);
+      renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, series.c_str());
+      y += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+    }
+    if (!featuredChapterTitle_.empty()) {
+      std::string chapter = featuredChapterTitle_;
+      const std::string folded = asciiLowerCopy(chapter);
+      if (chapterTitleNeedsSuffix(folded)) {
+        chapter += I18N.getLanguage() == Language::HU ? " fejezet" : " chapter";
+      }
+      chapter = renderer.truncatedText(UI_10_FONT_ID, chapter.c_str(), textW);
+      renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, chapter.c_str());
+      y += renderer.getLineHeight(UI_10_FONT_ID) + 4;
+    }
+    if (featuredProgressTenths_ >= 0) {
+      char progressText[48];
+      const int whole = featuredProgressTenths_ / 10;
+      const int decimal = featuredProgressTenths_ % 10;
+      const char decimalSep = I18N.getLanguage() == Language::HU ? ',' : '.';
+      if (featuredTotalPages_ > 0 && featuredCurrentPage_ > 0) {
+        snprintf(progressText, sizeof(progressText), "%d%c%d%% · %d / %d %s", whole, decimalSep, decimal,
+                 featuredCurrentPage_, featuredTotalPages_,
+                 I18N.getLanguage() == Language::HU ? "oldal" : "pages");
+      } else {
+        snprintf(progressText, sizeof(progressText), "%d%c%d%%", whole, decimalSep, decimal);
+      }
+      renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, progressText);
+      constexpr int progressBarHeight = 8;
+      const int progressBarY = y + renderer.getLineHeight(UI_10_FONT_ID) + 4;
+      renderer.fillRect(FEATURED_TEXT_X, progressBarY, textW, progressBarHeight, false);
+      renderer.drawRect(FEATURED_TEXT_X, progressBarY, textW, progressBarHeight, true);
+      const int innerWidth = std::max(0, textW - 2);
+      const int fillWidth = (innerWidth * std::clamp(featuredProgressTenths_, 0, 1000) + 500) / 1000;
+      if (fillWidth > 0) {
+        renderer.fillRectDither(FEATURED_TEXT_X + 1, progressBarY + 1, fillWidth, progressBarHeight - 2,
+                                Color::DarkGray);
       }
     }
 
