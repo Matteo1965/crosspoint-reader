@@ -52,7 +52,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 278, gapX, columns, 506};
+  return {left, coverW, coverH, 38, 278, gapX, columns, 498};
 }
 
 std::string trimCopy(std::string value) {
