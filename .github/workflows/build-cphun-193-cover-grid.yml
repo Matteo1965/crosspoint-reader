@@ -91,6 +91,7 @@ jobs:
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'gridFrameValid = renderGridGrayscaleCovers();' src/activities/home/HomeActivity.cpp
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
+          grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
 
           # CPHUN-174 FreeInkUI modification is versioned locally, not patched.
           test -f vendor/FreeInkUI/library.json
