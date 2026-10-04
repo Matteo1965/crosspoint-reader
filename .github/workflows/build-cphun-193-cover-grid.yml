@@ -1,4 +1,4 @@
-name: CPHUN-197 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-198 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -8,13 +8,14 @@ on:
       - agent/cphun-195-cover-grid-startup-fix
       - agent/cphun-196-grid-selection-refresh-fix
       - agent/cphun-197-cover-grid-performance
+      - agent/cphun-198-grid3-finalize
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-197-cover-grid-performance-${{ github.ref }}
+  group: cphun-198-grid3-finalize-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,7 +29,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-197-X4
+            artifact: CPHUN-198-X4
             firmware: firmware.bin
 
     steps:
@@ -43,7 +44,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261004-197-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261004-198-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -96,6 +97,10 @@ jobs:
           grep -Fq 'gridFrameValid = renderGridGrayscaleCovers();' src/activities/home/HomeActivity.cpp
           grep -Fq 'coverH, 38, 276' src/activities/home/HomeActivity.cpp
           grep -Fq 'SELECTION_SETTLE_MS = 350' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'gridLabel' src/activities/home/HomeActivity.cpp
+          grep -Fq 'useLibraryHomeMenu() ? 4' src/activities/home/HomeActivity.cpp
+          grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
+          grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/HomeActivity.cpp
           grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
