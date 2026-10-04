@@ -1,4 +1,4 @@
-name: CPHUN-196 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-197 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -7,13 +7,14 @@ on:
       - agent/cphun-194-cover-grid-render-fix
       - agent/cphun-195-cover-grid-startup-fix
       - agent/cphun-196-grid-selection-refresh-fix
+      - agent/cphun-197-cover-grid-performance
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-196-grid-selection-refresh-fix-${{ github.ref }}
+  group: cphun-197-cover-grid-performance-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +28,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-196-X4
+            artifact: CPHUN-197-X4
             firmware: firmware.bin
 
     steps:
@@ -42,7 +43,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261004-196-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261004-197-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -94,6 +95,9 @@ jobs:
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
           grep -Fq 'gridFrameValid = renderGridGrayscaleCovers();' src/activities/home/HomeActivity.cpp
           grep -Fq 'coverH, 38, 276' src/activities/home/HomeActivity.cpp
+          grep -Fq 'SELECTION_SETTLE_MS = 350' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
 
           # CPHUN-174 FreeInkUI modification is versioned locally, not patched.
