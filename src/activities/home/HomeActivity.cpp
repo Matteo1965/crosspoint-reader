@@ -11,7 +11,6 @@
 #include <Xtc.h>
 #include <Epub/Section.h>
 
-#include <Arduino.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -35,8 +34,6 @@
 #include "fontIds.h"
 
 namespace {
-constexpr unsigned long GRID_SELECTION_SETTLE_MS = 250;
-
 struct CoverGridLayout {
   int left;
   int coverW;
@@ -433,8 +430,6 @@ void HomeActivity::onEnter() {
   backPressSeen = false;
   gridFrameValid = false;
   previousGridSelection = -1;
-  gridDeferredRefresh = false;
-  gridDeferredDueMs = 0;
   firstRenderDone = false;
   recentsLoaded = false;
   recentsLoading = false;
@@ -1133,12 +1128,8 @@ void HomeActivity::loopCoverGrid() {
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
-    if (menuTouch == MappedInputManager::RowTouch::Tap) {
-      activate();
-    } else {
-      gridDeferredRefresh = true;
-      gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
-    }
+    if (menuTouch == MappedInputManager::RowTouch::Tap) activate();
+    else requestUpdate();
     return;
   }
 
