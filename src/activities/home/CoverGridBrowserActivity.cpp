@@ -691,13 +691,16 @@ void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect,
 }
 
 void CoverGridBrowserActivity::renderGrayscaleCovers() {
-  // First send the normal BW page as the grayscale base. In BW mode every
-  // non-white 2-bit cover pixel is black; the two overlay planes below lift
-  // levels 1/2 to the panel's dark/light gray states without touching UI text.
-  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  // CPHUN-195: preserve the already-rendered BW UI while replacing only
+  // the cover rectangles with Absolute/B 2-bit grayscale.
+  const bool stripSupported = renderer.supportsStripGrayscale();
+  bool absolute = stripSupported &&
+                  renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+
   if (absolute) {
-    renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute);
-  } else {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) absolute = false;
+  }
+  if (!absolute) {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
 
@@ -740,12 +743,42 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
     }
   };
 
-  renderer.clearScreen(absolute ? 0xFF : 0x00);
+  if (absolute) {
+    constexpr int STRIP_ROWS = 32;
+    const int panelRows = renderer.getDisplayHeight();
+    const size_t rowBytes = renderer.getDisplayWidthBytes();
+    const size_t scratchBytes = rowBytes * STRIP_ROWS;
+    uint8_t* scratch = static_cast<uint8_t*>(malloc(scratchBytes));
+    const uint8_t* bwPage = renderer.getFrameBuffer();
+
+    if (scratch != nullptr && bwPage != nullptr) {
+      for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+        renderer.setRenderMode(plane);
+        for (int y = 0; y < panelRows; y += STRIP_ROWS) {
+          const int rows = std::min(STRIP_ROWS, panelRows - y);
+          memcpy(scratch, bwPage + static_cast<size_t>(y) * rowBytes, static_cast<size_t>(rows) * rowBytes);
+          renderer.beginStripTarget(scratch, y, rows);
+          drawAllCoverPlanes();
+          renderer.endStripTarget();
+          renderer.writeGrayscalePlaneStrip(plane == GfxRenderer::GRAYSCALE_LSB, scratch, y, rows);
+        }
+      }
+      free(scratch);
+      renderer.displayGrayBuffer();
+      renderer.setRenderMode(GfxRenderer::BW);
+      return;
+    }
+    if (scratch != nullptr) free(scratch);
+    renderer.setRenderMode(GfxRenderer::BW);
+    return;
+  }
+
+  renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   drawAllCoverPlanes();
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(absolute ? 0xFF : 0x00);
+  renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   drawAllCoverPlanes();
   renderer.copyGrayscaleMsbBuffers();
