@@ -18,8 +18,6 @@ class HomeActivity final : public Activity {
   bool backPressSeen = false;  // Prevent a stale Back release opening a book on entering Home.
   bool gridFrameValid = false;  // The renderer's single framebuffer still contains the grid.
   int previousGridSelection = -1;
-  bool gridDeferredRefresh = false;
-  unsigned long gridDeferredDueMs = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
