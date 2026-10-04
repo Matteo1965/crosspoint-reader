@@ -52,7 +52,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 278, gapX, columns, 502};
+  return {left, coverW, coverH, 38, 276, gapX, columns, 502};
 }
 
 std::string trimCopy(std::string value) {
@@ -1177,7 +1177,10 @@ void HomeActivity::renderCoverGrid() {
       if (!newMenu) outlineBook(selectorIndex, true);
     }
     previousGridSelection = selectorIndex;
-    renderer.displayBuffer();
+    // Keep the current UI edits, but re-compose the cover rectangles through
+    // the Absolute grayscale path instead of sending the whole BW framebuffer.
+    // A plain displayBuffer() here is what made every cover fall back to dark BW.
+    gridFrameValid = renderGridGrayscaleCovers();
     return;
   }
 
