@@ -940,8 +940,29 @@ bool HomeActivity::renderGridGrayscaleCovers() {
     file.close();
   };
 
+  if (absolute && renderer.storeBwBuffer()) {
+    // CPHUN-198: preserve the complete BW page in chunked RAM, then decode
+    // each thumbnail only once per grayscale plane. This removes the old
+    // 32-row strip loop which re-opened/re-decoded every cover many times.
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.restoreBwBuffer(false, false);
+
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
+    renderer.setRenderMode(GfxRenderer::BW);
+    renderer.restoreBwBuffer(false, true);
+    return true;
+  }
+
   if (absolute) {
-    constexpr int STRIP_ROWS = 32;
+    // Low-memory fallback: larger strips reduce repeated SD bitmap decoding.
+    constexpr int STRIP_ROWS = 128;
     const int panelRows = renderer.getDisplayHeight();
     const size_t rowBytes = renderer.getDisplayWidthBytes();
     const size_t scratchBytes = rowBytes * STRIP_ROWS;
@@ -952,7 +973,6 @@ bool HomeActivity::renderGridGrayscaleCovers() {
         renderer.setRenderMode(plane);
         for (int y = 0; y < panelRows; y += STRIP_ROWS) {
           const int rows = std::min(STRIP_ROWS, panelRows - y);
-          // Seed both Absolute planes with the BW UI: black=00, white=11.
           memcpy(scratch, bwPage + static_cast<size_t>(y) * rowBytes, static_cast<size_t>(rows) * rowBytes);
           renderer.beginStripTarget(scratch, y, rows);
           for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
@@ -963,11 +983,10 @@ bool HomeActivity::renderGridGrayscaleCovers() {
       free(scratch);
       renderer.displayGrayBuffer();
       renderer.setRenderMode(GfxRenderer::BW);
-      return true;  // BW framebuffer was never destroyed.
+      return true;
     }
     if (scratch != nullptr) free(scratch);
     renderer.setRenderMode(GfxRenderer::BW);
-    // Do not attempt an Absolute full-buffer fallback: it would erase the UI.
     return false;
   }
 
