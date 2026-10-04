@@ -1,4 +1,4 @@
-name: CPHUN-198 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-199 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -9,13 +9,14 @@ on:
       - agent/cphun-196-grid-selection-refresh-fix
       - agent/cphun-197-cover-grid-performance
       - agent/cphun-198-grid3-finalize
+      - agent/cphun-199-grid3-debounced-gray
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-198-grid3-finalize-${{ github.ref }}
+  group: cphun-199-grid3-debounced-gray-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,7 +30,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-198-X4
+            artifact: CPHUN-199-X4
             firmware: firmware.bin
 
     steps:
@@ -44,7 +45,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261004-198-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261004-199-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -101,6 +102,8 @@ jobs:
           grep -Fq 'useLibraryHomeMenu() ? 4' src/activities/home/HomeActivity.cpp
           grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'GRID_SELECTION_SETTLE_MS = 250' src/activities/home/HomeActivity.cpp
+          ! grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
           grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
