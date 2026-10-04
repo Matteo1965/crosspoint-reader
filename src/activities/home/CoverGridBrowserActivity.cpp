@@ -143,6 +143,7 @@ void CoverGridBrowserActivity::onEnter() {
   thumbnailsLoading_ = false;
   previousSelected_ = -1;
   selectionFastRefresh_ = false;
+  sidePageHoldAction_ = 0;
 
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
@@ -597,6 +598,29 @@ void CoverGridBrowserActivity::loop() {
   }
   if (mappedInput.wasLongPressed(MappedInputManager::Button::NavNext, LONG_PRESS_MS)) {
     stepSortTab(1);
+    return;
+  }
+
+  // CPHUN-202: side buttons have dual behavior in the 6+1 grid.
+  // Short release falls through to NavPrevious/NavNext (one cover).
+  // Holding past LONG_PRESS_MS changes a whole six-book page. Keep a latch
+  // until release so the same physical release cannot also move one cover.
+  if (sidePageHoldAction_ != 0) {
+    const auto heldButton = sidePageHoldAction_ < 0 ? MappedInputManager::Button::PageBack
+                                                    : MappedInputManager::Button::PageForward;
+    if (mappedInput.wasReleased(heldButton)) sidePageHoldAction_ = 0;
+    return;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::PageBack) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    sidePageHoldAction_ = -1;
+    stepPage(-1);
+    return;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::PageForward) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    sidePageHoldAction_ = 1;
+    stepPage(1);
     return;
   }
 
