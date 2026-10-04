@@ -11,6 +11,7 @@
 #include <Xtc.h>
 #include <Epub/Section.h>
 
+#include <Arduino.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -34,6 +35,8 @@
 #include "fontIds.h"
 
 namespace {
+constexpr unsigned long GRID_SELECTION_SETTLE_MS = 250;
+
 struct CoverGridLayout {
   int left;
   int coverW;
@@ -433,6 +436,8 @@ void HomeActivity::onEnter() {
   backPressSeen = false;
   gridFrameValid = false;
   previousGridSelection = -1;
+  gridDeferredRefresh = false;
+  gridDeferredDueMs = 0;
   firstRenderDone = false;
   recentsLoaded = false;
   recentsLoading = false;
@@ -730,10 +735,7 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.displayBuffer();
 
-  if (!firstRenderDone) {
-    firstRenderDone = true;
-    requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
+  if (!firstRenderDone) firstRenderDone = true; else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);
   }
@@ -1077,12 +1079,14 @@ void HomeActivity::loopCoverGrid() {
   // while still respecting the user's configured hardware mapping.
   if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, navCount);
-    requestUpdate();
+    gridDeferredRefresh = true;
+    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, navCount);
-    requestUpdate();
+    gridDeferredRefresh = true;
+    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
     return;
   }
 
@@ -1091,7 +1095,8 @@ void HomeActivity::loopCoverGrid() {
     selectorIndex = swipe == MappedInputManager::SwipeDir::Up
                         ? ButtonNavigator::nextIndex(selectorIndex, navCount)
                         : ButtonNavigator::previousIndex(selectorIndex, navCount);
-    requestUpdate();
+    gridDeferredRefresh = true;
+    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
     return;
   }
 
@@ -1120,8 +1125,21 @@ void HomeActivity::loopCoverGrid() {
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
-    if (menuTouch == MappedInputManager::RowTouch::Tap) activate();
-    else requestUpdate();
+    if (menuTouch == MappedInputManager::RowTouch::Tap) {
+      activate();
+    } else {
+      gridDeferredRefresh = true;
+      gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
+    }
+    return;
+  }
+
+  if (gridDeferredRefresh &&
+      static_cast<long>(millis() - gridDeferredDueMs) >= 0) {
+    gridDeferredRefresh = false;
+    gridFrameValid = false;
+    previousGridSelection = -1;
+    requestUpdate();
     return;
   }
 
@@ -1156,48 +1174,11 @@ void HomeActivity::renderCoverGrid() {
                        [&icons](int index) { return icons[index]; });
   };
 
-  if (gridFrameValid && recentsLoaded) {
-    auto bookRect = [this, &layout](const int selected) {
-      const int x = selected == 0 ? layout.left
-                                  : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
-      const int y = selected == 0 ? layout.featuredY : layout.gridY;
-      return Rect{x, y, layout.coverW, layout.coverH};
-    };
-    auto outlineBook = [this, &bookRect](const int selected, const bool black) {
-      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
-      const Rect r = bookRect(selected);
-      renderer.drawRect(r.x - 3, r.y - 3, r.width + 6, r.height + 6, 2, black);
-    };
-    auto refreshOutline = [this, &bookRect](const int selected) {
-      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
-      const Rect r = bookRect(selected);
-      constexpr int ring = 4;
-      renderer.displayWindow(r.x - ring, r.y - ring, r.width + ring * 2, ring);
-      renderer.displayWindow(r.x - ring, r.y + r.height, r.width + ring * 2, ring);
-      renderer.displayWindow(r.x - ring, r.y, ring, r.height);
-      renderer.displayWindow(r.x + r.width, r.y, ring, r.height);
-    };
-
-    if (previousGridSelection != selectorIndex) {
-      const bool oldMenu = previousGridSelection >= bookCount;
-      const bool newMenu = selectorIndex >= bookCount;
-      if (oldMenu || newMenu) {
-        drawMenu();
-        const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
-        renderer.displayWindow(0, layout.menuTop, width, menuHeight);
-      }
-      if (!oldMenu) {
-        outlineBook(previousGridSelection, false);
-        refreshOutline(previousGridSelection);
-      }
-      if (!newMenu) {
-        outlineBook(selectorIndex, true);
-        refreshOutline(selectorIndex);
-      }
-    }
-    previousGridSelection = selectorIndex;
-    return;
-  }
+  // CPHUN-199: after an Absolute grayscale frame, never issue a BW
+  // partial/window refresh on this page. Even distant BW window updates alter
+  // the X4 panel state enough to darken the grayscale covers. All visible
+  // selection/menu changes are therefore coalesced into one full gray redraw
+  // after the short input-settle delay.
 
   renderer.clearScreen();
   // Compact 32 px header zone for the 132x220 Cover Grid geometry.
