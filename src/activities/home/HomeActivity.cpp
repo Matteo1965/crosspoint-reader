@@ -171,19 +171,10 @@ int HomeActivity::gridThumbHeight(int index) const {
 
 int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
   if (useLibraryHomeMenu()) {
-    if (coverGridActive()) {
-      if (item == HomeMenuItem::LIBRARY) return 0;
-      if (item == HomeMenuItem::COVER_GRID_BROWSER) return 1;
-      if (item == HomeMenuItem::FILE_BROWSER) return 2;
-      if (item == HomeMenuItem::FILE_TRANSFER) return 3;
-      if (item == HomeMenuItem::SETTINGS_MENU) return 4;
-      return 0;
-    }
     if (item == HomeMenuItem::LIBRARY) return 0;
-    if (item == HomeMenuItem::COVER_GRID_BROWSER) return 1;
-    if (item == HomeMenuItem::FILE_BROWSER) return 2;
-    if (item == HomeMenuItem::FILE_TRANSFER) return 3;
-    if (item == HomeMenuItem::SETTINGS_MENU) return 4;
+    if (item == HomeMenuItem::FILE_BROWSER) return 1;
+    if (item == HomeMenuItem::FILE_TRANSFER) return 2;
+    if (item == HomeMenuItem::SETTINGS_MENU) return 3;
     return 0;
   }
   int i = 0;
@@ -201,19 +192,10 @@ int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
 
 HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
   if (useLibraryHomeMenu()) {
-    if (coverGridActive()) {
-      if (idx == 0) return HomeMenuItem::LIBRARY;
-      if (idx == 1) return HomeMenuItem::COVER_GRID_BROWSER;
-      if (idx == 2) return HomeMenuItem::FILE_BROWSER;
-      if (idx == 3) return HomeMenuItem::FILE_TRANSFER;
-      if (idx == 4) return HomeMenuItem::SETTINGS_MENU;
-      return HomeMenuItem::NONE;
-    }
     if (idx == 0) return HomeMenuItem::LIBRARY;
-    if (idx == 1) return HomeMenuItem::COVER_GRID_BROWSER;
-    if (idx == 2) return HomeMenuItem::FILE_BROWSER;
-    if (idx == 3) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == 4) return HomeMenuItem::SETTINGS_MENU;
+    if (idx == 1) return HomeMenuItem::FILE_BROWSER;
+    if (idx == 2) return HomeMenuItem::FILE_TRANSFER;
+    if (idx == 3) return HomeMenuItem::SETTINGS_MENU;
     return HomeMenuItem::NONE;
   }
   int i = 0;
@@ -711,9 +693,8 @@ void HomeActivity::render(RenderLock&&) {
       menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
       menuIcons = {Library, Folder, Transfer, Settings};
     } else {
-      const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
-      menuItems = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
-      menuIcons = {Library, Recent, Folder, Transfer, Settings};
+      menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+      menuIcons = {Library, Folder, Transfer, Settings};
     }
   } else {
     menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
@@ -1034,7 +1015,7 @@ void HomeActivity::loopCoverGrid() {
   const auto layout = coverGridLayout(renderer);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int bookCount = static_cast<int>(recentBooks.size());
-  const int navCount = bookCount + 5;
+  const int navCount = bookCount + 4;
 
   auto activate = [this, bookCount]() {
     if (selectorIndex < bookCount) {
@@ -1044,7 +1025,6 @@ void HomeActivity::loopCoverGrid() {
     }
     switch (indexToMenuItem(selectorIndex - bookCount)) {
       case HomeMenuItem::LIBRARY: onLibraryOpen(); break;
-      case HomeMenuItem::COVER_GRID_BROWSER: onCoverGridOpen(); break;
       case HomeMenuItem::FILE_BROWSER: onFileBrowserOpen(); break;
       case HomeMenuItem::FILE_TRANSFER: onFileTransferOpen(); break;
       case HomeMenuItem::SETTINGS_MENU: onSettingsOpen(); break;
@@ -1117,7 +1097,7 @@ void HomeActivity::loopCoverGrid() {
 
   int menuRow = -1;
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 5, 0,
+  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 4, 0,
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
@@ -1146,25 +1126,37 @@ void HomeActivity::renderCoverGrid() {
   const int bookCount = static_cast<int>(recentBooks.size());
 
   auto drawMenu = [this, &metrics, &layout, width, height, bookCount]() {
-    const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
-    std::vector<const char*> labels = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER),
+    std::vector<const char*> labels = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER),
                                        tr(STR_SETTINGS_TITLE)};
-    std::vector<UIIcon> icons = {Library, Recent, Folder, Transfer, Settings};
+    std::vector<UIIcon> icons = {Library, Folder, Transfer, Settings};
     const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
     renderer.fillRect(0, layout.menuTop, width, menuHeight, false);
-    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 5,
+    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 4,
                        selectorIndex >= bookCount ? selectorIndex - bookCount : -1,
                        [&labels](int index) { return std::string(labels[index]); },
                        [&icons](int index) { return icons[index]; });
   };
 
   if (gridFrameValid && recentsLoaded) {
-    auto outlineBook = [this, &layout](const int selected, const bool black) {
-      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
+    auto bookRect = [this, &layout](const int selected) {
       const int x = selected == 0 ? layout.left
                                   : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
       const int y = selected == 0 ? layout.featuredY : layout.gridY;
-      renderer.drawRect(x - 3, y - 3, layout.coverW + 6, layout.coverH + 6, 2, black);
+      return Rect{x, y, layout.coverW, layout.coverH};
+    };
+    auto outlineBook = [this, &bookRect](const int selected, const bool black) {
+      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
+      const Rect r = bookRect(selected);
+      renderer.drawRect(r.x - 3, r.y - 3, r.width + 6, r.height + 6, 2, black);
+    };
+    auto refreshOutline = [this, &bookRect](const int selected) {
+      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
+      const Rect r = bookRect(selected);
+      constexpr int ring = 4;
+      renderer.displayWindow(r.x - ring, r.y - ring, r.width + ring * 2, ring);
+      renderer.displayWindow(r.x - ring, r.y + r.height, r.width + ring * 2, ring);
+      renderer.displayWindow(r.x - ring, r.y, ring, r.height);
+      renderer.displayWindow(r.x + r.width, r.y, ring, r.height);
     };
 
     if (previousGridSelection != selectorIndex) {
@@ -1172,15 +1164,19 @@ void HomeActivity::renderCoverGrid() {
       const bool newMenu = selectorIndex >= bookCount;
       if (oldMenu || newMenu) {
         drawMenu();
+        const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
+        renderer.displayWindow(0, layout.menuTop, width, menuHeight);
       }
-      if (!oldMenu) outlineBook(previousGridSelection, false);
-      if (!newMenu) outlineBook(selectorIndex, true);
+      if (!oldMenu) {
+        outlineBook(previousGridSelection, false);
+        refreshOutline(previousGridSelection);
+      }
+      if (!newMenu) {
+        outlineBook(selectorIndex, true);
+        refreshOutline(selectorIndex);
+      }
     }
     previousGridSelection = selectorIndex;
-    // Keep the current UI edits, but re-compose the cover rectangles through
-    // the Absolute grayscale path instead of sending the whole BW framebuffer.
-    // A plain displayBuffer() here is what made every cover fall back to dark BW.
-    gridFrameValid = renderGridGrayscaleCovers();
     return;
   }
 
