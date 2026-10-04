@@ -604,14 +604,6 @@ void CoverGridBrowserActivity::loop() {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::PageBack)) {
-    stepPage(-1);
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::PageForward)) {
-    stepPage(1);
-    return;
-  }
   if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
     moveSelection(-1);
     return;
