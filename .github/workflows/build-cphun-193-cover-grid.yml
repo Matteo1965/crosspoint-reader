@@ -1,4 +1,4 @@
-name: CPHUN-195 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-196 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
       - agent/cphun-193-cover-grid-browser
       - agent/cphun-194-cover-grid-render-fix
       - agent/cphun-195-cover-grid-startup-fix
+      - agent/cphun-196-grid-selection-refresh-fix
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-195-cover-grid-startup-fix-${{ github.ref }}
+  group: cphun-196-grid-selection-refresh-fix-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +27,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-195-X4
+            artifact: CPHUN-196-X4
             firmware: firmware.bin
 
     steps:
@@ -41,7 +42,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261004-195-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261004-196-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
