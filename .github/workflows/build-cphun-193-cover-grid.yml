@@ -100,7 +100,6 @@ jobs:
           grep -Fq 'SELECTION_SETTLE_MS = 350' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'gridLabel' src/activities/home/HomeActivity.cpp
           grep -Fq 'useLibraryHomeMenu() ? 4' src/activities/home/HomeActivity.cpp
-          grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/HomeActivity.cpp
           grep -Fq 'GRID_SELECTION_SETTLE_MS = 250' src/activities/home/HomeActivity.cpp
           ! grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
