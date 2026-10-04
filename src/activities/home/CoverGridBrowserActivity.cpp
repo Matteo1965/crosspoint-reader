@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <LibraryBuilder.h>
 
+#include <Arduino.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -44,6 +45,7 @@ constexpr int GRID_COLS = 3;
 constexpr int PAGE_READOUT_Y = 700;
 constexpr int HELP_Y = 724;
 constexpr unsigned long LONG_PRESS_MS = 700;
+constexpr unsigned long SELECTION_SETTLE_MS = 350;
 
 bool validBmpFile(const std::string& path) {
   if (path.empty()) return false;
@@ -138,6 +140,10 @@ void CoverGridBrowserActivity::onEnter() {
   descendingTabs_ = 1u;  // Recent descending, Title/Author ascending.
   thumbnailsReady_ = false;
   thumbnailsLoading_ = false;
+  previousSelected_ = -1;
+  selectionFastRefresh_ = false;
+  deferredSelectionRefresh_ = false;
+  deferredSelectionDueMs_ = 0;
 
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
@@ -442,18 +448,33 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
   if (total <= 0 || current < 0) return;
 
   const int next = std::clamp(current + delta, 0, total - 1);
+  if (next == current) return;
   const int nextPage = (next / PAGE_SIZE) * PAGE_SIZE;
   if (nextPage != pageStart_) {
     pageStart_ = nextPage;
     selected_ = next - pageStart_;
+    previousSelected_ = -1;
+    selectionFastRefresh_ = false;
+    deferredSelectionRefresh_ = false;
     if (!openIndex()) return;
     loadPage();
     index_.close();
     ensurePageThumbs();
-  } else {
-    selected_ = next - pageStart_;
+    loadSelectedDetails();
+    requestUpdate();
+    return;
   }
-  loadSelectedDetails();
+
+  previousSelected_ = selected_;
+  selected_ = next - pageStart_;
+
+  // CPHUN-197: keep navigation responsive. Move only the selection frame now;
+  // defer EPUB detail loading and the expensive featured grayscale refresh
+  // until input has been idle briefly.
+  clearSelectedDetails();
+  selectionFastRefresh_ = true;
+  deferredSelectionRefresh_ = true;
+  deferredSelectionDueMs_ = millis() + SELECTION_SETTLE_MS;
   requestUpdate();
 }
 
@@ -631,8 +652,12 @@ void CoverGridBrowserActivity::loop() {
     if (hit >= 0) {
       if (selected_ == hit) openSelectedBook();
       else {
+        previousSelected_ = selected_;
         selected_ = hit;
-        loadSelectedDetails();
+        clearSelectedDetails();
+        selectionFastRefresh_ = true;
+        deferredSelectionRefresh_ = true;
+        deferredSelectionDueMs_ = millis() + SELECTION_SETTLE_MS;
         requestUpdate();
       }
       return;
@@ -651,6 +676,13 @@ void CoverGridBrowserActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Right && !mappedInput.wasBackGesture()) {
     stepPage(-1);
     return;
+  }
+
+  if (deferredSelectionRefresh_ &&
+      static_cast<long>(millis() - deferredSelectionDueMs_) >= 0) {
+    deferredSelectionRefresh_ = false;
+    loadSelectedDetails();
+    requestUpdate();
   }
 }
 
@@ -743,8 +775,25 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
     }
   };
 
+  if (absolute && renderer.storeBwBuffer()) {
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    drawAllCoverPlanes();
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.restoreBwBuffer(false, false);
+
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    drawAllCoverPlanes();
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
+    renderer.setRenderMode(GfxRenderer::BW);
+    renderer.restoreBwBuffer(false, true);
+    return;
+  }
+
   if (absolute) {
-    constexpr int STRIP_ROWS = 32;
+    constexpr int STRIP_ROWS = 128;
     const int panelRows = renderer.getDisplayHeight();
     const size_t rowBytes = renderer.getDisplayWidthBytes();
     const size_t scratchBytes = rowBytes * STRIP_ROWS;
@@ -790,6 +839,40 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
 void CoverGridBrowserActivity::render(RenderLock&&) {
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
+
+  if (selectionFastRefresh_ && previousSelected_ >= 0 &&
+      previousSelected_ < static_cast<int>(books_.size()) &&
+      selected_ >= 0 && selected_ < static_cast<int>(books_.size())) {
+    auto coverRect = [](const int index) {
+      const int col = index % GRID_COLS;
+      const int row = index / GRID_COLS;
+      return Rect{GRID_LEFT + col * (GRID_W + GRID_GAP_X),
+                  GRID_TOP + row * (GRID_H + GRID_GAP_Y), GRID_W, GRID_H};
+    };
+    auto refreshFrame = [this](const Rect r) {
+      constexpr int outer = 5;
+      renderer.displayWindow(r.x - outer, r.y - outer, r.width + outer * 2, outer);
+      renderer.displayWindow(r.x - outer, r.y + r.height, r.width + outer * 2, outer);
+      renderer.displayWindow(r.x - outer, r.y, outer, r.height);
+      renderer.displayWindow(r.x + r.width, r.y, outer, r.height);
+    };
+
+    const Rect oldRect = coverRect(previousSelected_);
+    const Rect newRect = coverRect(selected_);
+
+    // Erase only the old frame ring; never touch the grayscale cover interior.
+    renderer.drawRect(oldRect.x - 4, oldRect.y - 4, oldRect.width + 8, oldRect.height + 8, 4, false);
+
+    // New selection: 2 px white separator, then the existing black outer frame.
+    renderer.drawRect(newRect.x - 3, newRect.y - 3, newRect.width + 6, newRect.height + 6, 2, false);
+    renderer.drawRect(newRect.x - 4, newRect.y - 4, newRect.width + 8, newRect.height + 8, 2, true);
+
+    refreshFrame(oldRect);
+    refreshFrame(newRect);
+    selectionFastRefresh_ = false;
+    previousSelected_ = selected_;
+    return;
+  }
 
   renderer.clearScreen();
   static constexpr const char* HU_TABS[] = {"Legutóbbi", "Cím", "Szerző"};
@@ -909,4 +992,6 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   renderGrayscaleCovers();
+  previousSelected_ = selected_;
 }
+
