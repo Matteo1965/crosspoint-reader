@@ -1,4 +1,4 @@
-name: CPHUN-200 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-201 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -11,13 +11,14 @@ on:
       - agent/cphun-198-grid3-finalize
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
+      - agent/cphun-201-grid3-cphun192-render
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-200-grid3-abc-test-${{ github.ref }}
+  group: cphun-201-grid3-cphun192-render-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,7 +32,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-200-X4
+            artifact: CPHUN-201-X4
             firmware: firmware.bin
 
     steps:
@@ -46,7 +47,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261004-200-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261004-201-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -101,12 +102,10 @@ jobs:
           grep -Fq 'SELECTION_SETTLE_MS = 350' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'gridLabel' src/activities/home/HomeActivity.cpp
           grep -Fq 'useLibraryHomeMenu() ? 4' src/activities/home/HomeActivity.cpp
+          grep -Fq 'renderer.displayBuffer();' src/activities/home/HomeActivity.cpp
+          grep -Fq 'path = epub.getThumbBmpPath(thumbHeight);' src/activities/home/HomeActivity.cpp
+          ! grep -Fq 'GRID_SELECTION_SETTLE_MS' src/activities/home/HomeActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/HomeActivity.cpp
-          grep -Fq 'GRID_SELECTION_SETTLE_MS = 250' src/activities/home/HomeActivity.cpp
-          grep -Fq 'modeB = SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_ABSOLUTE' src/activities/home/HomeActivity.cpp
-          grep -Fq 'modeC = SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_FLOYD_OVERLAY' src/activities/home/HomeActivity.cpp
-          grep -Fq 'getBookCoverViewBmpPath' src/activities/home/HomeActivity.cpp
-          ! grep -Fq 'renderer.displayWindow' src/activities/home/HomeActivity.cpp
           grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
