@@ -428,6 +428,7 @@ void CoverGridBrowserActivity::toggleSortDirection() {
   descendingTabs_ ^= static_cast<uint8_t>(1u << activeSortTab_);
   pageStart_ = 0;
   selected_ = 0;
+  previewSelected_ = 0;
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -980,8 +981,12 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   drawCenteredIn(renderer, UI_10_FONT_ID, 8, width - 16, HELP_Y,
                  renderer.truncatedText(UI_10_FONT_ID, hint, width - 16).c_str());
 
-  const auto labels = mappedInput.mapLabels(I18N.getLanguage() == Language::HU ? "Vissza" : "Back",
-                                            I18N.getLanguage() == Language::HU ? "Megnyitás" : "Open", "<", ">");
+  const bool previewMatchesCursor = previewSelected_ == selected_;
+  const auto labels = mappedInput.mapLabels(
+      I18N.getLanguage() == Language::HU ? "Vissza" : "Back",
+      previewMatchesCursor ? (I18N.getLanguage() == Language::HU ? "Megnyitás" : "Open")
+                           : (I18N.getLanguage() == Language::HU ? "Előnézet" : "Preview"),
+      "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (optionPopup_.isActive()) {
