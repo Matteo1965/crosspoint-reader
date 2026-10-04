@@ -101,6 +101,10 @@ jobs:
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'book.thumbPath = epub.getThumbBmpPath(thumbHeight());' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'previewMatchesCursor' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'Button::PageBack' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'Button::PageForward' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'moveSelection(-1);' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'moveSelection(1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'case HomeMenuItem::COVER_GRID_BROWSER: onCoverGridOpen(); break;' src/activities/home/HomeActivity.cpp
           ! grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'gridLabel' src/activities/home/HomeActivity.cpp
