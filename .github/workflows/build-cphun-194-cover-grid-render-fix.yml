@@ -1,0 +1,156 @@
+name: CPHUN-194 Cover Grid Render Fix Build (X4 dev)
+
+on:
+  push:
+    branches:
+      - agent/cphun-194-cover-grid-render-fix-browser
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cphun-194-cover-grid-render-fix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: default
+            label: X4
+            artifact: CPHUN-194-X4
+            firmware: firmware.bin
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Verify consolidated source baseline
+        run: |
+          set -euo pipefail
+
+          # This is a direct source build. No CPHUN reconstruction or source
+          # mutation scripts run before compilation.
+          grep -Fq 'CPHUN-261004-194-EXP' src/CPHUNBuildId.h
+
+          # CPHUN-191 persistence is real source now.
+          grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 40' src/CrossPointSettings.cpp
+          grep -Fq 'letterSpacingLimitPercent != 70' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimization"] = letterSpacingOptimization;' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimization"] | (uint8_t)0' src/CrossPointSettings.cpp
+          grep -Fq 'doc["letterSpacingOptimizationThreshold"] | (uint8_t)60' src/CrossPointSettings.cpp
+
+          # CPHUN-185..190 / Count Pages / reader menu are real source.
+          grep -Fq 'calibre:user_metadata:#pages' lib/Epub/Epub/parsers/ContentOpfParser.cpp
+          grep -Fq 'int calibrePageCount = 0;' lib/Epub/Epub/parsers/ContentOpfParser.h
+          grep -Fq 'int calibrePageCount = 0;' lib/Epub/Epub.h
+          grep -Fq 'info.calibrePageCount = parser.calibrePageCount;' lib/Epub/Epub.cpp
+          grep -Fq 'scaledCalibrePageCount' src/activities/home/HomeActivity.cpp
+          grep -Fq 'previewGridBook(selectorIndex)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'restoreOriginalGridBook();' src/activities/home/HomeActivity.cpp
+          grep -Fq '{MenuAction::DICTIONARY, StrId::STR_LOOKUP, "Szótári keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          grep -Fq '{MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP, "Kézi keresés"}' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.cpp
+          ! grep -Fq 'DICTIONARY_STATUS' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'EXPORT_EDITS' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'HIGHLIGHT' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'EDIT' src/activities/reader/EpubReaderMenuActivity.h
+          grep -Fq 'REINDEX_CHAPTER' src/activities/reader/EpubReaderMenuActivity.h
+
+          # CPHUN-164..180 accepted typography, Library and grayscale features.
+          test -f lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'consumeGuardedPair' lib/Epub/Epub/LetterSpacingOptimization.h
+          grep -Fq 'MAX_INK_CORRECTION_PX = 8;' lib/Epub/Epub/OpticalLineCorrection.h
+          grep -Fq 'return FsHelpers::checkFileExtension(name, ".epub");' lib/LibraryIndex/LibraryBuilder.cpp
+          grep -Fq 'CLIX_FORMAT_VERSION = 3' lib/LibraryIndex/LibraryFormat.h
+          grep -Fq 'COVER_TEST_ABSOLUTE' src/CrossPointSettings.h
+          grep -Fq 'GrayscaleMode::Absolute' src/activities/boot_sleep/SleepActivity.cpp
+
+          # CPHUN-194 Library-backed 6-cover browser is first-class source.
+          test -f src/activities/home/CoverGridBrowserActivity.cpp
+          test -f src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'static constexpr int PAGE_SIZE = 6;' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'library::LibraryIndexFile index_' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'showSelectedOptions' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'BookInfoActivity::Page::Metadata' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'generateBookCoverViewBmp' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'HomeMenuItem::COVER_GRID_BROWSER' src/activities/home/HomeActivity.cpp
+          grep -Fq 'GrayscaleMode::Absolute' src/activities/home/HomeActivity.cpp
+          grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'gridFrameValid = true;' src/activities/home/HomeActivity.cpp
+
+          # CPHUN-174 FreeInkUI modification is versioned locally, not patched.
+          test -f vendor/FreeInkUI/library.json
+          grep -Fq 'int16_t valueOffsetX = 0;' vendor/FreeInkUI/include/components/lists/list.h
+          grep -Fq 'item.valueOffsetX' vendor/FreeInkUI/include/components/lists/list.h
+          grep -Fq 'FreeInkUI=symlink://vendor/FreeInkUI' platformio.ini
+
+          # Remaining SDK is pinned to the tested release-sync revision and clean.
+          test "$(git -C freeink-sdk rev-parse HEAD)" = "13418e0986b05039bf056e050a6df5305d47c209"
+          test -z "$(git -C freeink-sdk status --porcelain)"
+
+          git diff --exit-code -- src lib vendor platformio.ini .gitmodules
+          echo "Consolidated source audit passed for ${{ matrix.label }}."
+
+      - name: Configure regression tests
+        run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build regression tests
+        run: cmake --build build/test -j2
+
+      - name: Run regression tests
+        run: ctest --test-dir build/test --output-on-failure -j2
+
+      - name: Confirm Library regression executables
+        run: |
+          test -x build/test/library_format/LibraryFormatTest
+          test -x build/test/library_text/LibraryTextTest
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: latest
+          enable-cache: false
+
+      - name: Install PlatformIO
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          uv pip install --python .venv/bin/python -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14"
+
+      - name: Confirm source unchanged before compile
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- src lib vendor platformio.ini .gitmodules
+          test -z "$(git -C freeink-sdk status --porcelain)"
+
+      - name: Build ${{ matrix.label }} directly from consolidated source
+        run: |
+          set -euo pipefail
+          .venv/bin/pio run -e ${{ matrix.env }} | tee pio.log
+          cp ".pio/build/${{ matrix.env }}/firmware.bin" "${{ matrix.firmware }}"
+          grep -E "RAM:\\s|Flash:\\s" pio.log || true
+          stat -c '${{ matrix.label }} firmware bytes=%s' "${{ matrix.firmware }}"
+
+      - name: Confirm tracked source unchanged after compile
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- src lib vendor platformio.ini .gitmodules
+          test -z "$(git -C freeink-sdk status --porcelain)"
+
+      - name: Upload ${{ matrix.label }} firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ github.run_id }}
+          path: ${{ matrix.firmware }}
+          if-no-files-found: error
+          retention-days: 90
