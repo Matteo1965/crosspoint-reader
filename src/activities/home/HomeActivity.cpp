@@ -52,7 +52,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 278, gapX, columns, 500};
+  return {left, coverW, coverH, 38, 278, gapX, columns, 502};
 }
 
 std::string trimCopy(std::string value) {
@@ -908,16 +908,18 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
 bool HomeActivity::renderGridGrayscaleCovers() {
   const auto layout = coverGridLayout(renderer);
 
-  // CPHUN-194: use the same Absolute grayscale path as the accepted
-  // CPHUN-179 B sleep-cover mode. Absolute does not use the HALF preclean and
-  // its planes must start white (0xFF), matching the SDK's direct 2-bit path.
-  bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  // Absolute/B is only safe here when strip uploads are available: each
+  // grayscale strip is seeded from the already-rendered BW page, so text,
+  // menu rows, frames and button hints survive as true black/white pixels.
+  // Only the cover rectangles then replace those pixels with 2-bit levels.
+  const bool stripSupported = renderer.supportsStripGrayscale();
+  bool absolute = stripSupported &&
+                  renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+
   if (absolute) {
-    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) {
-      absolute = false;
-      renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
-    }
-  } else {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) absolute = false;
+  }
+  if (!absolute) {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
 
@@ -957,23 +959,21 @@ bool HomeActivity::renderGridGrayscaleCovers() {
     file.close();
   };
 
-  // Preserve the complete BW page on X4/X4 Classic: render gray planes into
-  // a small strip scratch instead of clearing the shared 48 KB framebuffer.
-  // This makes subsequent menu/selection-only refreshes possible without a
-  // second screen-sized buffer or PSRAM.
-  if (renderer.supportsStripGrayscale()) {
+  if (absolute) {
     constexpr int STRIP_ROWS = 32;
     const int panelRows = renderer.getDisplayHeight();
     const size_t rowBytes = renderer.getDisplayWidthBytes();
     const size_t scratchBytes = rowBytes * STRIP_ROWS;
     uint8_t* scratch = static_cast<uint8_t*>(malloc(scratchBytes));
-    if (scratch != nullptr) {
+    const uint8_t* bwPage = renderer.getFrameBuffer();
+    if (scratch != nullptr && bwPage != nullptr) {
       for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
         renderer.setRenderMode(plane);
         for (int y = 0; y < panelRows; y += STRIP_ROWS) {
           const int rows = std::min(STRIP_ROWS, panelRows - y);
+          // Seed both Absolute planes with the BW UI: black=00, white=11.
+          memcpy(scratch, bwPage + static_cast<size_t>(y) * rowBytes, static_cast<size_t>(rows) * rowBytes);
           renderer.beginStripTarget(scratch, y, rows);
-          renderer.clearScreen(absolute ? 0xFF : 0x00);
           for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
           renderer.endStripTarget();
           renderer.writeGrayscalePlaneStrip(plane == GfxRenderer::GRAYSCALE_LSB, scratch, y, rows);
@@ -982,19 +982,21 @@ bool HomeActivity::renderGridGrayscaleCovers() {
       free(scratch);
       renderer.displayGrayBuffer();
       renderer.setRenderMode(GfxRenderer::BW);
-      return true;
+      return true;  // BW framebuffer was never destroyed.
     }
+    if (scratch != nullptr) free(scratch);
+    renderer.setRenderMode(GfxRenderer::BW);
+    // Do not attempt an Absolute full-buffer fallback: it would erase the UI.
+    return false;
   }
 
-  // Low-memory/platform fallback. This still produces the correct grayscale
-  // image, but consumes the shared framebuffer, so callers must force a full
-  // repaint on the next interaction.
-  renderer.clearScreen(absolute ? 0xFF : 0x00);
+  // Overlay fallback for platforms without strip+Absolute support.
+  renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(absolute ? 0xFF : 0x00);
+  renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
   renderer.copyGrayscaleMsbBuffers();
@@ -1130,6 +1132,15 @@ void HomeActivity::loopCoverGrid() {
 void HomeActivity::renderCoverGrid() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto layout = coverGridLayout(renderer);
+
+  // CPHUN-195: do not paint an incomplete BW/grid frame and then repaint it
+  // several times while thumbnails are being prepared. Finish cover loading
+  // first, then allow exactly one complete page render.
+  if (!recentsLoaded && !recentsLoading) {
+    firstRenderDone = true;
+    loadRecentCovers(layout.coverH);
+    return;
+  }
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
   const int bookCount = static_cast<int>(recentBooks.size());
