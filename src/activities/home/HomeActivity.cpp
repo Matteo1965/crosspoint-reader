@@ -208,7 +208,7 @@ HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = useLibraryHomeMenu() ? 5 : 4 + (hasOpdsServers ? 1 : 0);
+  int count = useLibraryHomeMenu() ? 4 : 4 + (hasOpdsServers ? 1 : 0);
   count += static_cast<int>(recentBooks.size());
   return count;
 }
