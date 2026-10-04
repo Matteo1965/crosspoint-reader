@@ -374,7 +374,7 @@ class GfxRenderer {
   // as one waveform. Route the base through displayGrayscaleBase() when true.
   bool combinesGrayscaleBase() const;
   bool storeBwBuffer();    // Returns true if buffer was stored successfully
-  void restoreBwBuffer(bool cleanupGrayscale = true);  // Restore and free the stored buffer
+  void restoreBwBuffer(bool cleanupGrayscale = true, bool freeBuffer = true);  // Restore stored BW page
   void cleanupGrayscaleWithFrameBuffer() const;
 
   // Font helpers
