@@ -68,14 +68,13 @@ class CoverGridBrowserActivity final : public Activity {
   int totalBooks_ = 0;
   int pageStart_ = 0;
   int selected_ = 0;
+  int previewSelected_ = 0;
   int activeSortTab_ = 0;
   uint8_t descendingTabs_ = 1u;  // Recent starts newest-first.
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
   bool selectionFastRefresh_ = false;
-  bool deferredSelectionRefresh_ = false;
-  unsigned long deferredSelectionDueMs_ = 0;
   OptionPopup optionPopup_;
   int featuredProgressTenths_ = -1;
   int featuredCurrentPage_ = 0;
