@@ -367,8 +367,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         book.coverBmpPath = thumbTemplate;
         RECENT_BOOKS.updateBook(book.path, book.title, book.author, thumbTemplate);
       }
-      const std::string coverPath =
-          coverGridActive() ? epub.getGridThumbBmpPath(thumbHeight) : epub.getThumbBmpPath(thumbHeight);
+      const std::string coverPath = epub.getThumbBmpPath(thumbHeight);
       if (Storage.exists(coverPath.c_str()) && !validBmpFile(coverPath)) {
         LOG_DBG("HOME", "Removing invalid EPUB thumbnail: %s", coverPath.c_str());
         Storage.remove(coverPath.c_str());
@@ -383,9 +382,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         // without CSS so the cover metadata is still available to the thumbnail generator.
         bool loaded = epub.load(false, true);
         if (!loaded) loaded = epub.load(true, true);
-        success = loaded &&
-                  (coverGridActive() ? epub.generateGridThumbBmp(thumbHeight) : epub.generateThumbBmp(thumbHeight)) &&
-                  validBmpFile(coverPath);
+        success = loaded && epub.generateThumbBmp(thumbHeight) && validBmpFile(coverPath);
       }
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       Xtc xtc(book.path, "/.crosspoint");
@@ -836,7 +833,7 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
   std::string path;
   if (FsHelpers::hasEpubExtension(book.path)) {
     Epub epub(book.path, "/.crosspoint");
-    path = epub.getGridThumbBmpPath(thumbHeight);
+    path = epub.getThumbBmpPath(thumbHeight);
   } else {
     path = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
   }
@@ -1093,14 +1090,12 @@ void HomeActivity::loopCoverGrid() {
   // while still respecting the user's configured hardware mapping.
   if (mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, navCount);
-    gridDeferredRefresh = true;
-    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
+    requestUpdate();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, navCount);
-    gridDeferredRefresh = true;
-    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
+    requestUpdate();
     return;
   }
 
@@ -1109,8 +1104,7 @@ void HomeActivity::loopCoverGrid() {
     selectorIndex = swipe == MappedInputManager::SwipeDir::Up
                         ? ButtonNavigator::nextIndex(selectorIndex, navCount)
                         : ButtonNavigator::previousIndex(selectorIndex, navCount);
-    gridDeferredRefresh = true;
-    gridDeferredDueMs = millis() + GRID_SELECTION_SETTLE_MS;
+    requestUpdate();
     return;
   }
 
@@ -1148,14 +1142,6 @@ void HomeActivity::loopCoverGrid() {
     return;
   }
 
-  if (gridDeferredRefresh &&
-      static_cast<long>(millis() - gridDeferredDueMs) >= 0) {
-    gridDeferredRefresh = false;
-    gridFrameValid = false;
-    previousGridSelection = -1;
-    requestUpdate();
-    return;
-  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) activate();
 }
@@ -1188,11 +1174,26 @@ void HomeActivity::renderCoverGrid() {
                        [&icons](int index) { return icons[index]; });
   };
 
-  // CPHUN-199: after an Absolute grayscale frame, never issue a BW
-  // partial/window refresh on this page. Even distant BW window updates alter
-  // the X4 panel state enough to darken the grayscale covers. All visible
-  // selection/menu changes are therefore coalesced into one full gray redraw
-  // after the short input-settle delay.
+  if (gridFrameValid && recentsLoaded) {
+    auto outlineBook = [this, &layout](const int selected, const bool black) {
+      if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
+      const int x = selected == 0 ? layout.left
+                                  : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
+      const int y = selected == 0 ? layout.featuredY : layout.gridY;
+      renderer.drawRect(x - 3, y - 3, layout.coverW + 6, layout.coverH + 6, 2, black);
+    };
+
+    if (previousGridSelection != selectorIndex) {
+      const bool oldMenu = previousGridSelection >= bookCount;
+      const bool newMenu = selectorIndex >= bookCount;
+      if (oldMenu || newMenu) drawMenu();
+      if (!oldMenu) outlineBook(previousGridSelection, false);
+      if (!newMenu) outlineBook(selectorIndex, true);
+    }
+    previousGridSelection = selectorIndex;
+    renderer.displayBuffer();
+    return;
+  }
 
   renderer.clearScreen();
   // Compact 32 px header zone for the 132x220 Cover Grid geometry.
@@ -1287,12 +1288,12 @@ void HomeActivity::renderCoverGrid() {
     return;
   }
 
-  gridFrameValid = renderGridGrayscaleCovers();
+  renderer.displayBuffer();
+  gridFrameValid = true;
   previousGridSelection = selectorIndex;
 
   if (!firstRenderDone) {
     firstRenderDone = true;
-    requestUpdate();
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(layout.coverH);
