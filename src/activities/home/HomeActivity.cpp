@@ -896,7 +896,9 @@ bool HomeActivity::renderGridGrayscaleCovers() {
   // menu rows, frames and button hints survive as true black/white pixels.
   // Only the cover rectangles then replace those pixels with 2-bit levels.
   const bool stripSupported = renderer.supportsStripGrayscale();
-  bool absolute = stripSupported &&
+  const bool modeB = SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_ABSOLUTE;
+  const bool modeC = SETTINGS.coverTestMode == CrossPointSettings::COVER_TEST_FLOYD_OVERLAY;
+  bool absolute = modeB && stripSupported &&
                   renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
 
   if (absolute) {
@@ -906,13 +908,25 @@ bool HomeActivity::renderGridGrayscaleCovers() {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
 
-  auto drawCoverPlane = [this, &layout](const size_t index) {
+  auto drawCoverPlane = [this, &layout, modeC](const size_t index) {
     if (index >= recentBooks.size()) return;
     const RecentBook& book = recentBooks[index];
     if (!FsHelpers::hasEpubExtension(book.path)) return;
 
     Epub epub(book.path, "/.crosspoint");
-    const std::string path = epub.getGridThumbBmpPath(gridThumbHeight(static_cast<int>(index)));
+    std::string path;
+    if (modeC) {
+      // CPHUN-200 C: reuse the same Floyd–Steinberg 2-bit cover cache as
+      // Book -> Show Cover / sleep-screen mode C.
+      path = epub.getBookCoverViewBmpPath();
+      if (!validBmpFile(path)) {
+        if (!epub.load(false, true)) return;
+        if (!epub.generateBookCoverViewBmp()) return;
+      }
+    } else {
+      // A/B use the compact grid thumbnail; only the panel waveform differs.
+      path = epub.getGridThumbBmpPath(gridThumbHeight(static_cast<int>(index)));
+    }
     if (!validBmpFile(path)) return;
 
     const int x = index == 0
@@ -992,7 +1006,7 @@ bool HomeActivity::renderGridGrayscaleCovers() {
     return false;
   }
 
-  // Overlay fallback for platforms without strip+Absolute support.
+  // A/C Overlay path, and B fallback when Absolute is unavailable.
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
