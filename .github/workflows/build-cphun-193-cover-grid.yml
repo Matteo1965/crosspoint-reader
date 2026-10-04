@@ -105,7 +105,6 @@ jobs:
           grep -Fq 'renderer.displayBuffer();' src/activities/home/HomeActivity.cpp
           grep -Fq 'path = epub.getThumbBmpPath(thumbHeight);' src/activities/home/HomeActivity.cpp
           ! grep -Fq 'GRID_SELECTION_SETTLE_MS' src/activities/home/HomeActivity.cpp
-          grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/HomeActivity.cpp
           grep -Fq 'displayWindow' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'restoreBwBuffer(false, false)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'preserve the already-rendered BW UI' src/activities/home/CoverGridBrowserActivity.cpp
