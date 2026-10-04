@@ -905,15 +905,18 @@ void HomeActivity::paintGridCover(const size_t index, Rect rect) {
     renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, true);
 }
 
-void HomeActivity::renderGridGrayscaleCovers() {
+bool HomeActivity::renderGridGrayscaleCovers() {
   const auto layout = coverGridLayout(renderer);
 
-  // Base pass: in BW mode a 2-bit BMP paints every non-white level black.
-  // The two overlay planes below then lift levels 1/2 to the panel's two gray states,
-  // while text, frames and menu pixels outside the cover rectangles remain untouched.
-  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  // CPHUN-194: use the same Absolute grayscale path as the accepted
+  // CPHUN-179 B sleep-cover mode. Absolute does not use the HALF preclean and
+  // its planes must start white (0xFF), matching the SDK's direct 2-bit path.
+  bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
   if (absolute) {
-    renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute);
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) {
+      absolute = false;
+      renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    }
   } else {
     renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
   }
@@ -954,6 +957,38 @@ void HomeActivity::renderGridGrayscaleCovers() {
     file.close();
   };
 
+  // Preserve the complete BW page on X4/X4 Classic: render gray planes into
+  // a small strip scratch instead of clearing the shared 48 KB framebuffer.
+  // This makes subsequent menu/selection-only refreshes possible without a
+  // second screen-sized buffer or PSRAM.
+  if (renderer.supportsStripGrayscale()) {
+    constexpr int STRIP_ROWS = 32;
+    const int panelRows = renderer.getDisplayHeight();
+    const size_t rowBytes = renderer.getDisplayWidthBytes();
+    const size_t scratchBytes = rowBytes * STRIP_ROWS;
+    uint8_t* scratch = static_cast<uint8_t*>(malloc(scratchBytes));
+    if (scratch != nullptr) {
+      for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+        renderer.setRenderMode(plane);
+        for (int y = 0; y < panelRows; y += STRIP_ROWS) {
+          const int rows = std::min(STRIP_ROWS, panelRows - y);
+          renderer.beginStripTarget(scratch, y, rows);
+          renderer.clearScreen(absolute ? 0xFF : 0x00);
+          for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
+          renderer.endStripTarget();
+          renderer.writeGrayscalePlaneStrip(plane == GfxRenderer::GRAYSCALE_LSB, scratch, y, rows);
+        }
+      }
+      free(scratch);
+      renderer.displayGrayBuffer();
+      renderer.setRenderMode(GfxRenderer::BW);
+      return true;
+    }
+  }
+
+  // Low-memory/platform fallback. This still produces the correct grayscale
+  // image, but consumes the shared framebuffer, so callers must force a full
+  // repaint on the next interaction.
   renderer.clearScreen(absolute ? 0xFF : 0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
@@ -966,6 +1001,7 @@ void HomeActivity::renderGridGrayscaleCovers() {
 
   renderer.displayGrayBuffer();
   renderer.setRenderMode(GfxRenderer::BW);
+  return false;
 }
 
 void HomeActivity::previewGridBook(const int index) {
@@ -1227,8 +1263,7 @@ void HomeActivity::renderCoverGrid() {
     return;
   }
 
-  renderGridGrayscaleCovers();
-  gridFrameValid = true;
+  gridFrameValid = renderGridGrayscaleCovers();
   previousGridSelection = selectorIndex;
 
   if (!firstRenderDone) {
