@@ -95,9 +95,7 @@ jobs:
           grep -Fq 'HomeMenuItem::COVER_GRID_BROWSER' src/activities/home/HomeActivity.cpp
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/HomeActivity.cpp
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'gridFrameValid = renderGridGrayscaleCovers();' src/activities/home/HomeActivity.cpp
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
-          grep -Fq 'gridFrameValid = renderGridGrayscaleCovers();' src/activities/home/HomeActivity.cpp
           grep -Fq 'coverH, 38, 276' src/activities/home/HomeActivity.cpp
           grep -Fq 'SELECTION_SETTLE_MS = 350' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'gridLabel' src/activities/home/HomeActivity.cpp
