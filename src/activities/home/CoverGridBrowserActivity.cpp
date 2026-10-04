@@ -136,14 +136,13 @@ void CoverGridBrowserActivity::onEnter() {
   Activity::onEnter();
   pageStart_ = 0;
   selected_ = 0;
+  previewSelected_ = 0;
   activeSortTab_ = 0;
   descendingTabs_ = 1u;  // Recent descending, Title/Author ascending.
   thumbnailsReady_ = false;
   thumbnailsLoading_ = false;
   previousSelected_ = -1;
   selectionFastRefresh_ = false;
-  deferredSelectionRefresh_ = false;
-  deferredSelectionDueMs_ = 0;
 
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
@@ -235,7 +234,7 @@ bool CoverGridBrowserActivity::loadPage() {
     if (book.title.empty()) book.title = book.path;
 
     Epub epub(book.path, "/.crosspoint");
-    book.thumbPath = epub.getGridThumbBmpPath(thumbHeight());
+    book.thumbPath = epub.getThumbBmpPath(thumbHeight());
     books_.push_back(std::move(book));
   }
 
@@ -275,11 +274,11 @@ bool CoverGridBrowserActivity::ensurePageThumbs() {
       Epub epub(book.path, "/.crosspoint");
       bool loaded = epub.load(false, true);
       if (!loaded) loaded = epub.load(true, true);
-      if (!loaded || !epub.generateGridThumbBmp(thumbHeight())) {
+      if (!loaded || !epub.generateThumbBmp(thumbHeight())) {
         LOG_ERR("GRID", "Cannot generate thumbnail: %s", book.path.c_str());
         ok = false;
       }
-      book.thumbPath = epub.getGridThumbBmpPath(thumbHeight());
+      book.thumbPath = epub.getThumbBmpPath(thumbHeight());
     }
     GUI.fillPopupProgress(renderer, popup,
                           10 + static_cast<int>((90u * static_cast<unsigned>(i + 1)) /
@@ -301,9 +300,9 @@ void CoverGridBrowserActivity::clearSelectedDetails() {
 
 void CoverGridBrowserActivity::loadSelectedDetails() {
   clearSelectedDetails();
-  if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
+  if (previewSelected_ < 0 || previewSelected_ >= static_cast<int>(books_.size())) return;
 
-  auto epub = std::make_shared<Epub>(books_[selected_].path, "/.crosspoint");
+  auto epub = std::make_shared<Epub>(books_[previewSelected_].path, "/.crosspoint");
   if (!epub->load(false, true) || epub->getBookSize() == 0) return;
 
   Epub::BookInfo info;
@@ -416,6 +415,7 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   }
   pageStart_ = 0;
   selected_ = 0;
+  previewSelected_ = 0;
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -453,9 +453,9 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
   if (nextPage != pageStart_) {
     pageStart_ = nextPage;
     selected_ = next - pageStart_;
+    previewSelected_ = selected_;
     previousSelected_ = -1;
     selectionFastRefresh_ = false;
-    deferredSelectionRefresh_ = false;
     if (!openIndex()) return;
     loadPage();
     index_.close();
@@ -468,13 +468,9 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
   previousSelected_ = selected_;
   selected_ = next - pageStart_;
 
-  // CPHUN-197: keep navigation responsive. Move only the selection frame now;
-  // defer EPUB detail loading and the expensive featured grayscale refresh
-  // until input has been idle briefly.
-  clearSelectedDetails();
+  // CPHUN-202: cursor movement never changes the featured preview.
+  // Keep the six covers and confirmed preview static; redraw only the frame.
   selectionFastRefresh_ = true;
-  deferredSelectionRefresh_ = true;
-  deferredSelectionDueMs_ = millis() + SELECTION_SETTLE_MS;
   requestUpdate();
 }
 
@@ -486,6 +482,7 @@ void CoverGridBrowserActivity::stepPage(const int delta) {
   if (nextStart == pageStart_) return;
   pageStart_ = nextStart;
   selected_ = 0;
+  previewSelected_ = 0;
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -623,7 +620,15 @@ void CoverGridBrowserActivity::loop() {
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    openSelectedBook();
+    if (previewSelected_ != selected_) {
+      previewSelected_ = selected_;
+      loadSelectedDetails();
+      selectionFastRefresh_ = false;
+      previousSelected_ = -1;
+      requestUpdate();
+    } else {
+      openSelectedBook();
+    }
     return;
   }
 
@@ -650,20 +655,29 @@ void CoverGridBrowserActivity::loop() {
     }
     const int hit = hitGridCover(x, y);
     if (hit >= 0) {
-      if (selected_ == hit) openSelectedBook();
-      else {
+      if (selected_ == hit && previewSelected_ == hit) {
+        openSelectedBook();
+      } else if (selected_ == hit) {
+        previewSelected_ = hit;
+        loadSelectedDetails();
+        selectionFastRefresh_ = false;
+        previousSelected_ = -1;
+        requestUpdate();
+      } else {
         previousSelected_ = selected_;
         selected_ = hit;
-        clearSelectedDetails();
         selectionFastRefresh_ = true;
-        deferredSelectionRefresh_ = true;
-        deferredSelectionDueMs_ = millis() + SELECTION_SETTLE_MS;
         requestUpdate();
       }
       return;
     }
     if (hitFeaturedCover(x, y)) {
-      openSelectedBook();
+      if (previewSelected_ >= 0 && previewSelected_ < static_cast<int>(books_.size())) {
+        const int saved = selected_;
+        selected_ = previewSelected_;
+        openSelectedBook();
+        selected_ = saved;
+      }
       return;
     }
   }
@@ -678,12 +692,6 @@ void CoverGridBrowserActivity::loop() {
     return;
   }
 
-  if (deferredSelectionRefresh_ &&
-      static_cast<long>(millis() - deferredSelectionDueMs_) >= 0) {
-    deferredSelectionRefresh_ = false;
-    loadSelectedDetails();
-    requestUpdate();
-  }
 }
 
 void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect, const bool selectedFrame) {
@@ -763,7 +771,7 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
   auto drawAllCoverPlanes = [this, &drawBookPlane]() {
     if (books_.empty()) return;
 
-    const GridBook& selectedBook = books_[std::clamp(selected_, 0, static_cast<int>(books_.size()) - 1)];
+    const GridBook& selectedBook = books_[std::clamp(previewSelected_, 0, static_cast<int>(books_.size()) - 1)];
     drawBookPlane(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H});
 
     for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
@@ -849,26 +857,16 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       return Rect{GRID_LEFT + col * (GRID_W + GRID_GAP_X),
                   GRID_TOP + row * (GRID_H + GRID_GAP_Y), GRID_W, GRID_H};
     };
-    auto refreshFrame = [this](const Rect r) {
-      constexpr int outer = 5;
-      renderer.displayWindow(r.x - outer, r.y - outer, r.width + outer * 2, outer);
-      renderer.displayWindow(r.x - outer, r.y + r.height, r.width + outer * 2, outer);
-      renderer.displayWindow(r.x - outer, r.y, outer, r.height);
-      renderer.displayWindow(r.x + r.width, r.y, outer, r.height);
-    };
 
     const Rect oldRect = coverRect(previousSelected_);
     const Rect newRect = coverRect(selected_);
-
-    // Erase only the old frame ring; never touch the grayscale cover interior.
     renderer.drawRect(oldRect.x - 4, oldRect.y - 4, oldRect.width + 8, oldRect.height + 8, 4, false);
-
-    // New selection: 2 px white separator, then the existing black outer frame.
     renderer.drawRect(newRect.x - 3, newRect.y - 3, newRect.width + 6, newRect.height + 6, 2, false);
     renderer.drawRect(newRect.x - 4, newRect.y - 4, newRect.width + 8, newRect.height + 8, 2, true);
 
-    refreshFrame(oldRect);
-    refreshFrame(newRect);
+    // Same model as the restored 3+1 view: send the already-rendered framebuffer
+    // without reopening or decoding any cover bitmap.
+    renderer.displayBuffer();
     selectionFastRefresh_ = false;
     previousSelected_ = selected_;
     return;
@@ -991,7 +989,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  renderGrayscaleCovers();
+  renderer.displayBuffer();
   previousSelected_ = selected_;
 }
 
