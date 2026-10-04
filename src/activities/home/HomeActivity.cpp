@@ -52,7 +52,7 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 278, gapX, columns, 498};
+  return {left, coverW, coverH, 38, 278, gapX, columns, 500};
 }
 
 std::string trimCopy(std::string value) {
@@ -637,7 +637,7 @@ void HomeActivity::loop() {
   }
 
   const bool includeContinueReading = metrics.homeContinueReadingInMenu && !useLibraryHomeMenu();
-  const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int menuTop = metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   const int renderedMenuSelection =
       includeContinueReading ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size());
   const int renderedMenuCount =
@@ -693,11 +693,11 @@ void HomeActivity::render(RenderLock&&) {
   coverRectX = 0;
   const bool roundedRaffHome =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
-  coverRectY = metrics.homeTopPadding + 24 + (roundedRaffHome ? 14 : 0);
+  coverRectY = metrics.homeTopPadding + 22 + (roundedRaffHome ? 14 : 0);
   coverRectW = pageWidth;
   coverRectH = roundedRaffHome ? metrics.homeCoverHeight : metrics.homeCoverTileHeight;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding + 24, pageWidth, metrics.homeCoverTileHeight},
+  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding + 22, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
@@ -730,7 +730,7 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + 24 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+      Rect{0, metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing + 20 +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
       static_cast<int>(menuItems.size()),
@@ -911,7 +911,12 @@ void HomeActivity::renderGridGrayscaleCovers() {
   // Base pass: in BW mode a 2-bit BMP paints every non-white level black.
   // The two overlay planes below then lift levels 1/2 to the panel's two gray states,
   // while text, frames and menu pixels outside the cover rectangles remain untouched.
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute);
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
   auto drawCoverPlane = [this, &layout](const size_t index) {
     if (index >= recentBooks.size()) return;
@@ -949,12 +954,12 @@ void HomeActivity::renderGridGrayscaleCovers() {
     file.close();
   };
 
-  renderer.clearScreen(0x00);
+  renderer.clearScreen(absolute ? 0xFF : 0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  renderer.clearScreen(absolute ? 0xFF : 0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   for (size_t i = 0; i < recentBooks.size(); ++i) drawCoverPlane(i);
   renderer.copyGrayscaleMsbBuffers();
@@ -1223,7 +1228,7 @@ void HomeActivity::renderCoverGrid() {
   }
 
   renderGridGrayscaleCovers();
-  gridFrameValid = false;
+  gridFrameValid = true;
   previousGridSelection = selectorIndex;
 
   if (!firstRenderDone) {
