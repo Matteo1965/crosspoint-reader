@@ -75,6 +75,7 @@ class CoverGridBrowserActivity final : public Activity {
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
   bool selectionFastRefresh_ = false;
+  int sidePageHoldAction_ = 0;  // -1=PageBack, +1=PageForward; consume release after long hold.
   OptionPopup optionPopup_;
   int featuredProgressTenths_ = -1;
   int featuredCurrentPage_ = 0;
