@@ -682,14 +682,24 @@ void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect,
     const auto title = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), rect.width - 12);
     renderer.drawText(UI_10_FONT_ID, rect.x + 6, rect.y + rect.height / 2, title.c_str());
   }
-  if (selectedFrame) renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 3, true);
+  if (selectedFrame) {
+    // Strong e-ink selection marker: a white separator keeps the marker
+    // distinct even when the cover itself has a dark edge.
+    renderer.drawRect(rect.x - 2, rect.y - 2, rect.width + 4, rect.height + 4, 1, false);
+    renderer.drawRect(rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8, 2, true);
+  }
 }
 
 void CoverGridBrowserActivity::renderGrayscaleCovers() {
   // First send the normal BW page as the grayscale base. In BW mode every
   // non-white 2-bit cover pixel is black; the two overlay planes below lift
   // levels 1/2 to the panel's dark/light gray states without touching UI text.
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute);
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
   auto drawBookPlane = [this](const GridBook& book, const Rect rect) {
     if (!validBmpFile(book.thumbPath)) return;
@@ -730,12 +740,12 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
     }
   };
 
-  renderer.clearScreen(0x00);
+  renderer.clearScreen(absolute ? 0xFF : 0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   drawAllCoverPlanes();
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  renderer.clearScreen(absolute ? 0xFF : 0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   drawAllCoverPlanes();
   renderer.copyGrayscaleMsbBuffers();
