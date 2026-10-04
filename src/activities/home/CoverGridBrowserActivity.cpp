@@ -685,7 +685,7 @@ void CoverGridBrowserActivity::paintCover(const GridBook& book, const Rect rect,
   if (selectedFrame) {
     // Strong e-ink selection marker: a white separator keeps the marker
     // distinct even when the cover itself has a dark edge.
-    renderer.drawRect(rect.x - 2, rect.y - 2, rect.width + 4, rect.height + 4, 1, false);
+    renderer.drawRect(rect.x - 3, rect.y - 3, rect.width + 6, rect.height + 6, 2, false);
     renderer.drawRect(rect.x - 4, rect.y - 4, rect.width + 8, rect.height + 8, 2, true);
   }
 }
