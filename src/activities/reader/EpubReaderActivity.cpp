@@ -2916,7 +2916,7 @@ void EpubReaderActivity::renderBook() {
   if (section->pageCount == 0) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
-    renderStatusBar();
+    if (!fullScreenCover) renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -2926,7 +2926,7 @@ void EpubReaderActivity::renderBook() {
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
-    renderStatusBar();
+    if (!fullScreenCover) renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -3068,6 +3068,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
   const int fontId = SETTINGS.getReaderFontId();
+  const bool fullScreenCover = page->isFullScreenCover();
 
   struct PxcSlotGuard {
     ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
@@ -3079,7 +3080,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Scan the status bar too: a CJK book/chapter title redirected to the SD
   // fallback font joins the page's single batch prewarm instead of triggering
   // its own SD pass after the scope ends.
-  renderStatusBar();
+  if (!fullScreenCover) renderStatusBar();
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
@@ -3116,7 +3117,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Legacy fallback only. CPHUN-182 Absolute pages decode/cache off-screen
     // and never expose the placeholder as an intermediate panel refresh.
     page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-    renderStatusBar();
+    if (!fullScreenCover) renderStatusBar();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     renderer.clearScreen();
   }
@@ -3126,7 +3127,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                        currentSpineIndex, *textEditStore);
   }
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-  renderStatusBar();
+  if (!fullScreenCover) renderStatusBar();
   const auto tBwRender = millis();
   if (highlightStore) {
     HighlightRenderer::render(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop,
@@ -3186,7 +3187,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
           renderer.beginStripTarget(scratch.get(), y, rows);
           if (needsTextGrayscale) {
             page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-            renderStatusBar();
+            if (!fullScreenCover) renderStatusBar();
           } else {
             page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
           }
