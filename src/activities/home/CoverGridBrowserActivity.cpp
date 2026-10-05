@@ -35,7 +35,7 @@ constexpr int FEATURED_H = 220;
 constexpr int FEATURED_TEXT_X = 182;
 
 constexpr int GRID_LEFT = 28;
-constexpr int GRID_TOP = 294;
+constexpr int GRID_TOP = 288;
 constexpr int GRID_W = 132;
 constexpr int GRID_H = 220;
 constexpr int GRID_GAP_X = 14;
@@ -888,13 +888,13 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   renderer.clearScreen();
-  static constexpr const char* HU_TABS[] = {"Legutóbbi", "Cím", "Szerző"};
+  static constexpr const char* HU_TABS[] = {"Legutóbbi", "Címek", "Szerzők"};
   static constexpr const char* EN_TABS[] = {"Recent", "Title", "Author"};
   const char* const* tabs = I18N.getLanguage() == Language::HU ? HU_TABS : EN_TABS;
   for (int i = 0; i < 3; ++i) {
     const int x = i * width / 3;
     const int w = (i + 1) * width / 3 - x;
-    const int visualX = x + (i == 0 ? 14 : 0);
+    const int visualX = x + (i == 0 ? 14 : (i == 2 ? -12 : 0));
     drawCenteredIn(renderer, UI_10_FONT_ID, visualX, w, TAB_Y + 5, tabs[i],
                    i == activeSortTab_ ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     if (i == activeSortTab_) {
