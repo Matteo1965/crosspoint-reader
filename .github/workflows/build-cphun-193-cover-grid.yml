@@ -1,5 +1,5 @@
-name: CPHUN-210 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-210 queue restart
+name: CPHUN-211 Cover Grid Render Fix Build (X4 dev)
+# CPHUN-211 queue restart
 
 on:
   push:
@@ -13,14 +13,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-210-grid6-proportional-tabs
+      - agent/cphun-211-fullscreen-epub-cover
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-210-grid6-proportional-tabs-${{ github.ref }}
+  group: cphun-211-fullscreen-epub-cover-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-210-X4
+            artifact: CPHUN-211-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-210-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261005-211-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -121,6 +121,12 @@ jobs:
           grep -Fq '{"Legutóbbi", "Újdonságok", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'for (int i = 0; i < 4; ++i)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'calculateSortTabLayout' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'getCoverImageHref() const' lib/Epub/Epub.h
+          grep -Fq 'setFullScreenCover' lib/Epub/Epub/Page.h
+          grep -Fq 'coverAtPageStart' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -Fq 'Fullscreen cover:' lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
+          grep -Fq 'SECTION_FILE_VERSION = 70' lib/Epub/Epub/Section.cpp
+          grep -Fq 'const bool fullScreenCover = page->isFullScreenCover();' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'const int left = GRID_LEFT;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int right = screenWidth - GRID_LEFT;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'layout[i].textX = left;' src/activities/home/CoverGridBrowserActivity.cpp
