@@ -716,6 +716,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 const bool hasCssHeight = imgStyle.hasImageHeight();
                 const bool hasCssWidth = imgStyle.hasImageWidth();
 
+                const std::string& declaredCoverHref = self->epub->getCoverImageHref();
+                const bool isDeclaredCoverImage =
+                    !declaredCoverHref.empty() &&
+                    FsHelpers::normalisePath(resolvedPath) == FsHelpers::normalisePath(declaredCoverHref);
+                const bool coverAtPageStart =
+                    isDeclaredCoverImage &&
+                    (!self->currentPage || self->currentPage->elements.empty()) &&
+                    (!self->currentTextBlock || self->currentTextBlock->isEmpty());
+
                 // Compute effective container width for percentage-based image sizes.
                 // If the image is inside a block with horizontal margins/padding (e.g.
                 // <div style="margin: 1em 40%">), percentage widths like width:100%
@@ -803,6 +812,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_DBG("EHP", "Display size: %dx%d (scale %.2f)", displayWidth, displayHeight, scale);
                 }
 
+                // CPHUN-211: the EPUB's declared cover image, when it begins an
+                // otherwise empty page, ignores publisher CSS sizing and reader
+                // margins. Enlarge it (including upscaling) to the largest
+                // aspect-preserving size that fits the physical display.
+                if (coverAtPageStart && dims.width > 0 && dims.height > 0) {
+                  const int maxWidth = self->renderer.getScreenWidth();
+                  const int maxHeight = self->renderer.getScreenHeight();
+                  const float scaleX = static_cast<float>(maxWidth) / dims.width;
+                  const float scaleY = static_cast<float>(maxHeight) / dims.height;
+                  const float coverScale = std::min(scaleX, scaleY);
+                  displayWidth = std::max(1, static_cast<int>(dims.width * coverScale + 0.5f));
+                  displayHeight = std::max(1, static_cast<int>(dims.height * coverScale + 0.5f));
+                  LOG_DBG("EHP", "Fullscreen cover: source=%dx%d display=%dx%d", dims.width, dims.height,
+                          displayWidth, displayHeight);
+                }
+
                 // Flush any pending text block so it appears before the image
                 if (self->partWordBufferIndex > 0) {
                   self->flushPartWordBuffer();
@@ -824,6 +849,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (self->blockStyleStack.size() > 1) {
                     imageMarginBottom = self->blockStyleStack.back().bottomInset();
                   }
+                }
+
+                if (coverAtPageStart) {
+                  imageMarginTop = 0;
+                  imageMarginBottom = 0;
+                  self->currentPageNextY = 0;
                 }
 
                 // Create page for image - only break if image won't fit remaining space
@@ -874,7 +905,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_ERR("EHP", "Failed to create ImageBlock");
                   return;
                 }
-                int xPos = (self->viewportWidth - displayWidth) / 2;
+                if (coverAtPageStart) self->currentPage->setFullScreenCover();
+                const int layoutWidth =
+                    coverAtPageStart ? self->renderer.getScreenWidth() : static_cast<int>(self->viewportWidth);
+                int xPos = (layoutWidth - displayWidth) / 2;
                 auto pageImage =
                     std::shared_ptr<PageImage>(new (std::nothrow) PageImage(imageBlock, xPos, self->currentPageNextY));
                 if (!pageImage) {
@@ -884,6 +918,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 self->currentPage->elements.push_back(pageImage);
                 self->setCurrentPageVisibleOffset(self->visibleTextOffset);
                 self->currentPageNextY += displayHeight + imageMarginBottom;
+                if (coverAtPageStart) {
+                  // Keep the cover isolated from any trailing title-page content.
+                  self->currentPageNextY = self->viewportHeight;
+                }
 
                 // The image consumed the empty block's accumulated vertical spacing.
                 // Reset the block so the Vertical merge in startNewTextBlock doesn't
