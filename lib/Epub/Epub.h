@@ -66,6 +66,7 @@ class Epub {
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
+  const std::string& getCoverImageHref() const;
   bool readBookInfo(BookInfo& info) const;
   std::string getCoverBmpPath(bool cropped = false, bool release165 = false) const;
   bool generateCoverBmp(bool cropped = false, bool release165 = false) const;
