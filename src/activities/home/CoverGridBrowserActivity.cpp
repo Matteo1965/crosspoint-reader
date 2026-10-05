@@ -25,25 +25,23 @@
 
 namespace {
 
-constexpr int TAB_Y = 36;
+constexpr int TAB_Y = 12;
 constexpr int TAB_H = 34;
 
-constexpr int FEATURED_X = 24;
-constexpr int FEATURED_Y = 92;
+constexpr int FEATURED_X = 28;
+constexpr int FEATURED_Y = 56;
 constexpr int FEATURED_W = 132;
-constexpr int FEATURED_H = 174;
-constexpr int FEATURED_TEXT_X = 170;
+constexpr int FEATURED_H = 220;
+constexpr int FEATURED_TEXT_X = 182;
 
 constexpr int GRID_LEFT = 28;
-constexpr int GRID_TOP = 284;
+constexpr int GRID_TOP = 294;
 constexpr int GRID_W = 132;
-constexpr int GRID_H = 174;
+constexpr int GRID_H = 220;
 constexpr int GRID_GAP_X = 14;
-constexpr int GRID_GAP_Y = 18;
+constexpr int GRID_GAP_Y = 6;
 constexpr int GRID_COLS = 3;
 
-constexpr int PAGE_READOUT_Y = 700;
-constexpr int HELP_Y = 724;
 constexpr unsigned long LONG_PRESS_MS = 700;
 constexpr unsigned long SELECTION_SETTLE_MS = 350;
 
@@ -896,12 +894,13 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   for (int i = 0; i < 3; ++i) {
     const int x = i * width / 3;
     const int w = (i + 1) * width / 3 - x;
-    drawCenteredIn(renderer, UI_10_FONT_ID, x, w, TAB_Y + 5, tabs[i],
+    const int visualX = x + (i == 0 ? 14 : 0);
+    drawCenteredIn(renderer, UI_10_FONT_ID, visualX, w, TAB_Y + 5, tabs[i],
                    i == activeSortTab_ ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     if (i == activeSortTab_) {
-      renderer.drawLine(x + 10, TAB_Y + TAB_H - 2, x + w - 10, TAB_Y + TAB_H - 2, true);
+      renderer.drawLine(visualX + 10, TAB_Y + TAB_H - 2, visualX + w - 10, TAB_Y + TAB_H - 2, true);
       const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << i)) != 0;
-      renderer.drawText(UI_10_FONT_ID, x + w - 20, TAB_Y + 5, desc ? "↓" : "↑");
+      renderer.drawText(UI_10_FONT_ID, visualX + w - 20, TAB_Y + 5, desc ? "↓" : "↑");
     }
   }
 
@@ -982,20 +981,6 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
     drawCenteredIn(renderer, UI_12_FONT_ID, 20, width - 40, FEATURED_Y + 80,
                    I18N.getLanguage() == Language::HU ? "Nincs indexelt EPUB." : "No indexed EPUB files.");
   }
-
-  if (totalBooks() > 0) {
-    const int first = pageStart_ + 1;
-    const int last = pageStart_ + static_cast<int>(books_.size());
-    char pageText[48];
-    snprintf(pageText, sizeof(pageText), "%d–%d / %d %s", first, last, totalBooks(), bookWord());
-    drawCenteredIn(renderer, UI_10_FONT_ID, 0, width, PAGE_READOUT_Y, pageText);
-  }
-
-  const char* hint = I18N.getLanguage() == Language::HU
-                         ? "Hosszú OK: Infó · Hosszú Vissza: Fordított"
-                         : "Hold OK: Info · Hold Back: Reverse";
-  drawCenteredIn(renderer, UI_10_FONT_ID, 8, width - 16, HELP_Y,
-                 renderer.truncatedText(UI_10_FONT_ID, hint, width - 16).c_str());
 
   const bool previewMatchesCursor = previewSelected_ == selected_;
   const auto labels = mappedInput.mapLabels(
