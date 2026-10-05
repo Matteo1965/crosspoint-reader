@@ -1,5 +1,5 @@
-name: CPHUN-209 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-209 queue restart
+name: CPHUN-210 Cover Grid Render Fix Build (X4 dev)
+# CPHUN-210 queue restart
 
 on:
   push:
@@ -13,14 +13,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-209-grid6-four-tabs
+      - agent/cphun-210-grid6-proportional-tabs
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-209-grid6-four-tabs-${{ github.ref }}
+  group: cphun-210-grid6-proportional-tabs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-209-X4
+            artifact: CPHUN-210-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-209-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261005-210-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -120,6 +120,11 @@ jobs:
           grep -Fq 'backSortHoldActive_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq '{"Legutóbbi", "Újdonságok", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'for (int i = 0; i < 4; ++i)' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'calculateSortTabLayout' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'const int left = GRID_LEFT;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'const int right = screenWidth - GRID_LEFT;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'layout[i].textX = left;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'layout[i].textX = right - measured[i];' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'buildReadingShelves()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'progress.bin' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'Rendezési sorrend: ' src/activities/home/CoverGridBrowserActivity.cpp
