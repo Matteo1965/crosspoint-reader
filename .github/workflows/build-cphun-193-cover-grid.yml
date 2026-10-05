@@ -1,4 +1,4 @@
-name: CPHUN-204 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-205 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -12,14 +12,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-202-grid6-confirm-preview
+      - agent/cphun-205-grid6-layout
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-202-grid6-confirm-preview-${{ github.ref }}
+  group: cphun-205-grid6-layout-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-204-X4
+            artifact: CPHUN-205-X4
             firmware: firmware.bin
 
     steps:
@@ -48,7 +48,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-204-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261005-205-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -107,6 +107,17 @@ jobs:
           grep -Fq 'moveSelection(1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'sidePageHoldAction_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'renderer.getScreenWidth() - bookmarkStatusIconWidth - 2' src/components/themes/BaseTheme.cpp
+          grep -Fq 'constexpr int TAB_Y = 12;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int FEATURED_X = 28;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int FEATURED_Y = 56;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int FEATURED_H = 220;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int FEATURED_TEXT_X = 182;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int GRID_TOP = 294;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int GRID_H = 220;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int GRID_GAP_Y = 6;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'const int visualX = x + (i == 0 ? 14 : 0);' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'PAGE_READOUT_Y' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'HELP_Y' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int bookmarkY = 2;' src/components/themes/BaseTheme.cpp
           grep -Fq 'stepPage(-1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'stepPage(1);' src/activities/home/CoverGridBrowserActivity.cpp
