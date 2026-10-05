@@ -83,6 +83,10 @@ class Page {
   // build LUT or the on-disk LUT while the page file is already open, so the reader can persist
   // progress without a second section-file open per page turn.
   uint32_t visibleTextOffset = 0;
+  bool fullScreenCover = false;
+
+  bool isFullScreenCover() const { return fullScreenCover; }
+  void setFullScreenCover(const bool enabled = true) { fullScreenCover = enabled; }
 
   void addFootnote(const char* number, const char* href) {
     if (footnotes.size() >= MAX_FOOTNOTES_PER_PAGE) return;  // Cap per-page footnotes
