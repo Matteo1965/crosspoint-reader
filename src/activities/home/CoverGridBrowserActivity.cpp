@@ -40,6 +40,8 @@ constexpr int GRID_W = 132;
 constexpr int GRID_H = 220;
 constexpr int GRID_GAP_X = 14;
 constexpr int GRID_GAP_Y = 6;
+constexpr int GRID_SECOND_ROW_EXTRA_Y = 6;
+constexpr int FEATURED_INFO_OFFSET_Y = 10;
 constexpr int GRID_COLS = 3;
 
 constexpr unsigned long LONG_PRESS_MS = 700;
@@ -566,7 +568,7 @@ int CoverGridBrowserActivity::hitGridCover(const int x, const int y) const {
     const int col = i % GRID_COLS;
     const int row = i / GRID_COLS;
     const int rx = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
-    const int ry = GRID_TOP + row * (GRID_H + GRID_GAP_Y);
+    const int ry = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
     if (x >= rx && x < rx + GRID_W && y >= ry && y < ry + GRID_H) return i;
   }
   return -1;
@@ -793,7 +795,7 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
       const int col = i % GRID_COLS;
       const int row = i / GRID_COLS;
       const int x = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
-      const int y = GRID_TOP + row * (GRID_H + GRID_GAP_Y);
+      const int y = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
       drawBookPlane(books_[i], Rect{x, y, GRID_W, GRID_H});
     }
   };
@@ -870,7 +872,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       const int col = index % GRID_COLS;
       const int row = index / GRID_COLS;
       return Rect{GRID_LEFT + col * (GRID_W + GRID_GAP_X),
-                  GRID_TOP + row * (GRID_H + GRID_GAP_Y), GRID_W, GRID_H};
+                  GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0), GRID_W, GRID_H};
     };
 
     const Rect oldRect = coverRect(previousSelected_);
@@ -910,7 +912,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
     const int textW = std::max(40, width - FEATURED_TEXT_X - 22);
     const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, selectedBook.title.c_str(), textW, 3);
-    int y = FEATURED_Y + 4;
+    int y = FEATURED_Y + FEATURED_INFO_OFFSET_Y;
     for (const auto& line : titleLines) {
       renderer.drawText(UI_12_FONT_ID, FEATURED_TEXT_X, y, line.c_str(), true, EpdFontFamily::BOLD);
       y += renderer.getLineHeight(UI_12_FONT_ID);
@@ -974,7 +976,7 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       const int col = i % GRID_COLS;
       const int row = i / GRID_COLS;
       const int x = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
-      const int gy = GRID_TOP + row * (GRID_H + GRID_GAP_Y);
+      const int gy = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
       paintCover(books_[i], Rect{x, gy, GRID_W, GRID_H}, i == selected_);
     }
   } else {
