@@ -14,6 +14,12 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
+std::string asciiLower(std::string value) {
+  for (char& c : value) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+  }
+  return value;
+}
 // v28: text decoration bits now include line-through in serialized wordStyles.
 // v29: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 // text blob) instead of length-prefixed strings and per-field arrays.
@@ -328,6 +334,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   }
 
   const auto localPath = epub->getSpineItem(spineIndex).href;
+  const std::string lowerLocalPath = asciiLower(localPath);
+  const bool coverSpineCandidate =
+      spineIndex == 0 || lowerLocalPath.find("cover") != std::string::npos;
   const auto htmlDir = epub->getCachePath() + "/html";
   const auto htmlPath = htmlDir + "/" + std::to_string(spineIndex) + ".html";
   const auto tmpHtmlPath = htmlDir + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -474,8 +483,8 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
         ctxPtr->lut.push_back(
             {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
       },
-      spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
-      popupFn, ctxPtr->cssParser);
+      spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, coverSpineCandidate,
+      spec.imageRendering, std::move(tocAnchors), popupFn, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     if (ctx->cssParser) ctx->cssParser->clear();
