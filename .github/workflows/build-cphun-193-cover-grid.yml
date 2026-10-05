@@ -1,4 +1,4 @@
-name: CPHUN-205 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-206 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -12,14 +12,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-205-grid6-layout
+      - agent/cphun-206-grid6-spacing-tabs
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-205-grid6-layout-${{ github.ref }}
+  group: cphun-206-grid6-spacing-tabs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-205-X4
+            artifact: CPHUN-206-X4
             firmware: firmware.bin
 
     steps:
@@ -48,7 +48,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-205-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261005-206-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -112,10 +112,11 @@ jobs:
           grep -Fq 'constexpr int FEATURED_Y = 56;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int FEATURED_H = 220;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int FEATURED_TEXT_X = 182;' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'constexpr int GRID_TOP = 294;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'constexpr int GRID_TOP = 288;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int GRID_H = 220;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int GRID_GAP_Y = 6;' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'const int visualX = x + (i == 0 ? 14 : 0);' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'const int visualX = x + (i == 0 ? 14 : (i == 2 ? -12 : 0));' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq '{"Legutóbbi", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'PAGE_READOUT_Y' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'HELP_Y' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int bookmarkY = 2;' src/components/themes/BaseTheme.cpp
