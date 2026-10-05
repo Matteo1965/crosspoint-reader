@@ -467,17 +467,23 @@ void CoverGridBrowserActivity::loadSelectedDetails() {
 }
 
 bool CoverGridBrowserActivity::reopenAfterChild() {
-  // The page metadata and six thumbnail paths stay resident while the child
-  // activity is open. Keep the Library index closed so cover/info file access
-  // never competes for the SD reader handle.
-  thumbnailsReady_ = true;
+  // A reader visit may have created or updated progress.bin, which changes the
+  // Recent/New shelves. Rebuild only the lightweight ordinal lists, then reload
+  // the current six-book page.
+  if (openIndex()) {
+    buildReadingShelves();
+    loadPage();
+    index_.close();
+  }
+  thumbnailsReady_ = false;
+  ensurePageThumbs();
   loadSelectedDetails();
   requestUpdate();
   return true;
 }
 
 void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfActive) {
-  if (tab < 0 || tab > 2) return;
+  if (tab < 0 || tab > 3) return;
   if (toggleIfActive && tab == activeSortTab_) {
     descendingTabs_ ^= static_cast<uint8_t>(1u << tab);
   } else {
@@ -508,8 +514,8 @@ void CoverGridBrowserActivity::toggleSortDirection() {
 }
 
 void CoverGridBrowserActivity::stepSortTab(const int delta) {
-  int tab = (activeSortTab_ + delta) % 3;
-  if (tab < 0) tab += 3;
+  int tab = (activeSortTab_ + delta) % 4;
+  if (tab < 0) tab += 4;
   selectSortTab(tab, false);
 }
 
@@ -628,7 +634,7 @@ void CoverGridBrowserActivity::showSelectedOptions() {
 bool CoverGridBrowserActivity::hitSortTab(const int x, const int y, int& tab) const {
   if (y < TAB_Y || y >= TAB_Y + TAB_H) return false;
   const int width = renderer.getScreenWidth();
-  tab = std::clamp((x * 3) / std::max(1, width), 0, 2);
+  tab = std::clamp((x * 4) / std::max(1, width), 0, 3);
   return true;
 }
 
@@ -657,7 +663,15 @@ void CoverGridBrowserActivity::loop() {
     showSelectedOptions();
     return;
   }
-  if (mappedInput.wasLongPressed(MappedInputManager::Button::Back, LONG_PRESS_MS)) {
+  // CPHUN-209: Back has dual behavior too. Short release exits; a long
+  // hold reverses the active shelf. Consume the release after the long action.
+  if (backSortHoldActive_) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) backSortHoldActive_ = false;
+    return;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    backSortHoldActive_ = true;
     toggleSortDirection();
     return;
   }
