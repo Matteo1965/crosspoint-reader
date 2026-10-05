@@ -121,26 +121,34 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
-  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
+  const int effectiveX = fullScreenCover ? 0 : xOffset;
+  const int effectiveY = fullScreenCover ? 0 : yOffset;
+  renderFilteredPageElements(elements, renderer, fontId, effectiveX, effectiveY,
+                             [](const PageElement&) { return true; });
 }
 
 void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
-  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
+  const int effectiveX = fullScreenCover ? 0 : xOffset;
+  const int effectiveY = fullScreenCover ? 0 : yOffset;
+  renderFilteredPageElements(elements, renderer, fontId, effectiveX, effectiveY,
                              [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
 }
 
 void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset,
                                        const int yOffset) const {
+  const int effectiveX = fullScreenCover ? 0 : xOffset;
+  const int effectiveY = fullScreenCover ? 0 : yOffset;
   for (const auto& element : elements) {
     if (element->getTag() == TAG_PageImage) {
-      static_cast<const PageImage&>(*element).renderPlaceholder(renderer, xOffset, yOffset);
+      static_cast<const PageImage&>(*element).renderPlaceholder(renderer, effectiveX, effectiveY);
     } else {
-      element->render(renderer, fontId, xOffset, yOffset);
+      element->render(renderer, fontId, effectiveX, effectiveY);
     }
   }
 }
 
 bool Page::serialize(HalFile& file) const {
+  serialization::writePod(file, static_cast<uint8_t>(fullScreenCover ? 1 : 0));
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
 
@@ -170,6 +178,10 @@ bool Page::serialize(HalFile& file) const {
 
 std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
+
+  uint8_t fullScreenCover = 0;
+  serialization::readPod(file, fullScreenCover);
+  page->fullScreenCover = fullScreenCover != 0;
 
   uint16_t count;
   serialization::readPod(file, count);
