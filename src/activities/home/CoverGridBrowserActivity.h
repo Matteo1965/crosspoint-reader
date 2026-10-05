@@ -35,6 +35,8 @@ class CoverGridBrowserActivity final : public Activity {
   bool openIndex();
   bool rebuildIndex();
   bool loadPage();
+  bool buildReadingShelves();
+  uint16_t ordinalForActiveRow(int row) const;
   bool ensurePageThumbs();
   bool reopenAfterChild();
   void loadSelectedDetails();
@@ -70,13 +72,16 @@ class CoverGridBrowserActivity final : public Activity {
   int selected_ = 0;
   int previewSelected_ = 0;
   int activeSortTab_ = 0;
-  uint8_t descendingTabs_ = 1u;  // Recent starts newest-first.
+  uint8_t descendingTabs_ = 3u;  // Recent/New start newest-first; Title/Author ascending.
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
   bool selectionFastRefresh_ = false;
   int sidePageHoldAction_ = 0;  // -1=PageBack, +1=PageForward; consume release after long hold.
   int frontTabHoldAction_ = 0;  // -1=previous tab, +1=next tab; consume front-button release.
+  bool backSortHoldActive_ = false;  // Consume Back release after long-hold sort reversal.
+  std::vector<uint16_t> recentOrdinals_;
+  std::vector<uint16_t> newOrdinals_;
   OptionPopup optionPopup_;
   int featuredProgressTenths_ = -1;
   int featuredCurrentPage_ = 0;
