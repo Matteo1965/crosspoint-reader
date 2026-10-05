@@ -76,6 +76,7 @@ class CoverGridBrowserActivity final : public Activity {
   int previousSelected_ = -1;
   bool selectionFastRefresh_ = false;
   int sidePageHoldAction_ = 0;  // -1=PageBack, +1=PageForward; consume release after long hold.
+  int frontTabHoldAction_ = 0;  // -1=previous tab, +1=next tab; consume front-button release.
   OptionPopup optionPopup_;
   int featuredProgressTenths_ = -1;
   int featuredCurrentPage_ = 0;
