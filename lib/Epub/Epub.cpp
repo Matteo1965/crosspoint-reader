@@ -797,6 +797,12 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
+const std::string& Epub::getCoverImageHref() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.coverItemHref;
+}
+
 
 bool Epub::readBookInfo(BookInfo& info) const {
   info = {};
