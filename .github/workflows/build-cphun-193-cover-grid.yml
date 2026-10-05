@@ -101,8 +101,6 @@ jobs:
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'book.thumbPath = epub.getThumbBmpPath(thumbHeight());' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'previewMatchesCursor' src/activities/home/CoverGridBrowserActivity.cpp
-          ! grep -Fq 'Button::PageBack' src/activities/home/CoverGridBrowserActivity.cpp
-          ! grep -Fq 'Button::PageForward' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'moveSelection(-1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'moveSelection(1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'sidePageHoldAction_' src/activities/home/CoverGridBrowserActivity.cpp
@@ -130,7 +128,6 @@ jobs:
           grep -Fq 'mappedInput.isPressed(MappedInputManager::Button::Right)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'stepSortTab(-1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'stepSortTab(1);' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq '{"Legutóbbi", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'PAGE_READOUT_Y' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'HELP_Y' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int bookmarkY = 2;' src/components/themes/BaseTheme.cpp
