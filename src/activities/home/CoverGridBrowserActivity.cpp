@@ -41,7 +41,6 @@ constexpr int GRID_H = 220;
 constexpr int GRID_GAP_X = 14;
 constexpr int GRID_GAP_Y = 6;
 constexpr int GRID_SECOND_ROW_EXTRA_Y = 6;
-constexpr int FEATURED_INFO_OFFSET_Y = 10;
 constexpr int GRID_COLS = 3;
 
 constexpr unsigned long LONG_PRESS_MS = 700;
@@ -138,13 +137,16 @@ void CoverGridBrowserActivity::onEnter() {
   selected_ = 0;
   previewSelected_ = 0;
   activeSortTab_ = 0;
-  descendingTabs_ = 1u;  // Recent descending, Title/Author ascending.
+  descendingTabs_ = 3u;  // Recent/New descending, Title/Author ascending.
   thumbnailsReady_ = false;
   thumbnailsLoading_ = false;
   previousSelected_ = -1;
   selectionFastRefresh_ = false;
   sidePageHoldAction_ = 0;
   frontTabHoldAction_ = 0;
+  backSortHoldActive_ = false;
+  recentOrdinals_.clear();
+  newOrdinals_.clear();
 
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
@@ -153,6 +155,7 @@ void CoverGridBrowserActivity::onEnter() {
     }
   }
 
+  buildReadingShelves();
   loadPage();
   index_.close();
   ensurePageThumbs();
@@ -164,6 +167,8 @@ void CoverGridBrowserActivity::onExit() {
   optionPopup_.dismiss();
   index_.close();
   books_.clear();
+  recentOrdinals_.clear();
+  newOrdinals_.clear();
   Activity::onExit();
 }
 
@@ -188,12 +193,75 @@ bool CoverGridBrowserActivity::rebuildIndex() {
 
 library::SortOrder CoverGridBrowserActivity::sortOrder() const {
   const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
-  if (activeSortTab_ == 1) return desc ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
-  if (activeSortTab_ == 2) return desc ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
+  if (activeSortTab_ == 2) return desc ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
+  if (activeSortTab_ == 3) return desc ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
   return desc ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
 
-int CoverGridBrowserActivity::totalBooks() const { return totalBooks_; }
+int CoverGridBrowserActivity::totalBooks() const {
+  if (activeSortTab_ == 0) return static_cast<int>(recentOrdinals_.size());
+  if (activeSortTab_ == 1) return static_cast<int>(newOrdinals_.size());
+  return totalBooks_;
+}
+
+uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) const {
+  if (row < 0) return 0xFFFF;
+  const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
+  if (activeSortTab_ == 0 || activeSortTab_ == 1) {
+    const auto& ordinals = activeSortTab_ == 0 ? recentOrdinals_ : newOrdinals_;
+    if (row >= static_cast<int>(ordinals.size())) return 0xFFFF;
+    const size_t pos = desc ? ordinals.size() - 1 - static_cast<size_t>(row) : static_cast<size_t>(row);
+    return ordinals[pos];
+  }
+  return index_.ordinalForRow(sortOrder(), static_cast<uint16_t>(row));
+}
+
+bool CoverGridBrowserActivity::buildReadingShelves() {
+  recentOrdinals_.clear();
+  newOrdinals_.clear();
+  if (!index_.isOpen()) return false;
+
+  struct RecentEntry {
+    uint16_t ordinal;
+    uint32_t lastRead;
+    uint16_t addedRank;
+  };
+  std::vector<RecentEntry> recent;
+  recent.reserve(totalBooks_);
+  newOrdinals_.reserve(totalBooks_);
+
+  // Walk the library in ascending arrival order so unopened books naturally keep
+  // the Library index's "added" ordering, while opened books are re-ranked by
+  // progress.bin modification time (the time progress was last saved).
+  for (int row = 0; row < totalBooks_; ++row) {
+    const uint16_t ordinal =
+        index_.ordinalForRow(library::SortOrder::RecentAsc, static_cast<uint16_t>(row));
+    if (ordinal == 0xFFFF) continue;
+
+    library::ClixRecord record{};
+    std::string path;
+    if (!index_.readRecord(ordinal, record) || !index_.readPath(record, path)) continue;
+
+    Epub epub(path, "/.crosspoint");
+    const std::string progressPath = epub.getCachePath() + "/progress.bin";
+    HalFile progressFile;
+    if (!Storage.openFileForRead("GRID", progressPath, progressFile)) {
+      newOrdinals_.push_back(ordinal);
+      continue;
+    }
+    const uint32_t lastRead = progressFile.modificationTime();
+    progressFile.close();
+    recent.push_back({ordinal, lastRead, static_cast<uint16_t>(row)});
+  }
+
+  std::stable_sort(recent.begin(), recent.end(), [](const RecentEntry& a, const RecentEntry& b) {
+    if (a.lastRead != b.lastRead) return a.lastRead < b.lastRead;
+    return a.addedRank < b.addedRank;
+  });
+  recentOrdinals_.reserve(recent.size());
+  for (const auto& entry : recent) recentOrdinals_.push_back(entry.ordinal);
+  return true;
+}
 
 int CoverGridBrowserActivity::globalSelection() const {
   if (books_.empty()) return -1;
@@ -223,7 +291,7 @@ bool CoverGridBrowserActivity::loadPage() {
   books_.reserve(count);
 
   for (int i = 0; i < count; ++i) {
-    const uint16_t ordinal = index_.ordinalForRow(sortOrder(), static_cast<uint16_t>(pageStart_ + i));
+    const uint16_t ordinal = ordinalForActiveRow(pageStart_ + i);
     if (ordinal == 0xFFFF) continue;
 
     library::ClixRecord record{};
