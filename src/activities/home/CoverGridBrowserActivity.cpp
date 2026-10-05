@@ -204,7 +204,7 @@ int CoverGridBrowserActivity::totalBooks() const {
   return totalBooks_;
 }
 
-uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) const {
+uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) {
   if (row < 0) return 0xFFFF;
   const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
   if (activeSortTab_ == 0 || activeSortTab_ == 1) {
