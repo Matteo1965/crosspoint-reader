@@ -144,6 +144,7 @@ void CoverGridBrowserActivity::onEnter() {
   previousSelected_ = -1;
   selectionFastRefresh_ = false;
   sidePageHoldAction_ = 0;
+  frontTabHoldAction_ = 0;
 
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
@@ -592,11 +593,25 @@ void CoverGridBrowserActivity::loop() {
     toggleSortDirection();
     return;
   }
-  if (mappedInput.wasLongPressed(MappedInputManager::Button::NavPrevious, LONG_PRESS_MS)) {
+
+  // CPHUN-208: front Left/Right have dual behavior.
+  // Short release remains NavPrevious/NavNext (one cover). A long hold
+  // switches sort tabs. Latch through release so it cannot also move a cover.
+  if (frontTabHoldAction_ != 0) {
+    const auto heldFront = frontTabHoldAction_ < 0 ? MappedInputManager::Button::Left
+                                                   : MappedInputManager::Button::Right;
+    if (mappedInput.wasReleased(heldFront)) frontTabHoldAction_ = 0;
+    return;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::Left) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    frontTabHoldAction_ = -1;
     stepSortTab(-1);
     return;
   }
-  if (mappedInput.wasLongPressed(MappedInputManager::Button::NavNext, LONG_PRESS_MS)) {
+  if (mappedInput.isPressed(MappedInputManager::Button::Right) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    frontTabHoldAction_ = 1;
     stepSortTab(1);
     return;
   }
