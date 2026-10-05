@@ -11,6 +11,7 @@
 
 #include <Arduino.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <memory>
@@ -124,6 +125,65 @@ void drawCenteredIn(GfxRenderer& renderer, const int fontId, const int x, const 
                     const char* text, const EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
   const int textW = renderer.getTextAdvanceX(fontId, text, style);
   renderer.drawText(fontId, x + std::max(0, (width - textW) / 2), y, text, true, style);
+}
+
+static constexpr const char* HU_SORT_TABS[] = {"Legutóbbi", "Újdonságok", "Címek", "Szerzők"};
+static constexpr const char* EN_SORT_TABS[] = {"Recent", "New", "Titles", "Authors"};
+
+struct SortTabLayout {
+  int slotX = 0;
+  int slotW = 0;
+  int textX = 0;
+  int textW = 0;
+};
+
+std::array<SortTabLayout, 4> calculateSortTabLayout(GfxRenderer& renderer, const int screenWidth,
+                                                    const char* const* labels) {
+  std::array<SortTabLayout, 4> layout{};
+  std::array<int, 4> measured{};
+  int totalMeasured = 0;
+
+  // Use the wider of regular/bold metrics, so switching the active tab never
+  // shifts any neighboring tab.
+  for (int i = 0; i < 4; ++i) {
+    const int regular = renderer.getTextAdvanceX(UI_10_FONT_ID, labels[i], EpdFontFamily::REGULAR);
+    const int bold = renderer.getTextAdvanceX(UI_10_FONT_ID, labels[i], EpdFontFamily::BOLD);
+    measured[i] = std::max(1, std::max(regular, bold));
+    totalMeasured += measured[i];
+  }
+
+  const int left = GRID_LEFT;
+  const int right = screenWidth - GRID_LEFT;
+  const int available = std::max(4, right - left);
+  int slotX = left;
+  int allocated = 0;
+
+  for (int i = 0; i < 4; ++i) {
+    int slotW = 0;
+    if (i == 3) {
+      slotW = available - allocated;
+    } else {
+      slotW = (available * measured[i]) / std::max(1, totalMeasured);
+      slotW = std::max(1, slotW);
+    }
+
+    layout[i].slotX = slotX;
+    layout[i].slotW = slotW;
+    layout[i].textW = measured[i];
+
+    if (i == 0) {
+      layout[i].textX = left;
+    } else if (i == 3) {
+      layout[i].textX = right - measured[i];
+    } else {
+      layout[i].textX = slotX + std::max(0, (slotW - measured[i]) / 2);
+    }
+
+    slotX += slotW;
+    allocated += slotW;
+  }
+
+  return layout;
 }
 
 }  // namespace
@@ -633,9 +693,15 @@ void CoverGridBrowserActivity::showSelectedOptions() {
 
 bool CoverGridBrowserActivity::hitSortTab(const int x, const int y, int& tab) const {
   if (y < TAB_Y || y >= TAB_Y + TAB_H) return false;
-  const int width = renderer.getScreenWidth();
-  tab = std::clamp((x * 4) / std::max(1, width), 0, 3);
-  return true;
+  const char* const* labels = I18N.getLanguage() == Language::HU ? HU_SORT_TABS : EN_SORT_TABS;
+  const auto layout = calculateSortTabLayout(renderer, renderer.getScreenWidth(), labels);
+  for (int i = 0; i < 4; ++i) {
+    if (x >= layout[i].slotX && x < layout[i].slotX + layout[i].slotW) {
+      tab = i;
+      return true;
+    }
+  }
+  return false;
 }
 
 int CoverGridBrowserActivity::hitGridCover(const int x, const int y) const {
@@ -987,16 +1053,14 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   renderer.clearScreen();
-  static constexpr const char* HU_TABS[] = {"Legutóbbi", "Újdonságok", "Címek", "Szerzők"};
-  static constexpr const char* EN_TABS[] = {"Recent", "New", "Titles", "Authors"};
-  const char* const* tabs = I18N.getLanguage() == Language::HU ? HU_TABS : EN_TABS;
+  const char* const* tabs = I18N.getLanguage() == Language::HU ? HU_SORT_TABS : EN_SORT_TABS;
+  const auto tabLayout = calculateSortTabLayout(renderer, width, tabs);
   for (int i = 0; i < 4; ++i) {
-    const int x = i * width / 4;
-    const int w = (i + 1) * width / 4 - x;
-    drawCenteredIn(renderer, UI_10_FONT_ID, x, w, TAB_Y + 5, tabs[i],
-                   i == activeSortTab_ ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const auto style = i == activeSortTab_ ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    renderer.drawText(UI_10_FONT_ID, tabLayout[i].textX, TAB_Y + 5, tabs[i], true, style);
     if (i == activeSortTab_) {
-      renderer.drawLine(x + 8, TAB_Y + TAB_H - 2, x + w - 8, TAB_Y + TAB_H - 2, true);
+      renderer.drawLine(tabLayout[i].textX, TAB_Y + TAB_H - 2,
+                        tabLayout[i].textX + tabLayout[i].textW, TAB_Y + TAB_H - 2, true);
     }
   }
 
