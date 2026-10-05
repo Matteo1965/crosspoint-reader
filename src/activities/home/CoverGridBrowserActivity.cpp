@@ -987,19 +987,16 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   renderer.clearScreen();
-  static constexpr const char* HU_TABS[] = {"Legutóbbi", "Címek", "Szerzők"};
-  static constexpr const char* EN_TABS[] = {"Recent", "Title", "Author"};
+  static constexpr const char* HU_TABS[] = {"Legutóbbi", "Újdonságok", "Címek", "Szerzők"};
+  static constexpr const char* EN_TABS[] = {"Recent", "New", "Titles", "Authors"};
   const char* const* tabs = I18N.getLanguage() == Language::HU ? HU_TABS : EN_TABS;
-  for (int i = 0; i < 3; ++i) {
-    const int x = i * width / 3;
-    const int w = (i + 1) * width / 3 - x;
-    const int visualX = x + (i == 0 ? 14 : (i == 2 ? -12 : 0));
-    drawCenteredIn(renderer, UI_10_FONT_ID, visualX, w, TAB_Y + 5, tabs[i],
+  for (int i = 0; i < 4; ++i) {
+    const int x = i * width / 4;
+    const int w = (i + 1) * width / 4 - x;
+    drawCenteredIn(renderer, UI_10_FONT_ID, x, w, TAB_Y + 5, tabs[i],
                    i == activeSortTab_ ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
     if (i == activeSortTab_) {
-      renderer.drawLine(visualX + 10, TAB_Y + TAB_H - 2, visualX + w - 10, TAB_Y + TAB_H - 2, true);
-      const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << i)) != 0;
-      renderer.drawText(UI_10_FONT_ID, visualX + w - 20, TAB_Y + 5, desc ? "↓" : "↑");
+      renderer.drawLine(x + 8, TAB_Y + TAB_H - 2, x + w - 8, TAB_Y + TAB_H - 2, true);
     }
   }
 
@@ -1009,7 +1006,61 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
     const int textW = std::max(40, width - FEATURED_TEXT_X - 22);
     const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, selectedBook.title.c_str(), textW, 3);
-    int y = FEATURED_Y + FEATURED_INFO_OFFSET_Y;
+    const int line10 = renderer.getLineHeight(UI_10_FONT_ID);
+    const int line12 = renderer.getLineHeight(UI_12_FONT_ID);
+    const int halfGap = std::max(2, line10 / 2);
+    const int panelBottom = FEATURED_Y + FEATURED_H;
+    const bool hasAuthor = !selectedBook.author.empty();
+    const bool hasSeries = !featuredSeries_.empty();
+    const bool hasChapter = !featuredChapterTitle_.empty();
+    const bool hasProgress = featuredProgressTenths_ >= 0;
+
+    auto requiredHeight = [&](const bool includeSeries, const bool includeListLine, const bool includeChapter) {
+      int h = line10;  // sort direction
+      if (includeListLine) h += line10;
+      h += halfGap;
+      h += static_cast<int>(titleLines.size()) * line12;
+      if (hasAuthor) h += line10 + 8;
+      if (includeSeries && hasSeries) h += line10 + 4;
+      if (includeChapter && hasChapter) h += line10 + 4;
+      if (hasProgress) h += line10 + 12;
+      return h;
+    };
+
+    bool showSeries = hasSeries;
+    bool showListLine = true;
+    bool showChapter = hasChapter;
+    if (requiredHeight(showSeries, showListLine, showChapter) > FEATURED_H) showSeries = false;
+    if (requiredHeight(showSeries, showListLine, showChapter) > FEATURED_H) showListLine = false;
+    if (requiredHeight(showSeries, showListLine, showChapter) > FEATURED_H) showChapter = false;
+
+    int y = FEATURED_Y;
+    const bool sortDesc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
+    const char* sortLabel = I18N.getLanguage() == Language::HU ? "Rendezési sorrend: " : "Sort order: ";
+    const char* direction = I18N.getLanguage() == Language::HU
+                                ? (sortDesc ? "Csökkenő" : "Növekvő")
+                                : (sortDesc ? "Descending" : "Ascending");
+    std::string sortText = std::string(sortLabel) + direction;
+    sortText = renderer.truncatedText(UI_10_FONT_ID, sortText.c_str(), textW);
+    renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, sortText.c_str());
+    y += line10;
+
+    if (showListLine) {
+      const int total = totalBooks();
+      const int first = total > 0 ? pageStart_ + 1 : 0;
+      const int last = total > 0 ? std::min(pageStart_ + static_cast<int>(books_.size()), total) : 0;
+      char listText[48];
+      if (I18N.getLanguage() == Language::HU) {
+        snprintf(listText, sizeof(listText), "%d–%d könyv / %d könyv", first, last, total);
+      } else {
+        snprintf(listText, sizeof(listText), "%d–%d books / %d books", first, last, total);
+      }
+      renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y,
+                        renderer.truncatedText(UI_10_FONT_ID, listText, textW).c_str());
+      y += line10;
+    }
+
+    y += halfGap;
     for (const auto& line : titleLines) {
       renderer.drawText(UI_12_FONT_ID, FEATURED_TEXT_X, y, line.c_str(), true, EpdFontFamily::BOLD);
       y += renderer.getLineHeight(UI_12_FONT_ID);
@@ -1029,12 +1080,12 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, author.c_str());
       y += renderer.getLineHeight(UI_10_FONT_ID) + 4;
     }
-    if (!featuredSeries_.empty()) {
+    if (showSeries) {
       const auto series = renderer.truncatedText(UI_10_FONT_ID, featuredSeries_.c_str(), textW);
       renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, series.c_str());
       y += renderer.getLineHeight(UI_10_FONT_ID) + 4;
     }
-    if (!featuredChapterTitle_.empty()) {
+    if (showChapter) {
       std::string chapter = featuredChapterTitle_;
       const std::string folded = asciiLowerCopy(chapter);
       if (chapterTitleNeedsSuffix(folded)) {
@@ -1058,7 +1109,8 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       }
       renderer.drawText(UI_10_FONT_ID, FEATURED_TEXT_X, y, progressText);
       constexpr int progressBarHeight = 8;
-      const int progressBarY = y + renderer.getLineHeight(UI_10_FONT_ID) + 4;
+      const int progressBarY = std::min(y + renderer.getLineHeight(UI_10_FONT_ID) + 4,
+                                      panelBottom - progressBarHeight);
       renderer.fillRect(FEATURED_TEXT_X, progressBarY, textW, progressBarHeight, false);
       renderer.drawRect(FEATURED_TEXT_X, progressBarY, textW, progressBarHeight, true);
       const int innerWidth = std::max(0, textW - 2);
