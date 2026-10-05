@@ -2916,7 +2916,7 @@ void EpubReaderActivity::renderBook() {
   if (section->pageCount == 0) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
-    if (!fullScreenCover) renderStatusBar();
+    renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
@@ -2926,7 +2926,7 @@ void EpubReaderActivity::renderBook() {
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
-    if (!fullScreenCover) renderStatusBar();
+    renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
