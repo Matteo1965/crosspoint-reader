@@ -60,7 +60,7 @@ std::string asciiLower(std::string value) {
 // CPHUN-169: 8px optical closure, production without TXT diagnostics.
 // CPHUN-211: Page serialization adds the fullscreen-cover flag and cover
 // layout can now ignore reader margins, so all cached section pages must rebuild.
-constexpr uint8_t SECTION_FILE_VERSION = 70;
+constexpr uint8_t SECTION_FILE_VERSION = 71;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
