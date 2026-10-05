@@ -717,13 +717,26 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 const bool hasCssWidth = imgStyle.hasImageWidth();
 
                 const std::string& declaredCoverHref = self->epub->getCoverImageHref();
+                const std::string normalizedResolved = FsHelpers::normalisePath(resolvedPath);
+                const std::string normalizedDeclared = FsHelpers::normalisePath(declaredCoverHref);
                 const bool isDeclaredCoverImage =
-                    !declaredCoverHref.empty() &&
-                    FsHelpers::normalisePath(resolvedPath) == FsHelpers::normalisePath(declaredCoverHref);
-                const bool coverAtPageStart =
-                    isDeclaredCoverImage &&
+                    !declaredCoverHref.empty() && normalizedResolved == normalizedDeclared;
+
+                std::string lowerResolved = normalizedResolved;
+                for (char& c : lowerResolved) {
+                  if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+                }
+                const bool imageNameLooksLikeCover = lowerResolved.find("cover") != std::string::npos;
+                const bool pageIsStillEmpty =
                     (!self->currentPage || self->currentPage->elements.empty()) &&
                     (!self->currentTextBlock || self->currentTextBlock->isEmpty());
+
+                // CPHUN-212: robust cover detection. Prefer the explicit OPF
+                // cover-image declaration, but accept a "cover"-named image or
+                // the first image in a likely cover spine (including spine 0).
+                const bool coverAtPageStart =
+                    pageIsStillEmpty &&
+                    (isDeclaredCoverImage || imageNameLooksLikeCover || self->coverSpineCandidate);
 
                 // Compute effective container width for percentage-based image sizes.
                 // If the image is inside a block with horizontal margins/padding (e.g.
