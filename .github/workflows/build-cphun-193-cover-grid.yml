@@ -1,4 +1,4 @@
-name: CPHUN-208 Cover Grid Render Fix Build (X4 dev)
+name: CPHUN-209 Cover Grid Render Fix Build (X4 dev)
 
 on:
   push:
@@ -12,14 +12,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-208-grid6-front-tab-hold
+      - agent/cphun-209-grid6-four-tabs
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-208-grid6-front-tab-hold-${{ github.ref }}
+  group: cphun-209-grid6-four-tabs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-208-X4
+            artifact: CPHUN-209-X4
             firmware: firmware.bin
 
     steps:
@@ -48,7 +48,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-208-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261005-209-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -116,15 +116,20 @@ jobs:
           grep -Fq 'constexpr int GRID_H = 220;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int GRID_GAP_Y = 6;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'constexpr int GRID_SECOND_ROW_EXTRA_Y = 6;' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'constexpr int FEATURED_INFO_OFFSET_Y = 10;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq '(row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0)' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'int y = FEATURED_Y + FEATURED_INFO_OFFSET_Y;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'frontTabHoldAction_' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'backSortHoldActive_' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq '{"Legutóbbi", "Újdonságok", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'for (int i = 0; i < 4; ++i)' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'buildReadingShelves()' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'progress.bin' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'Rendezési sorrend: ' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'bool showListLine = true;' src/activities/home/CoverGridBrowserActivity.cpp
+          ! grep -Fq 'desc ? "↓" : "↑"' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'mappedInput.isPressed(MappedInputManager::Button::Left)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'mappedInput.isPressed(MappedInputManager::Button::Right)' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'stepSortTab(-1);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'stepSortTab(1);' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'const int visualX = x + (i == 0 ? 14 : (i == 2 ? -12 : 0));' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq '{"Legutóbbi", "Címek", "Szerzők"}' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'PAGE_READOUT_Y' src/activities/home/CoverGridBrowserActivity.cpp
           ! grep -Fq 'HELP_Y' src/activities/home/CoverGridBrowserActivity.cpp
