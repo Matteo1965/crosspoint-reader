@@ -194,8 +194,11 @@ std::array<SortTabLayout, 4> calculateSortTabLayout(GfxRenderer& renderer, const
 
 }  // namespace
 
-CoverGridBrowserActivity::CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("CoverGridBrowser", renderer, mappedInput) {}
+CoverGridBrowserActivity::CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                   LibraryViewStatePtr sharedViewState, const bool integrated)
+    : Activity("CoverGridBrowser", renderer, mappedInput),
+      viewState_(std::move(sharedViewState)),
+      integrated_(integrated) {}
 
 void CoverGridBrowserActivity::onEnter() {
   Activity::onEnter();
@@ -204,8 +207,8 @@ void CoverGridBrowserActivity::onEnter() {
   previewSelected_ = 0;
   pinnedSortRow_ = -1;
   pinnedBook_ = GridBook{};
-  activeSortTab_ = 0;
-  descendingTabs_ = 2u;  // Recent ascending; New descending; Title/Author ascending.
+  activeSortTab_ = viewState_ ? std::clamp(viewState_->activeSortTab, 0, 3) : 0;
+  descendingTabs_ = viewState_ ? viewState_->descendingTabs : 3u;  // Recent/New newest first; Title/Author ascending.
   thumbnailsReady_ = false;
   thumbnailsLoading_ = false;
   previousSelected_ = -1;
@@ -581,6 +584,10 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   } else {
     activeSortTab_ = tab;
   }
+  if (viewState_) {
+    viewState_->activeSortTab = activeSortTab_;
+    viewState_->descendingTabs = descendingTabs_;
+  }
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
@@ -596,6 +603,10 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
 
 void CoverGridBrowserActivity::toggleSortDirection() {
   descendingTabs_ ^= static_cast<uint8_t>(1u << activeSortTab_);
+  if (viewState_) {
+    viewState_->activeSortTab = activeSortTab_;
+    viewState_->descendingTabs = descendingTabs_;
+  }
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
@@ -714,6 +725,7 @@ void CoverGridBrowserActivity::openSelectedCover() {
 void CoverGridBrowserActivity::showSelectedOptions() {
   if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
   showBookOptionsMenu(optionPopup_, books_[selected_].title.c_str(), false,
+                      integrated_ ? (I18N.getLanguage() == Language::HU ? "Lista nézet" : "List view") : nullptr,
                       [this](const BookOptionsAction action) {
                         switch (action) {
                           case BookOptionsAction::Description:
@@ -735,6 +747,9 @@ void CoverGridBrowserActivity::showSelectedOptions() {
                             rebuildLibraryFromOptions();
                             break;
                           case BookOptionsAction::RemoveFromRecent:
+                            break;
+                          case BookOptionsAction::SwitchView:
+                            if (integrated_) finish();
                             break;
                         }
                       });
@@ -919,7 +934,10 @@ void CoverGridBrowserActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoHome();
+    if (integrated_)
+      finish();
+    else
+      onGoHome();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
