@@ -289,8 +289,10 @@ std::shared_ptr<Epub> LibraryListActivity::loadBookEpub(const std::string& path)
 }
 
 void LibraryListActivity::openBookInfo(const std::string& path, const bool metadata) {
+  index.close();
   auto epub = loadBookEpub(path);
   if (!epub) {
+    index.open(library::libraryIndexPath());
     requestUpdate();
     return;
   }
@@ -298,23 +300,32 @@ void LibraryListActivity::openBookInfo(const std::string& path, const bool metad
       std::make_unique<BookInfoActivity>(renderer, mappedInput, epub,
                                          metadata ? BookInfoActivity::Page::Metadata
                                                   : BookInfoActivity::Page::Description),
-      [this](const ActivityResult&) { requestUpdate(); });
+      [this](const ActivityResult&) {
+        if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+        requestUpdate();
+      });
 }
 
 void LibraryListActivity::openBookCover(const std::string& path) {
+  index.close();
   auto epub = loadBookEpub(path);
   if (!epub) {
+    index.open(library::libraryIndexPath());
     requestUpdate();
     return;
   }
   std::string coverPath = epub->getBookCoverViewBmpPath();
   if (!Storage.exists(coverPath.c_str())) epub->generateBookCoverViewBmp();
   if (!Storage.exists(coverPath.c_str())) {
+    index.open(library::libraryIndexPath());
     requestUpdate();
     return;
   }
   startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
-                         [this](const ActivityResult&) { requestUpdate(); });
+                         [this](const ActivityResult&) {
+                           if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+                           requestUpdate();
+                         });
 }
 
 // Shared long-Confirm book menu. The base entries are identical to Cover Grid;
