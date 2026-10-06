@@ -11,6 +11,7 @@
 #include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
+#include "activities/library/LibraryViewState.h"
 
 class Epub;
 
@@ -34,7 +35,7 @@ class Epub;
 // indexed book so an allocation failure remains recoverable on the C3.
 class LibraryListActivity final : public UiTabListActivity {
  public:
-  LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, LibraryViewStatePtr viewState = {});
 
   void onEnter() override;
   void onExit() override;
@@ -81,6 +82,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Input
   void openSelectedBook();
   void openSearch();
+  void openGridView();
   // Shared tail of row activation and the options menu's Open entry.
   void openBookByPath(const std::string& path);
   void promptRebuildIndex();
@@ -107,6 +109,8 @@ class LibraryListActivity final : public UiTabListActivity {
   void swallowHeldReleases();
   static void searchActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void rebuildActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+
+  LibraryViewStatePtr viewState;
 
   // Data
   void applyFilter();
@@ -152,7 +156,7 @@ class LibraryListActivity final : public UiTabListActivity {
   int activeTabIndex = 0;
   library::SortOrder sortOrder = library::SortOrder::RecentAsc;
   // One bit per tab. Defaults: Recent asc, New desc, Title/Author asc.
-  uint8_t descendingTabs = 1u << 1;
+  uint8_t descendingTabs = 3u;
   std::vector<uint16_t> newOrdinals;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
