@@ -1,5 +1,5 @@
-name: CPHUN-222 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-222 queue restart
+name: CPHUN-223 Library Search + View Persistence Build (X4 dev)
+# CPHUN-223 Library/List/Grid persistence and shared search
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-222-X4
+            artifact: CPHUN-223-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261006-222-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261007-223-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -134,6 +134,16 @@ jobs:
           grep -Fq 'openPersistedGridOnNextLoop' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_GRID;' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_LIST;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'std::string searchQuery;' src/activities/library/LibraryViewState.h
+          grep -Fq 'BookOptionsAction::Search' src/components/BookOptionsMenu.h
+          grep -Fq 'BookOptionsAction::ClearSearch' src/components/BookOptionsMenu.h
+          grep -Fq '"Keresés módosítása"' src/components/BookOptionsMenu.h
+          grep -Fq '"Keresés törlése"' src/components/BookOptionsMenu.h
+          grep -Fq 'query = viewState->searchQuery;' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'mappedInput.hasTouch()' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'void CoverGridBrowserActivity::applyFilter()' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'viewState_->searchQuery' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'onGoHome(HomeMenuItem::LIBRARY);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'displayBook.title = bookui::cleanDisplayedBookTitle' src/activities/home/HomeActivity.cpp
           grep -Fq 'if (!recentsLoaded && !recentsLoading) requestUpdate();' src/activities/home/HomeActivity.cpp
           grep -Fq 'int tabSideMarginPx() const override { return 28; }' src/activities/library/LibraryListActivity.h
