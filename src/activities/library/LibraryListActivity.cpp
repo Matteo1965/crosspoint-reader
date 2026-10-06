@@ -29,6 +29,7 @@
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookTitleUtils.h"
 
 namespace fui = freeink::ui;
 
@@ -798,6 +799,7 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     if (fileName) index.readName(record, *fileName);
   }
   if (title.empty()) title = tr(STR_LIBRARY_UNKNOWN_TITLE);
+  title = bookui::cleanDisplayedBookTitle(title);
   return true;
 }
 
