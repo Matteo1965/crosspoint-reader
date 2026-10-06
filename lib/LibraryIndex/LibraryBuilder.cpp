@@ -91,6 +91,9 @@ void serviceBuilder(uint32_t& workUnits) {
   if ((++workUnits & 0x1Fu) == 0) delay(1);
 }
 
+bool isBookName(const std::string& name);
+bool isHiddenOrSidecar(const char* name);
+
 struct LibraryFingerprint {
   uint32_t count = 0;
   uint64_t hash = 1469598103934665603ULL;
