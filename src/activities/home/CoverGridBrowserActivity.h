@@ -28,6 +28,7 @@ class CoverGridBrowserActivity final : public Activity {
     std::string title;
     std::string author;
     std::string thumbPath;
+    int sortRow = -1;
   };
 
   static constexpr int PAGE_SIZE = 7;
@@ -71,7 +72,9 @@ class CoverGridBrowserActivity final : public Activity {
   library::LibraryIndexFile index_;
   std::vector<GridBook> books_;
   int totalBooks_ = 0;
-  int pageStart_ = 0;
+  int pageStart_ = 0;  // Offset in the sorted list excluding the featured book.
+  GridBook pinnedBook_;
+  int pinnedSortRow_ = -1;
   int selected_ = 0;
   int previewSelected_ = 0;
   int gridBookIndices_[6] = {-1, -1, -1, -1, -1, -1};
