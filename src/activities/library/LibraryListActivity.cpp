@@ -82,6 +82,7 @@ LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManag
   activeTabIndex = viewState->activeSortTab;
   descendingTabs = viewState->descendingTabs;
   sortOrder = orderForTab(activeTabIndex, descendingTabs);
+  query = viewState->searchQuery;
   // Three short tab labels: a full-slot pill would stretch across a third of
   // the screen, so cap it at the label plus padding (slots stay put).
   tabPillMaxPad = 16;
@@ -373,6 +374,7 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   app.clearTapFlash();
   showBookOptionsMenu(optionPopup, title.c_str(), isStoreRow,
                       I18N.getLanguage() == Language::HU ? "Rács nézet" : "Grid view",
+                      !query.empty(),
                       [this, path, title](const BookOptionsAction action) {
                         swallowHeldReleases();
                         switch (action) {
@@ -399,6 +401,12 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
                             break;
                           case BookOptionsAction::SwitchView:
                             openGridView();
+                            break;
+                          case BookOptionsAction::Search:
+                            openSearch();
+                            break;
+                          case BookOptionsAction::ClearSearch:
+                            clearSearch();
                             break;
                         }
                       });
@@ -569,6 +577,7 @@ void LibraryListActivity::openSearch() {
     swallowHeldReleases();
     if (result.isCancelled) return;
     query = std::get<KeyboardResult>(result.data).text;
+    if (viewState) viewState->searchQuery = query;
     applyFilter();
     auto& nav = activeNav();
     if (!query.empty() && filteredCount == 0 && !degraded) {
@@ -582,6 +591,17 @@ void LibraryListActivity::openSearch() {
     nav.top = 0;
     requestUpdate();
   });
+}
+
+void LibraryListActivity::clearSearch() {
+  if (query.empty()) return;
+  query.clear();
+  if (viewState) viewState->searchQuery.clear();
+  applyFilter();
+  auto& nav = activeNav();
+  nav.selected = listCount() > 0 ? 1 : 0;
+  nav.top = 0;
+  requestUpdate();
 }
 
 void LibraryListActivity::stepTab(const int direction) {
@@ -1091,15 +1111,13 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   }
   header.trailingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
   header.borderEdges = fui::EdgeBottom;
-  if (!degraded) {
-    // Keep both touch actions together on the right; button boards reach
-    // rebuild through the row options menu.
+  if (!degraded && mappedInput.hasTouch()) {
+    // Touch devices keep the header shortcuts. X4 uses the long-Open popup,
+    // so the search icon is intentionally absent there.
     header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
     header.trailingAction = ACTION_SEARCH;
-    if (mappedInput.hasTouch()) {
-      header.trailingAdjacentIcon = fui::bitmapFromIcon(icon_refresh_cw_32);
-      header.trailingAdjacentAction = ACTION_REBUILD;
-    }
+    header.trailingAdjacentIcon = fui::bitmapFromIcon(icon_refresh_cw_32);
+    header.trailingAdjacentAction = ACTION_REBUILD;
     const int titleFontId = uiScaleSpec().titleFontId;
     header.actionOffsetY =
         static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
