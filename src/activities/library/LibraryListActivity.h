@@ -48,8 +48,8 @@ class LibraryListActivity final : public UiTabListActivity {
   const char* tabLabel(int index) const override;
   int tabWidthPercent(int index) const override {
     if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;
-    static constexpr int widths[3] = {41, 25, 34};
-    return index >= 0 && index < 3 ? widths[index] : 0;
+    static constexpr int widths[4] = {29, 32, 17, 22};
+    return index >= 0 && index < 4 ? widths[index] : 0;
   }
   int tabSideMarginPx() const override {
     return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 16 : 0;
@@ -109,6 +109,8 @@ class LibraryListActivity final : public UiTabListActivity {
 
   // Data
   void applyFilter();
+  bool buildNewShelf();
+  uint16_t ordinalForShelfRow(int row) const;
   int bookRowCount() const;
   int rowFor(int entry) const;
   // fileName, when asked for, is the on-card name the row's icon derives from
@@ -147,9 +149,10 @@ class LibraryListActivity final : public UiTabListActivity {
 
   library::LibraryIndexFile index;
   int activeTabIndex = 0;
-  library::SortOrder sortOrder = library::SortOrder::RecentDesc;
-  // One bit per tab; Recent starts descending (newest first).
-  uint8_t descendingTabs = 1u << 0;
+  library::SortOrder sortOrder = library::SortOrder::RecentAsc;
+  // One bit per tab. Defaults: Recent asc, New desc, Title/Author asc.
+  uint8_t descendingTabs = 1u << 1;
+  std::vector<uint16_t> newOrdinals;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
