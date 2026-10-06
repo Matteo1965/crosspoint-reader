@@ -210,6 +210,14 @@ void CoverGridBrowserActivity::onEnter() {
   recentOrdinals_.clear();
   newOrdinals_.clear();
 
+  if (!library::libraryRootAvailable(SETTINGS.libraryRootFolder)) {
+    GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "A Könyvtár mappa nem található"
+                                                               : "Library folder not found");
+    requestUpdate();
+    return;
+  }
+  if (library::libraryContentChanged(SETTINGS.libraryRootFolder)) library::markLibraryIndexDirty();
+
   if (!openIndex()) {
     GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár indexelése…" : "Indexing library…");
     if (!rebuildIndex() || !openIndex()) {
@@ -250,7 +258,7 @@ bool CoverGridBrowserActivity::openIndex() {
 bool CoverGridBrowserActivity::rebuildIndex() {
   index_.close();
   library::BuildStats stats;
-  return library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  return library::buildLibraryIndex(SETTINGS.libraryRootFolder, stats, SETTINGS.libraryUseMetadata != 0);
 }
 
 library::SortOrder CoverGridBrowserActivity::sortOrder() const {
