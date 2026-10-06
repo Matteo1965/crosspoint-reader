@@ -1147,6 +1147,9 @@ void CrossPointWebServer::handleDelete() const {
       clearBookCache(itemPath.c_str());
     }
 
+    if (success && isLibraryBookFile(itemName)) {
+      library::markLibraryIndexDirty();
+    }
     if (!success) {
       failedItems += itemPath + " (deletion failed); ";
       allSuccess = false;
