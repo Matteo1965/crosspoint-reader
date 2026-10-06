@@ -583,33 +583,16 @@ void CoverGridBrowserActivity::stepSortTab(const int delta) {
 }
 
 void CoverGridBrowserActivity::moveSelection(const int delta) {
-  const int total = totalBooks();
-  const int current = globalSelection();
-  if (total <= 0 || current < 0) return;
-
-  const int next = std::clamp(current + delta, 0, total - 1);
-  if (next == current) return;
-  const int nextPage = (next / PAGE_SIZE) * PAGE_SIZE;
-  if (nextPage != pageStart_) {
-    pageStart_ = nextPage;
-    selected_ = next - pageStart_;
-    previewSelected_ = selected_;
-    previousSelected_ = -1;
-    selectionFastRefresh_ = false;
-    if (!openIndex()) return;
-    loadPage();
-    index_.close();
-    ensurePageThumbs();
-    loadSelectedDetails();
-    requestUpdate();
-    return;
-  }
-
+  if (books_.empty() || delta == 0) return;
+  // CPHUN-214: traverse physical positions, not sorted book indices.
+  // The currently featured book occupies position 0, followed by six slots.
+  int position = selected_ == previewSelected_ ? 0 : gridSlotForBook(selected_) + 1;
+  if (position < 0) return;
+  const int nextPosition = position + (delta > 0 ? 1 : -1);
+  if (nextPosition < 0 || nextPosition > 6 ||
+      (nextPosition > 0 && gridBookIndices_[nextPosition - 1] < 0)) return;
   previousSelected_ = selected_;
-  selected_ = next - pageStart_;
-
-  // CPHUN-202: cursor movement never changes the featured preview.
-  // Keep the six covers and confirmed preview static; redraw only the frame.
+  selected_ = nextPosition == 0 ? previewSelected_ : gridBookIndices_[nextPosition - 1];
   selectionFastRefresh_ = true;
   requestUpdate();
 }
@@ -820,7 +803,7 @@ void CoverGridBrowserActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
+    onGoHome();
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
