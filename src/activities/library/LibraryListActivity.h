@@ -83,6 +83,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Input
   void openSelectedBook();
   void openSearch();
+  void clearSearch();
   void openGridView();
   // Shared tail of row activation and the options menu's Open entry.
   void openBookByPath(const std::string& path);
