@@ -725,7 +725,7 @@ void CoverGridBrowserActivity::openSelectedCover() {
 void CoverGridBrowserActivity::showSelectedOptions() {
   if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
   showBookOptionsMenu(optionPopup_, books_[selected_].title.c_str(), false,
-                      integrated_ ? (I18N.getLanguage() == Language::HU ? "Lista nézet" : "List view") : nullptr,
+                      I18N.getLanguage() == Language::HU ? "Lista nézet" : "List view",
                       [this](const BookOptionsAction action) {
                         switch (action) {
                           case BookOptionsAction::Description:
