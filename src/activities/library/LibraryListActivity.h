@@ -198,7 +198,6 @@ class LibraryListActivity final : public UiTabListActivity {
   bool lockNextBackRelease = false;
   bool backSortHoldActive = false;
   int frontTabHoldAction = 0;  // -1=#3 previous tab, +1=#4 next tab; consume release.
-  int previewEntry = -1;
 
   // Row options modal (Recent long-press menu); owned here so it outlives the
   // touch event that opened it.
