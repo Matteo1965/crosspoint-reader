@@ -174,9 +174,14 @@ void SettingsActivity::rebuildRowItems() {
   rowItems_.reserve(settings.size());
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
-    item.label = settings[i].nameId == StrId::STR_DICTIONARY && I18N.getLanguage() == Language::HU
-                     ? "Szótár:"
-                     : I18N.get(settings[i].nameId);
+    if (settings[i].type == SettingType::STRING && settings[i].key &&
+        std::string(settings[i].key) == "libraryRootFolder") {
+      item.label = I18N.getLanguage() == Language::HU ? "Könyvtár mappa" : "Library folder";
+    } else {
+      item.label = settings[i].nameId == StrId::STR_DICTIONARY && I18N.getLanguage() == Language::HU
+                       ? "Szótár:"
+                       : I18N.get(settings[i].nameId);
+    }
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
@@ -323,6 +328,34 @@ void SettingsActivity::toggleCurrentSetting() {
     } else {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
+  } else if (setting.type == SettingType::STRING && setting.stringOffset != 0) {
+    char* value = reinterpret_cast<char*>(&SETTINGS) + setting.stringOffset;
+    std::string current(value);
+    auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(
+        renderer, mappedInput,
+        I18N.getLanguage() == Language::HU ? "Könyvtár mappa" : "Library folder",
+        current, static_cast<int>(setting.stringMaxLen - 1), InputType::Text);
+    if (!keyboard) {
+      LOG_ERR("SETTINGS", "OOM: Library folder keyboard");
+      return;
+    }
+    const size_t offset = setting.stringOffset;
+    const size_t maxLen = setting.stringMaxLen;
+    startActivityForResult(std::move(keyboard), [this, offset, maxLen](const ActivityResult& result) {
+      if (result.isCancelled) return;
+      std::string path = std::get<KeyboardResult>(result.data).text;
+      while (!path.empty() && path.back() == '/') path.pop_back();
+      if (path.empty()) path = "/Books";
+      if (path.front() != '/') path.insert(path.begin(), '/');
+      char* dest = reinterpret_cast<char*>(&SETTINGS) + offset;
+      strncpy(dest, path.c_str(), maxLen - 1);
+      dest[maxLen - 1] = '\0';
+      SETTINGS.saveToFile();
+      library::markLibraryIndexDirty();
+      rebuildSettingsLists();
+      requestUpdate();
+    });
+    return;
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
@@ -463,6 +496,10 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
       return I18N.get(setting.enumValues[value]);
     }
     return "";
+  }
+  if (setting.type == SettingType::STRING && setting.stringOffset != 0) {
+    const char* value = reinterpret_cast<const char*>(&SETTINGS) + setting.stringOffset;
+    return value;
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
