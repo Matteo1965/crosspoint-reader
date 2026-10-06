@@ -22,6 +22,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BookOptionsMenu.h"
 #include "components/UIScale.h"
+#include "activities/home/CoverGridBrowserActivity.h"
 #include "activities/reader/BookInfoActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "components/UITheme.h"
@@ -74,8 +75,13 @@ const char* tabLabelFor(const int tab) {
 
 }  // namespace
 
-LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiTabListActivity("Library", renderer, mappedInput, true) {
+LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                         LibraryViewStatePtr sharedViewState)
+    : UiTabListActivity("Library", renderer, mappedInput, true),
+      viewState(sharedViewState ? std::move(sharedViewState) : std::make_shared<LibraryViewState>()) {
+  activeTabIndex = viewState->activeSortTab;
+  descendingTabs = viewState->descendingTabs;
+  sortOrder = orderForTab(activeTabIndex, descendingTabs);
   // Three short tab labels: a full-slot pill would stretch across a third of
   // the screen, so cap it at the label plus padding (slots stay put).
   tabPillMaxPad = 16;
@@ -357,6 +363,7 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
 
   app.clearTapFlash();
   showBookOptionsMenu(optionPopup, title.c_str(), isStoreRow,
+                      I18N.getLanguage() == Language::HU ? "Rács nézet" : "Grid view",
                       [this, path, title](const BookOptionsAction action) {
                         swallowHeldReleases();
                         switch (action) {
@@ -380,6 +387,9 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
                             break;
                           case BookOptionsAction::RebuildLibrary:
                             promptRebuildIndex();
+                            break;
+                          case BookOptionsAction::SwitchView:
+                            openGridView();
                             break;
                         }
                       });
@@ -498,6 +508,35 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
   });
 }
 
+void LibraryListActivity::openGridView() {
+  if (!viewState) viewState = std::make_shared<LibraryViewState>();
+  viewState->activeSortTab = activeTabIndex;
+  viewState->descendingTabs = descendingTabs;
+  index.close();
+  auto grid = makeUniqueNoThrow<CoverGridBrowserActivity>(renderer, mappedInput, viewState, true);
+  if (!grid) {
+    LOG_ERR("LIB", "OOM: integrated Cover Grid");
+    index.open(library::libraryIndexPath());
+    return;
+  }
+  startActivityForResult(std::move(grid), [this](const ActivityResult&) {
+    if (!index.open(library::libraryIndexPath())) {
+      LOG_ERR("LIB", "cannot reopen library index after Grid");
+      return;
+    }
+    if (viewState) {
+      activeTabIndex = std::clamp(viewState->activeSortTab, 0, TAB_SLOTS - 1);
+      descendingTabs = viewState->descendingTabs;
+      sortOrder = orderForTab(activeTabIndex, descendingTabs);
+    }
+    resetAfterRebuild();
+    auto& nav = activeNav();
+    nav.selected = listCount() > 0 ? 1 : 0;
+    nav.top = 0;
+    requestUpdate(true);
+  });
+}
+
 void LibraryListActivity::openSearch() {
   app.clearTapFlash();
   // No key filtering here on purpose. Greying out the letters that lead nowhere
@@ -543,6 +582,10 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   activeTabIndex = index;
   sortOrder = orderForTab(index, descendingTabs);
+  if (viewState) {
+    viewState->activeSortTab = activeTabIndex;
+    viewState->descendingTabs = descendingTabs;
+  }
   // The filter and the overlap rows hold positions in the old order, so they
   // must be rebuilt after the active shelf changes.
   applyFilter();
