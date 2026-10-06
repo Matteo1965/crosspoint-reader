@@ -867,6 +867,7 @@ void CoverGridBrowserActivity::rebuildLibraryFromOptions() {
     return;
   }
   buildReadingShelves();
+  applyFilter();
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
