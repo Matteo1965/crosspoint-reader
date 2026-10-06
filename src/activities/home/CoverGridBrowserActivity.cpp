@@ -25,6 +25,7 @@
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookTitleUtils.h"
 #include "fontIds.h"
 #include "../reader/BookInfoActivity.h"
 #include "../util/BmpViewerActivity.h"
@@ -373,6 +374,7 @@ bool CoverGridBrowserActivity::loadPage() {
     if (!index_.readTitle(record, book.title) || book.title.empty()) index_.readName(record, book.title);
     index_.readAuthor(record, book.author);
     if (book.title.empty()) book.title = book.path;
+    book.title = bookui::cleanDisplayedBookTitle(book.title);
     Epub epub(book.path, "/.crosspoint");
     book.thumbPath = epub.getThumbBmpPath(thumbHeight());
     book.sortRow = sortRow;
