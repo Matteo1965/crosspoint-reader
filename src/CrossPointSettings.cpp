@@ -110,6 +110,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
     doc["dictionaryName"] = dictionaryName;
   }
   doc["wordSelectionMode"] = wordSelectionMode;
+  doc["libraryViewMode"] = libraryViewMode;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
