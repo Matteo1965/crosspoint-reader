@@ -194,6 +194,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  libraryViewMode = clamp(doc["libraryViewMode"] | (uint8_t)LIBRARY_LIST,
+                          (uint8_t)LIBRARY_VIEW_MODE_COUNT, (uint8_t)LIBRARY_LIST);
+
   if (legacyCoverGridTheme && doc["homeLayout"].isNull()) {
     uiTheme = ROUNDEDRAFF;
     homeLayout = HOME_COVER_GRID;
