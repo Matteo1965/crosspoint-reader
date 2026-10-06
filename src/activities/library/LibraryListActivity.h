@@ -110,7 +110,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Data
   void applyFilter();
   bool buildNewShelf();
-  uint16_t ordinalForShelfRow(int row) const;
+  uint16_t ordinalForShelfRow(int row);
   int bookRowCount() const;
   int rowFor(int entry) const;
   // fileName, when asked for, is the on-card name the row's icon derives from
