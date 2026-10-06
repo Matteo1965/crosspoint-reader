@@ -617,10 +617,17 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
 
 void CoverGridBrowserActivity::stepPage(const int delta) {
   const int gridTotal = std::max(0, totalBooks() - 1);
-  if (gridTotal <= 0) return;
+  if (gridTotal <= 0 || pinnedBook_.path.empty() || pinnedSortRow_ < 0) return;
   const int maxStart = ((gridTotal - 1) / 6) * 6;
   const int nextStart = std::clamp(pageStart_ + delta * 6, 0, maxStart);
   if (nextStart == pageStart_) return;
+
+  // Preserve the featured book by identity across lower-grid page changes.
+  // loadPage() may rebuild the six visible rows, but it must never replace
+  // the pinned book during this operation.
+  const GridBook featured = pinnedBook_;
+  const int featuredSortRow = pinnedSortRow_;
+
   pageStart_ = nextStart;
   selected_ = 0;
   previewSelected_ = 0;
@@ -628,6 +635,12 @@ void CoverGridBrowserActivity::stepPage(const int delta) {
   selectionFastRefresh_ = false;
   if (!openIndex()) return;
   loadPage();
+  if (!books_.empty()) {
+    pinnedBook_ = featured;
+    pinnedSortRow_ = featuredSortRow;
+    books_[0] = pinnedBook_;
+    resetGridSlots();
+  }
   index_.close();
   ensurePageThumbs();
   loadSelectedDetails();
