@@ -20,7 +20,10 @@
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/BookOptionsMenu.h"
 #include "components/UIScale.h"
+#include "activities/reader/BookInfoActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
@@ -274,6 +277,49 @@ void LibraryListActivity::onRowLongPress(const int index) {
 // Recent-shelf long-press menu (button hold and touch long-press). The first
 // rows may come from RecentBooksStore; the rest are index rows sorted by
 // modification time. Only store rows can be removed from recents.
+std::shared_ptr<Epub> LibraryListActivity::loadBookEpub(const std::string& path) {
+  auto epub = std::make_shared<Epub>(path, "/.crosspoint");
+  bool loaded = epub->load(false, true);
+  if (!loaded) loaded = epub->load(true, true);
+  if (!loaded) {
+    LOG_ERR("LIB", "cannot load EPUB for options: %s", path.c_str());
+    return {};
+  }
+  return epub;
+}
+
+void LibraryListActivity::openBookInfo(const std::string& path, const bool metadata) {
+  auto epub = loadBookEpub(path);
+  if (!epub) {
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(
+      std::make_unique<BookInfoActivity>(renderer, mappedInput, epub,
+                                         metadata ? BookInfoActivity::Page::Metadata
+                                                  : BookInfoActivity::Page::Description),
+      [this](const ActivityResult&) { requestUpdate(); });
+}
+
+void LibraryListActivity::openBookCover(const std::string& path) {
+  auto epub = loadBookEpub(path);
+  if (!epub) {
+    requestUpdate();
+    return;
+  }
+  std::string coverPath = epub->getBookCoverViewBmpPath();
+  if (!Storage.exists(coverPath.c_str())) epub->generateBookCoverViewBmp();
+  if (!Storage.exists(coverPath.c_str())) {
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(std::make_unique<BmpViewerActivity>(renderer, mappedInput, coverPath, true),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}
+
+// Shared long-Confirm book menu. The base entries are identical to Cover Grid;
+// only a pinned RecentBooksStore row gets the additional "remove from recent"
+// action.
 void LibraryListActivity::showRecentBookOptions(const int entry) {
   if (entry < 0 || entry >= listCount()) return;
 
@@ -292,41 +338,39 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     std::string author;
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record) || !index.readPath(record, path) ||
         !rowTextFor(entry, title, author)) {
-      LOG_ERR("LIB", "cannot resolve Recent row %d", entry);
+      LOG_ERR("LIB", "cannot resolve row %d", entry);
       return;
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
-                   [this, path, title, isStoreRow](const int choice) {
-                     swallowHeldReleases();
-                     switch (choice) {
-                       case 0:
-                         openBookByPath(path);
-                         break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
-                         break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
-                         break;
-                       case 3:
-                         if (isStoreRow) promptRebuildIndex();
-                         break;
-                       default:
-                         break;
-                     }
-                   });
+  showBookOptionsMenu(optionPopup, title.c_str(), isStoreRow,
+                      [this, path, title](const BookOptionsAction action) {
+                        swallowHeldReleases();
+                        switch (action) {
+                          case BookOptionsAction::Description:
+                            openBookInfo(path, false);
+                            break;
+                          case BookOptionsAction::Metadata:
+                            openBookInfo(path, true);
+                            break;
+                          case BookOptionsAction::ShowCover:
+                            openBookCover(path);
+                            break;
+                          case BookOptionsAction::Open:
+                            openBookByPath(path);
+                            break;
+                          case BookOptionsAction::RemoveFromRecent:
+                            promptRemoveRecentBook(path, title);
+                            break;
+                          case BookOptionsAction::Delete:
+                            promptDeleteBookByPath(path, title);
+                            break;
+                          case BookOptionsAction::RebuildLibrary:
+                            promptRebuildIndex();
+                            break;
+                        }
+                      });
   requestUpdate();
 }
 
