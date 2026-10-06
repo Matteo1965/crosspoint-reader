@@ -1,5 +1,5 @@
-name: CPHUN-212 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-212 queue restart
+name: CPHUN-213 Cover Grid Render Fix Build (X4 dev)
+# CPHUN-213 queue restart
 
 on:
   push:
@@ -13,14 +13,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-212-cover-page-detection
+      - agent/cphun-213-seven-cover-grid
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-212-cover-page-detection-${{ github.ref }}
+  group: cphun-213-seven-cover-grid-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-212-X4
+            artifact: CPHUN-213-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261005-212-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261006-213-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -89,7 +89,7 @@ jobs:
           # CPHUN-193 Library-backed 6-cover browser is first-class source.
           test -f src/activities/home/CoverGridBrowserActivity.cpp
           test -f src/activities/home/CoverGridBrowserActivity.h
-          grep -Fq 'static constexpr int PAGE_SIZE = 6;' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'static constexpr int PAGE_SIZE = 7;' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'library::LibraryIndexFile index_' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'showSelectedOptions' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'BookInfoActivity::Page::Metadata' src/activities/home/CoverGridBrowserActivity.cpp
@@ -100,6 +100,11 @@ jobs:
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
           grep -Fq 'coverH, 38, 276' src/activities/home/HomeActivity.cpp
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'gridBookIndices_[6]' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'descendingTabs_ = 2u' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'gridBookIndices_[selectedSlot] = oldPreview;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'const int featuredIndex = std::clamp(previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'book.thumbPath = epub.getThumbBmpPath(thumbHeight());' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'previewMatchesCursor' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'moveSelection(-1);' src/activities/home/CoverGridBrowserActivity.cpp
