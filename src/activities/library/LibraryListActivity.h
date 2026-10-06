@@ -47,16 +47,12 @@ class LibraryListActivity final : public UiTabListActivity {
   int activeTab() const override;
   const char* tabLabel(int index) const override;
   int tabWidthPercent(int index) const override {
-    if (SETTINGS.uiTheme != CrossPointSettings::ROUNDEDRAFF) return 0;
     static constexpr int widths[4] = {29, 32, 17, 22};
     return index >= 0 && index < 4 ? widths[index] : 0;
   }
-  int tabSideMarginPx() const override {
-    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 16 : 0;
-  }
-  int tabGapPx() const override {
-    return SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF ? 6 : 0;
-  }
+  int tabSideMarginPx() const override { return 28; }
+  int tabGapPx() const override { return 0; }
+  bool tabUnderlineOnly() const override { return true; }
   freeink::ui::TabIndicator tabIndicator(int index) const override;
   void onTabAction(int index) override;
   void stepTab(int direction) override;
