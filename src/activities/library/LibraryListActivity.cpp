@@ -86,6 +86,7 @@ void LibraryListActivity::onEnter() {
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
   backSortHoldActive = false;
+  frontTabHoldAction = 0;
   previewEntry = -1;
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
@@ -776,16 +777,31 @@ bool LibraryListActivity::handleButtons() {
     return true;
   }
 
+  if (frontTabHoldAction != 0) {
+    const auto held = frontTabHoldAction < 0 ? MappedInputManager::Button::Left
+                                             : MappedInputManager::Button::Right;
+    if (mappedInput.wasReleased(held)) frontTabHoldAction = 0;
+    return true;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::Left) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    frontTabHoldAction = -1;
+    stepTab(-1);
+    return true;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::Right) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    frontTabHoldAction = 1;
+    stepTab(1);
+    return true;
+  }
+
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
-    if (tabsFocused()) {
-      if (count > 0) {
-        nav.selected = 1;
-        requestUpdate();
-      }
-    } else if (count > 0 && !groupsCollapsed) {
-      showRecentBookOptions(selectedEntry());
-    } else if (groupsCollapsed) {
+    if (groupsCollapsed) {
       expandGroup(selectedEntry());
+    } else if (count > 0) {
+      if (tabsFocused()) nav.selected = 1;
+      showRecentBookOptions(selectedEntry());
     }
     return true;
   }
@@ -834,9 +850,9 @@ void LibraryListActivity::navigateButtons() {
       moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
     }
   });
-  // CPHUN-215: #3/#4 long press always changes the sort tab, matching Cover Grid.
-  buttonNavigator.onNextContinuous([this, count, &nav] { stepTab(1); });
-  buttonNavigator.onPreviousContinuous([this, count, &nav] { stepTab(-1); });
+  // #3/#4 long press is handled once per hold in handleButtons(), matching Cover Grid.
+  buttonNavigator.onNextContinuous([] {});
+  buttonNavigator.onPreviousContinuous([] {});
 }
 
 void LibraryListActivity::buildRows(UiScreen& screen) {
