@@ -87,7 +87,6 @@ void LibraryListActivity::onEnter() {
   UiTabListActivity::onEnter();
   backSortHoldActive = false;
   frontTabHoldAction = 0;
-  previewEntry = -1;
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
 
@@ -485,7 +484,6 @@ void LibraryListActivity::onTabAction(const int index) {
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
   if (index < 0 || index >= TAB_SLOTS) return;
-  previewEntry = -1;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   activeTabIndex = index;
   sortOrder = orderForTab(index, descendingTabs);
@@ -822,23 +820,15 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      if (count > 0) {
-        nav.selected = 1;
-        previewEntry = 0;
-        requestUpdate();
-      }
+      if (count > 0) nav.selected = 1;
       return true;
     }
     if (count > 0) {
       const int entry = selectedEntry();
-      if (groupsCollapsed) {
+      if (groupsCollapsed)
         expandGroup(entry);
-      } else if (previewEntry == entry) {
+      else
         openSelectedBook();
-      } else {
-        previewEntry = entry;
-        requestUpdate();
-      }
     }
     return true;
   }
@@ -1085,9 +1075,7 @@ void LibraryListActivity::drawFooter() {
   drawHoldHelp();
 
   const char* backLabel = tr(STR_BACK);
-  const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT)
-      : (!tabsFocused() && previewEntry == selectedEntry() ? tr(STR_OPEN)
-          : (I18N.getLanguage() == Language::HU ? "Előnézet" : "Preview"));
+  const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
