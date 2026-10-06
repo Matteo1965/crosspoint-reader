@@ -82,7 +82,7 @@ class CoverGridBrowserActivity final : public Activity {
   int previewSelected_ = 0;
   int gridBookIndices_[6] = {-1, -1, -1, -1, -1, -1};
   int activeSortTab_ = 0;
-  uint8_t descendingTabs_ = 3u;  // Recent ascending; New descending; Title/Author ascending.
+  uint8_t descendingTabs_ = 3u;  // Recent/New newest first; Title/Author ascending.
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
