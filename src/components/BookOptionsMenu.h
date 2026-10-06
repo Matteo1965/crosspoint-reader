@@ -2,6 +2,7 @@
 
 #include <I18n.h>
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <utility>
@@ -22,7 +23,7 @@ inline void showBookOptionsMenu(OptionPopup& popup, const char* title, const boo
                                 std::function<void(BookOptionsAction)> onSelect) {
   const bool hu = I18N.getLanguage() == Language::HU;
   const char* options[7] = {};
-  BookOptionsAction actions[7] = {};
+  std::array<BookOptionsAction, 7> actions{};
   int count = 0;
 
   options[count] = hu ? "Fülszöveg" : "Description";
@@ -41,7 +42,7 @@ inline void showBookOptionsMenu(OptionPopup& popup, const char* title, const boo
 
   options[count] = tr(STR_DELETE);
   actions[count++] = BookOptionsAction::Delete;
-  options[count] = tr(STR_LIBRARY_REBUILD);
+  options[count] = hu ? "Könyvtár frissítése" : "Refresh library";
   actions[count++] = BookOptionsAction::RebuildLibrary;
 
   popup.showMultilineTitle(title, options, count, 0,
