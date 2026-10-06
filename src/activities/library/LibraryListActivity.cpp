@@ -509,9 +509,8 @@ int LibraryListActivity::activeTab() const { return activeTabIndex; }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
 
-fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
-  if (index != activeTab()) return fui::TabIndicator::None;
-  return isDescending(sortOrder) ? fui::TabIndicator::Down : fui::TabIndicator::Up;
+fui::TabIndicator LibraryListActivity::tabIndicator(const int) const {
+  return fui::TabIndicator::None;
 }
 
 int LibraryListActivity::bookRowCount() const {
