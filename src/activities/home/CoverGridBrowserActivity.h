@@ -54,6 +54,8 @@ class CoverGridBrowserActivity final : public Activity {
   void stepPage(int delta);
 
   void showSelectedOptions();
+  void promptDeleteSelected();
+  void rebuildLibraryFromOptions();
   void openSelectedBook();
   void openSelectedInfo(bool metadata);
   void openSelectedCover();
