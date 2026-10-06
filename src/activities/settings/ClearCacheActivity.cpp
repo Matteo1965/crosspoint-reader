@@ -126,12 +126,30 @@ void ClearCacheActivity::clearCache() {
   root.close();
 
   for (const auto& fullPath : targets) {
-    LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
-    const bool removed = Storage.removeDir(fullPath.c_str());
-    if (removed && !Storage.exists(fullPath.c_str())) {
+    LOG_DBG("CLEAR_CACHE", "Clearing cache while preserving progress: %s", fullPath.c_str());
+    const std::string progressPath = fullPath + "/progress.bin";
+    const std::string keepPath = fullPath + ".progress.keep";
+    const bool hadProgress = Storage.exists(progressPath.c_str());
+
+    bool progressMoved = true;
+    if (hadProgress) {
+      if (Storage.exists(keepPath.c_str())) Storage.remove(keepPath.c_str());
+      progressMoved = Storage.rename(progressPath.c_str(), keepPath.c_str());
+    }
+
+    const bool removed = progressMoved && Storage.removeDir(fullPath.c_str());
+    bool restored = true;
+    if (removed && hadProgress) {
+      restored = Storage.mkdir(fullPath.c_str(), true) &&
+                 Storage.rename(keepPath.c_str(), progressPath.c_str());
+    } else if (!removed && hadProgress && progressMoved && Storage.exists(keepPath.c_str())) {
+      restored = Storage.rename(keepPath.c_str(), progressPath.c_str());
+    }
+
+    if (removed && restored) {
       clearedCount++;
     } else {
-      LOG_ERR("CLEAR_CACHE", "Failed to remove completely: %s", fullPath.c_str());
+      LOG_ERR("CLEAR_CACHE", "Failed to clear cache safely: %s", fullPath.c_str());
       failedCount++;
     }
   }
