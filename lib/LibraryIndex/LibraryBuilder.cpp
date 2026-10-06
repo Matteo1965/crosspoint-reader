@@ -24,6 +24,7 @@ constexpr char NEW_PATH[] = "/.crosspoint/library.new";
 constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
 constexpr char DIRTY_PATH[] = "/.crosspoint/library.dirty";
+constexpr char SIGNATURE_PATH[] = "/.crosspoint/library.sig";
 constexpr char CACHE_DIR[] = "/.crosspoint";
 // Sticky fallback when the marker could not be persisted (card unavailable at
 // write time): callers must still see the index as stale until a rebuild clears it.
@@ -88,6 +89,75 @@ bool sortKeyLess(const SortKey& a, const SortKey& b) {
 // work between yields.
 void serviceBuilder(uint32_t& workUnits) {
   if ((++workUnits & 0x1Fu) == 0) delay(1);
+}
+
+struct LibraryFingerprint {
+  uint32_t count = 0;
+  uint64_t hash = 1469598103934665603ULL;
+  bool ok = true;
+};
+
+uint64_t fingerprintMix(uint64_t hash, const void* data, size_t len) {
+  const auto* bytes = static_cast<const uint8_t*>(data);
+  for (size_t i = 0; i < len; ++i) {
+    hash ^= bytes[i];
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+void scanLibraryFingerprint(const std::string& path, const int depth, LibraryFingerprint& fp) {
+  if (!fp.ok || depth > LIBRARY_MAX_DEPTH) return;
+  HalFile dir = Storage.open(path.c_str());
+  if (!dir || !dir.isDirectory()) {
+    if (dir) dir.close();
+    fp.ok = false;
+    return;
+  }
+  dir.rewindDirectory();
+  char name[NAME_BUF_SIZE];
+  for (HalFile file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    file.getName(name, sizeof(name));
+    if (name[0] == '\0' || isHiddenOrSidecar(name)) {
+      file.close();
+      continue;
+    }
+    std::string fullPath = path;
+    if (fullPath.size() > 1 && fullPath.back() == '/') fullPath.pop_back();
+    if (fullPath != "/") fullPath.push_back('/');
+    fullPath += name;
+    if (file.isDirectory()) {
+      file.close();
+      scanLibraryFingerprint(fullPath, depth + 1, fp);
+      continue;
+    }
+    if (isBookName(name)) {
+      const uint32_t size = static_cast<uint32_t>(file.fileSize());
+      const uint32_t mtime = file.modificationTime();
+      uint64_t item = 1469598103934665603ULL;
+      item = fingerprintMix(item, fullPath.data(), fullPath.size());
+      item = fingerprintMix(item, &size, sizeof(size));
+      item = fingerprintMix(item, &mtime, sizeof(mtime));
+      // XOR makes the aggregate independent of directory enumeration order.
+      fp.hash ^= item + 0x9e3779b97f4a7c15ULL + (item << 6) + (item >> 2);
+      ++fp.count;
+    }
+    file.close();
+  }
+  dir.close();
+}
+
+bool computeLibraryFingerprint(const char* rootPath, LibraryFingerprint& fp) {
+  if (!rootPath || rootPath[0] != '/') return false;
+  HalFile root = Storage.open(rootPath);
+  if (!root || !root.isDirectory()) {
+    if (root) root.close();
+    return false;
+  }
+  root.close();
+  fp.hash = fingerprintMix(fp.hash, rootPath, strlen(rootPath));
+  scanLibraryFingerprint(rootPath, 0, fp);
+  return fp.ok;
 }
 
 bool recoverInterruptedInstall() {
@@ -1195,6 +1265,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
             static_cast<unsigned>(stats.metadataReused), static_cast<unsigned>(stats.parsed),
             static_cast<unsigned>(stats.walkMs));
     clearLibraryIndexDirty();
+    updateLibraryFingerprint(rootPath);
     return true;
   }
 
@@ -1377,8 +1448,38 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
           static_cast<unsigned>(stats.parsed), static_cast<unsigned>(stats.metadataReused),
           static_cast<unsigned>(stats.indexReplaced), static_cast<unsigned>(stats.duplicatesDropped),
           static_cast<unsigned>(stats.unreadableSkipped), static_cast<unsigned>(stats.walkMs));
-  if (ok) clearLibraryIndexDirty();
+  if (ok) {
+    clearLibraryIndexDirty();
+    updateLibraryFingerprint(rootPath);
+  }
   return ok;
+}
+
+bool libraryRootAvailable(const char* rootPath) {
+  if (!rootPath || rootPath[0] != '/') return false;
+  HalFile root = Storage.open(rootPath);
+  const bool ok = root && root.isDirectory();
+  if (root) root.close();
+  return ok;
+}
+
+bool libraryContentChanged(const char* rootPath) {
+  LibraryFingerprint current;
+  if (!computeLibraryFingerprint(rootPath, current)) return false;
+  const String saved = Storage.readFile(SIGNATURE_PATH);
+  unsigned long savedCount = 0;
+  unsigned long long savedHash = 0;
+  if (saved.isEmpty() || sscanf(saved.c_str(), "%lu %llu", &savedCount, &savedHash) != 2) return true;
+  return savedCount != current.count || savedHash != current.hash;
+}
+
+bool updateLibraryFingerprint(const char* rootPath) {
+  LibraryFingerprint current;
+  if (!computeLibraryFingerprint(rootPath, current)) return false;
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%lu %llu", static_cast<unsigned long>(current.count),
+           static_cast<unsigned long long>(current.hash));
+  return Storage.writeFile(SIGNATURE_PATH, String(buf));
 }
 
 }  // namespace library
