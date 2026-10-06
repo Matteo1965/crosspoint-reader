@@ -1,5 +1,5 @@
-name: CPHUN-220 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-220 queue restart
+name: CPHUN-221 Cover Grid Render Fix Build (X4 dev)
+# CPHUN-221 queue restart
 
 on:
   push:
@@ -13,7 +13,7 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-220-shared-book-options
+      - agent/cphun-221-library-grid-integration
   workflow_dispatch:
 
 permissions:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-220-X4
+            artifact: CPHUN-221-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261006-220-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261006-221-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -122,6 +122,13 @@ jobs:
           grep -Fq 'BookOptionsAction::Description' src/components/BookOptionsMenu.h
           grep -Fq 'BookOptionsAction::Delete' src/components/BookOptionsMenu.h
           grep -Fq 'BookOptionsAction::RebuildLibrary' src/components/BookOptionsMenu.h
+          grep -Fq 'BookOptionsAction::SwitchView' src/components/BookOptionsMenu.h
+          grep -Fq 'Rács nézet' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'Lista nézet' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'LibraryViewStatePtr' src/activities/library/LibraryViewState.h
+          grep -Fq 'cleanDisplayedBookTitle' src/util/BookTitleUtils.h
+          grep -Fq '"test"' src/util/BookTitleUtils.h
+          grep -Fq 'if (!pendingVirtualChapterJump) advancePastSkippedSpines(true);' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'int tabSideMarginPx() const override { return 28; }' src/activities/library/LibraryListActivity.h
           grep -Fq 'const GridBook featured = pinnedBook_;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'descendingTabs_ = 2u' src/activities/home/CoverGridBrowserActivity.h
