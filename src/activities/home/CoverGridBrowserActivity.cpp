@@ -8,6 +8,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
+#include <LibraryText.h>
 #include <Memory.h>
 
 #include <Arduino.h>
@@ -24,6 +25,7 @@
 #include "components/UITheme.h"
 #include "RecentBooksStore.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookTitleUtils.h"
 #include "fontIds.h"
@@ -235,6 +237,7 @@ void CoverGridBrowserActivity::onEnter() {
   }
 
   buildReadingShelves();
+  applyFilter();
   loadPage();
   index_.close();
   ensurePageThumbs();
@@ -277,13 +280,18 @@ library::SortOrder CoverGridBrowserActivity::sortOrder() const {
   return desc ? library::SortOrder::RecentDesc : library::SortOrder::RecentAsc;
 }
 
-int CoverGridBrowserActivity::totalBooks() const {
+int CoverGridBrowserActivity::rawTotalBooks() const {
   if (activeSortTab_ == 0) return static_cast<int>(recentOrdinals_.size());
   if (activeSortTab_ == 1) return static_cast<int>(newOrdinals_.size());
   return totalBooks_;
 }
 
-uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) {
+int CoverGridBrowserActivity::totalBooks() const {
+  if (viewState_ && !viewState_->searchQuery.empty()) return static_cast<int>(filteredRows_.size());
+  return rawTotalBooks();
+}
+
+uint16_t CoverGridBrowserActivity::ordinalForUnfilteredActiveRow(const int row) {
   if (row < 0) return 0xFFFF;
   const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
   if (activeSortTab_ == 0 || activeSortTab_ == 1) {
@@ -293,6 +301,38 @@ uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) {
     return ordinals[pos];
   }
   return index_.ordinalForRow(sortOrder(), static_cast<uint16_t>(row));
+}
+
+uint16_t CoverGridBrowserActivity::ordinalForActiveRow(const int row) {
+  if (row < 0) return 0xFFFF;
+  int sourceRow = row;
+  if (viewState_ && !viewState_->searchQuery.empty()) {
+    if (row >= static_cast<int>(filteredRows_.size())) return 0xFFFF;
+    sourceRow = filteredRows_[static_cast<size_t>(row)];
+  }
+  return ordinalForUnfilteredActiveRow(sourceRow);
+}
+
+void CoverGridBrowserActivity::applyFilter() {
+  filteredRows_.clear();
+  if (!viewState_ || viewState_->searchQuery.empty() || !index_.isOpen()) return;
+
+  const std::string needle = library::fold(viewState_->searchQuery);
+  const int total = rawTotalBooks();
+  filteredRows_.reserve(static_cast<size_t>(total));
+  for (int row = 0; row < total; ++row) {
+    const uint16_t ordinal = ordinalForUnfilteredActiveRow(row);
+    library::ClixRecord record{};
+    if (ordinal == 0xFFFF || !index_.readRecord(ordinal, record)) continue;
+    if (library::matchesQuery(std::string_view(record.fold, record.foldLen), needle)) {
+      filteredRows_.push_back(static_cast<uint16_t>(row));
+      continue;
+    }
+    std::string author;
+    if (index_.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
+      filteredRows_.push_back(static_cast<uint16_t>(row));
+    }
+  }
 }
 
 bool CoverGridBrowserActivity::buildReadingShelves() {
@@ -565,6 +605,7 @@ bool CoverGridBrowserActivity::reopenAfterChild() {
   // the current six-book page.
   if (openIndex()) {
     buildReadingShelves();
+    applyFilter();
     pinnedSortRow_ = -1;
     pinnedBook_ = GridBook{};
     loadPage();
@@ -594,6 +635,7 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   pinnedSortRow_ = -1;
   pinnedBook_ = GridBook{};
   if (!openIndex()) return;
+  applyFilter();
   loadPage();
   index_.close();
   ensurePageThumbs();
@@ -613,6 +655,7 @@ void CoverGridBrowserActivity::toggleSortDirection() {
   pinnedSortRow_ = -1;
   pinnedBook_ = GridBook{};
   if (!openIndex()) return;
+  applyFilter();
   loadPage();
   index_.close();
   ensurePageThumbs();
@@ -726,6 +769,7 @@ void CoverGridBrowserActivity::showSelectedOptions() {
   if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
   showBookOptionsMenu(optionPopup_, books_[selected_].title.c_str(), false,
                       I18N.getLanguage() == Language::HU ? "Lista nézet" : "List view",
+                      viewState_ && !viewState_->searchQuery.empty(),
                       [this](const BookOptionsAction action) {
                         switch (action) {
                           case BookOptionsAction::Description:
@@ -758,9 +802,60 @@ void CoverGridBrowserActivity::showSelectedOptions() {
                               activityManager.goToLibrary();
                             }
                             break;
+                          case BookOptionsAction::Search:
+                            openSearch();
+                            break;
+                          case BookOptionsAction::ClearSearch:
+                            clearSearch();
+                            break;
                         }
                       });
   requestUpdate();
+}
+
+void CoverGridBrowserActivity::openSearch() {
+  if (!viewState_) viewState_ = std::make_shared<LibraryViewState>();
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(
+      renderer, mappedInput, tr(STR_LIBRARY_SEARCH), viewState_->searchQuery, 48, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("GRID", "OOM: search keyboard");
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled) return;
+    viewState_->searchQuery = std::get<KeyboardResult>(result.data).text;
+    if (!openIndex()) return;
+    applyFilter();
+    pageStart_ = 0;
+    selected_ = 0;
+    previewSelected_ = 0;
+    pinnedSortRow_ = -1;
+    pinnedBook_ = GridBook{};
+    loadPage();
+    index_.close();
+    thumbnailsReady_ = false;
+    ensurePageThumbs();
+    loadSelectedDetails();
+    requestUpdate(true);
+  });
+}
+
+void CoverGridBrowserActivity::clearSearch() {
+  if (!viewState_ || viewState_->searchQuery.empty()) return;
+  viewState_->searchQuery.clear();
+  filteredRows_.clear();
+  if (!openIndex()) return;
+  pageStart_ = 0;
+  selected_ = 0;
+  previewSelected_ = 0;
+  pinnedSortRow_ = -1;
+  pinnedBook_ = GridBook{};
+  loadPage();
+  index_.close();
+  thumbnailsReady_ = false;
+  ensurePageThumbs();
+  loadSelectedDetails();
+  requestUpdate(true);
 }
 
 void CoverGridBrowserActivity::rebuildLibraryFromOptions() {
@@ -942,7 +1037,7 @@ void CoverGridBrowserActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (integrated_)
-      finish();
+      onGoHome(HomeMenuItem::LIBRARY);
     else
       onGoHome();
     return;
