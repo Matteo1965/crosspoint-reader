@@ -749,7 +749,14 @@ void CoverGridBrowserActivity::showSelectedOptions() {
                           case BookOptionsAction::RemoveFromRecent:
                             break;
                           case BookOptionsAction::SwitchView:
-                            if (integrated_) finish();
+                            SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_LIST;
+                            SETTINGS.saveToFile();
+                            if (integrated_) {
+                              setResult(MenuResult{});
+                              finish();
+                            } else {
+                              activityManager.goToLibrary();
+                            }
                             break;
                         }
                       });
