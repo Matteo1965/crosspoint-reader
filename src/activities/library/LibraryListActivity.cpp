@@ -7,6 +7,7 @@
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <LibraryText.h>
+#include <Epub.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <Utf8.h>
@@ -33,8 +34,9 @@ constexpr int SIDE_PADDING = 12;
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
 constexpr int RECENT_TAB = 0;
-constexpr int TITLE_TAB = 1;
-constexpr int AUTHOR_TAB = 2;
+constexpr int NEW_TAB = 1;
+constexpr int TITLE_TAB = 2;
+constexpr int AUTHOR_TAB = 3;
 constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
 
 constexpr bool isDescending(const library::SortOrder order) {
@@ -58,9 +60,12 @@ constexpr library::SortOrder orderForTab(const int tab, const uint8_t descending
 }
 
 const char* tabLabelFor(const int tab) {
-  if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
-  if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_RECENT);
+  if (I18N.getLanguage() == Language::HU) {
+    static constexpr const char* HU[] = {"Legutóbbi", "Újdonságok", "Címek", "Szerzők"};
+    return tab >= 0 && tab < 4 ? HU[tab] : "";
+  }
+  static constexpr const char* EN[] = {"Recent", "New", "Titles", "Authors"};
+  return tab >= 0 && tab < 4 ? EN[tab] : "";
 }
 
 }  // namespace
@@ -98,13 +103,14 @@ void LibraryListActivity::onEnter() {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     rebuildIndex();
-    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
+    if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot open library index");
   }
   degraded = index.isOpen() && index.ranksDegraded();
   if (index.isOpen() && index.dedupDegraded()) {
     LOG_ERR("LIB", "index was built without duplicate detection");
   }
   resolvePinned();
+  buildNewShelf();
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -114,6 +120,7 @@ void LibraryListActivity::onEnter() {
 
 void LibraryListActivity::onExit() {
   index.close();
+  newOrdinals.clear();
   Activity::onExit();
 }
 
@@ -206,7 +213,7 @@ void LibraryListActivity::openSelectedBook() {
     path = books[pinnedBookIndices[selectedEntry()]].path;
   } else {
     if (!index.isOpen()) return;
-    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
+    const uint16_t ordinal = ordinalForShelfRow(rowFor(selectedEntry()));
     if (ordinal == 0xFFFF) return;
 
     library::ClixRecord record{};
@@ -265,12 +272,12 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   const bool isStoreRow = entry < pinnedCount();
   if (isStoreRow) {
     const auto& books = RECENT_BOOKS.getBooks();
-    if (entry >= static_cast<int>(books.size())) return;
+    if (entry >= static_cast<int>(books.size()) return;
     path = books[pinnedBookIndices[entry]].path;
     title = books[pinnedBookIndices[entry]].title;
   } else {
     if (!index.isOpen()) return;
-    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+    const uint16_t ordinal = ordinalForShelfRow(rowFor(entry));
     library::ClixRecord record{};
     std::string author;
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record) || !index.readPath(record, path) ||
@@ -321,13 +328,14 @@ void LibraryListActivity::promptRebuildIndex() {
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
   index.close();
   rebuildIndex();
-  if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
+  if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot open library index");
   resetAfterRebuild();
   requestUpdate(true);
 }
 
 void LibraryListActivity::resetAfterRebuild() {
   // Sort positions, group starts, and pinned rows all point into the old order.
+  buildNewShelf();
   applyFilter();
   resolvePinned();
   auto& nav = activeNav();
@@ -347,13 +355,13 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
       makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title);
   if (!confirmation) {
     LOG_ERR("LIB", "OOM: recent removal confirmation");
-    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    if (reopenIndex && !index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
     return;
   }
 
   startActivityForResult(std::move(confirmation), [this, path, reopenIndex](const ActivityResult& result) {
     swallowHeldReleases();
-    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    if (reopenIndex && !index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
     if (!result.isCancelled && RECENT_BOOKS.removeByPath(path)) {
       resolvePinned();
       closeRouting();
@@ -371,7 +379,7 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
 
 void LibraryListActivity::promptDeleteBook(const int entry) {
   if (!index.isOpen() || entry < 0 || entry >= bookRowCount()) return;
-  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  const uint16_t ordinal = ordinalForShelfRow(rowFor(entry));
   if (ordinal == 0xFFFF) return;
 
   std::string path;
@@ -393,7 +401,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title);
   if (!confirmation) {
     LOG_ERR("LIB", "OOM: delete confirmation");
-    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
     return;
   }
 
@@ -407,12 +415,12 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       if (!result.isCancelled) {
         LOG_DBG("LIB", "deleting %s", path.c_str());
         clearBookCache(path);
-        if (!Storage.remove(path.c_str())) LOG_ERR("LIB", "cannot delete %s", path.c_str());
+        if (!Storage.remove(path.c_str()) LOG_ERR("LIB", "cannot delete %s", path.c_str());
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
       }
-      if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+      if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
       if (!result.isCancelled) {
         resetAfterRebuild();
       }
@@ -468,11 +476,11 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
   if (index < 0 || index >= TAB_SLOTS) return;
   previewEntry = -1;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+  activeTabIndex = index;
   sortOrder = orderForTab(index, descendingTabs);
   // The filter and the overlap rows hold positions in the old order, so they
-  // must be rebuilt.
+  // must be rebuilt after the active shelf changes.
   applyFilter();
-  activeTabIndex = index;
   refreshOverlap();
   // Tab changes happen only while the bar owns focus. A tab's remembered row
   // must not pull focus back into the list after the switch.
@@ -497,6 +505,7 @@ fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
 
 int LibraryListActivity::bookRowCount() const {
   if (!query.empty()) return static_cast<int>(filteredCount);
+  if (activeTabIndex == NEW_TAB) return static_cast<int>(newOrdinals.size());
   // Pinned books already in the index are skipped below the pins, not doubled;
   // pinned books the index missed still show, so the difference stays split.
   const int pinned = pinnedCount();
@@ -509,6 +518,39 @@ int LibraryListActivity::listCount() const { return groupsCollapsed ? static_cas
 // unfiltered and unpinned, so the shelf costs nothing when nothing is typed.
 // With pins active, entries below pinnedCount() belong to the store and must
 // not reach this; the rest walk past the pinned books' own sort rows.
+uint16_t LibraryListActivity::ordinalForShelfRow(const int row) const {
+  if (row < 0) return 0xFFFF;
+  if (activeTabIndex == NEW_TAB) {
+    if (row >= static_cast<int>(newOrdinals.size()) return 0xFFFF;
+    const bool descending = (descendingTabs & static_cast<uint8_t>(1u << NEW_TAB)) != 0;
+    const size_t pos = descending ? newOrdinals.size() - 1 - static_cast<size_t>(row) : static_cast<size_t>(row);
+    return newOrdinals[pos];
+  }
+  return index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
+}
+
+bool LibraryListActivity::buildNewShelf() {
+  newOrdinals.clear();
+  if (!index.isOpen()) return false;
+  const int total = static_cast<int>(index.bookCount());
+  newOrdinals.reserve(total);
+  for (int row = 0; row < total; ++row) {
+    const uint16_t ordinal = index.ordinalForRow(library::SortOrder::RecentAsc, static_cast<uint16_t>(row));
+    if (ordinal == 0xFFFF) continue;
+    library::ClixRecord record{};
+    std::string path;
+    if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) continue;
+    Epub epub(path, "/.crosspoint");
+    HalFile progressFile;
+    if (!Storage.openFileForRead("LIB", epub.getCachePath() + "/progress.bin", progressFile)) {
+      newOrdinals.push_back(ordinal);
+    } else {
+      progressFile.close();
+    }
+  }
+  return true;
+}
+
 int LibraryListActivity::rowFor(const int entry) const {
   if (!query.empty()) {
     if (entry < 0 || entry >= static_cast<int>(filteredCount) || !filtered) return 0;
@@ -526,7 +568,7 @@ int LibraryListActivity::rowFor(const int entry) const {
 bool LibraryListActivity::groupable() const { return !degraded && !isRecentSort(sortOrder) && bookRowCount() > 0; }
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
-  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  const uint16_t ordinal = ordinalForShelfRow(rowFor(entry));
   library::ClixRecord record{};
   if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) return 0;
   return library::foldedGroupInitial(std::string_view(record.fold, record.foldLen));
@@ -538,7 +580,7 @@ bool LibraryListActivity::buildGroupStarts() {
   if (groupCapacity < count) {
     auto starts = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(count));
     if (!starts) {
-      LOG_ERR("LIB", "cannot allocate %u-byte group map", static_cast<unsigned>(count * sizeof(uint16_t)));
+      LOG_ERR("LIB", "cannot allocate %u-byte group map", static_cast<unsigned>(count * sizeof(uint16_t));
       return false;
     }
     groupStarts = std::move(starts);
@@ -567,7 +609,7 @@ bool LibraryListActivity::buildGroupStarts() {
     if (startsGroup) groupStarts[groupCount++] = static_cast<uint16_t>(entry);
   }
   LOG_DBG("LIB", "group map: %u groups, %u bytes", static_cast<unsigned>(groupCount),
-          static_cast<unsigned>(groupCapacity * sizeof(uint16_t)));
+          static_cast<unsigned>(groupCapacity * sizeof(uint16_t));
   return groupCount > 0;
 }
 
@@ -622,12 +664,13 @@ void LibraryListActivity::applyFilter() {
   if (query.empty()) return;
 
   const std::string needle = library::fold(query);
-  const int total = static_cast<int>(index.bookCount());
+  const int total = activeTabIndex == NEW_TAB ? static_cast<int>(newOrdinals.size())
+                                               : static_cast<int>(index.bookCount());
   if (total <= 0) return;
 
   auto matches = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(total));
   if (!matches) {
-    LOG_ERR("LIB", "cannot allocate %u-byte search result buffer", static_cast<unsigned>(total * sizeof(uint16_t)));
+    LOG_ERR("LIB", "cannot allocate %u-byte search result buffer", static_cast<unsigned>(total * sizeof(uint16_t));
     filterFailed = true;
     return;
   }
@@ -635,7 +678,7 @@ void LibraryListActivity::applyFilter() {
   uint16_t matchCount = 0;
   std::string author;
   for (int row = 0; row < total; row++) {
-    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
+    const uint16_t ordinal = ordinalForShelfRow(row);
     library::ClixRecord record{};
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
     if (library::matchesQuery(std::string_view(record.fold, record.foldLen), needle)) {
@@ -679,7 +722,7 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
     if (fileName) *fileName = book.path;
     return true;
   }
-  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  const uint16_t ordinal = ordinalForShelfRow(rowFor(entry));
   library::ClixRecord record{};
   if (ordinal != 0xFFFF && index.readRecord(ordinal, record)) {
     // The build already decided both fields — from the book's own metadata when
@@ -756,7 +799,7 @@ bool LibraryListActivity::handleButtons() {
     if (tabsFocused()) {
       if (count > 0) {
         nav.selected = 1;
-        previewEntry = -1;
+        previewEntry = 0;
         requestUpdate();
       }
       return true;
@@ -791,23 +834,9 @@ void LibraryListActivity::navigateButtons() {
       moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
     }
   });
-  // A held button steps tabs while the strip has focus (the base behaviour
-  // Settings keeps) and page-jumps once the selection is down in the rows,
-  // where fast travel through a long shelf is what a hold means.
-  buttonNavigator.onNextContinuous([this, count, &nav] {
-    if (tabsFocused()) {
-      stepTab(1);
-    } else if (count > 0) {
-      moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
-    }
-  });
-  buttonNavigator.onPreviousContinuous([this, count, &nav] {
-    if (tabsFocused()) {
-      stepTab(-1);
-    } else if (count > 0) {
-      moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
-    }
-  });
+  // CPHUN-215: #3/#4 long press always changes the sort tab, matching Cover Grid.
+  buttonNavigator.onNextContinuous([this, count, &nav] { stepTab(1); });
+  buttonNavigator.onPreviousContinuous([this, count, &nav] { stepTab(-1); });
 }
 
 void LibraryListActivity::buildRows(UiScreen& screen) {
