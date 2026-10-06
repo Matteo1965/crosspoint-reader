@@ -197,7 +197,7 @@ void CoverGridBrowserActivity::onEnter() {
   selected_ = 0;
   previewSelected_ = 0;
   activeSortTab_ = 0;
-  descendingTabs_ = 3u;  // Recent/New descending, Title/Author ascending.
+  descendingTabs_ = 2u;  // Recent ascending; New descending; Title/Author ascending.
   thumbnailsReady_ = false;
   thumbnailsLoading_ = false;
   previousSelected_ = -1;
@@ -329,8 +329,8 @@ int CoverGridBrowserActivity::globalSelection() const {
 }
 
 int CoverGridBrowserActivity::thumbHeight() const {
-  // One thumbnail size feeds both the six cells and the highlighted preview.
-  // This keeps the page to six unique cover cache files.
+  // One thumbnail size feeds the six grid cells and the highlighted preview.
+  // CPHUN-213 keeps seven unique books per page without duplicate cover files.
   return 220;
 }
 
@@ -370,9 +370,12 @@ bool CoverGridBrowserActivity::loadPage() {
 
   if (books_.empty()) {
     selected_ = 0;
+    previewSelected_ = 0;
   } else {
     selected_ = std::clamp(selected_, 0, static_cast<int>(books_.size()) - 1);
+    previewSelected_ = std::clamp(previewSelected_, 0, static_cast<int>(books_.size()) - 1);
   }
+  resetGridSlots();
   return true;
 }
 
@@ -704,13 +707,42 @@ bool CoverGridBrowserActivity::hitSortTab(const int x, const int y, int& tab) co
   return false;
 }
 
+void CoverGridBrowserActivity::resetGridSlots() {
+  for (int& bookIndex : gridBookIndices_) bookIndex = -1;
+  int slot = 0;
+  for (int bookIndex = 0; bookIndex < static_cast<int>(books_.size()) && slot < 6; ++bookIndex) {
+    if (bookIndex == previewSelected_) continue;
+    gridBookIndices_[slot++] = bookIndex;
+  }
+}
+
+int CoverGridBrowserActivity::gridSlotForBook(const int bookIndex) const {
+  for (int slot = 0; slot < 6; ++slot) {
+    if (gridBookIndices_[slot] == bookIndex) return slot;
+  }
+  return -1;
+}
+
+Rect CoverGridBrowserActivity::coverRectForBook(const int bookIndex) const {
+  if (bookIndex == previewSelected_) return Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H};
+  const int slot = gridSlotForBook(bookIndex);
+  if (slot < 0) return Rect{0, 0, 0, 0};
+  const int col = slot % GRID_COLS;
+  const int row = slot / GRID_COLS;
+  return Rect{GRID_LEFT + col * (GRID_W + GRID_GAP_X),
+              GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0),
+              GRID_W, GRID_H};
+}
+
 int CoverGridBrowserActivity::hitGridCover(const int x, const int y) const {
-  for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
-    const int col = i % GRID_COLS;
-    const int row = i / GRID_COLS;
+  for (int slot = 0; slot < 6; ++slot) {
+    const int bookIndex = gridBookIndices_[slot];
+    if (bookIndex < 0 || bookIndex >= static_cast<int>(books_.size())) continue;
+    const int col = slot % GRID_COLS;
+    const int row = slot / GRID_COLS;
     const int rx = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
     const int ry = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
-    if (x >= rx && x < rx + GRID_W && y >= ry && y < ry + GRID_H) return i;
+    if (x >= rx && x < rx + GRID_W && y >= ry && y < ry + GRID_H) return bookIndex;
   }
   return -1;
 }
@@ -764,9 +796,9 @@ void CoverGridBrowserActivity::loop() {
     return;
   }
 
-  // CPHUN-202: side buttons have dual behavior in the 6+1 grid.
+  // Side buttons have dual behavior in the seven-book grid.
   // Short release falls through to NavPrevious/NavNext (one cover).
-  // Holding past LONG_PRESS_MS changes a whole six-book page. Keep a latch
+  // Holding past LONG_PRESS_MS changes a whole seven-book page. Keep a latch
   // until release so the same physical release cannot also move one cover.
   if (sidePageHoldAction_ != 0) {
     const auto heldButton = sidePageHoldAction_ < 0 ? MappedInputManager::Button::PageBack
@@ -801,7 +833,10 @@ void CoverGridBrowserActivity::loop() {
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (previewSelected_ != selected_) {
+      const int selectedSlot = gridSlotForBook(selected_);
+      const int oldPreview = previewSelected_;
       previewSelected_ = selected_;
+      if (selectedSlot >= 0) gridBookIndices_[selectedSlot] = oldPreview;
       loadSelectedDetails();
       selectionFastRefresh_ = false;
       previousSelected_ = -1;
@@ -838,7 +873,10 @@ void CoverGridBrowserActivity::loop() {
       if (selected_ == hit && previewSelected_ == hit) {
         openSelectedBook();
       } else if (selected_ == hit) {
+        const int selectedSlot = gridSlotForBook(hit);
+        const int oldPreview = previewSelected_;
         previewSelected_ = hit;
+        if (selectedSlot >= 0) gridBookIndices_[selectedSlot] = oldPreview;
         loadSelectedDetails();
         selectionFastRefresh_ = false;
         previousSelected_ = -1;
@@ -954,12 +992,14 @@ void CoverGridBrowserActivity::renderGrayscaleCovers() {
     const GridBook& selectedBook = books_[std::clamp(previewSelected_, 0, static_cast<int>(books_.size()) - 1)];
     drawBookPlane(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H});
 
-    for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
-      const int col = i % GRID_COLS;
-      const int row = i / GRID_COLS;
+    for (int slot = 0; slot < 6; ++slot) {
+      const int bookIndex = gridBookIndices_[slot];
+      if (bookIndex < 0 || bookIndex >= static_cast<int>(books_.size())) continue;
+      const int col = slot % GRID_COLS;
+      const int row = slot / GRID_COLS;
       const int x = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
       const int y = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
-      drawBookPlane(books_[i], Rect{x, y, GRID_W, GRID_H});
+      drawBookPlane(books_[bookIndex], Rect{x, y, GRID_W, GRID_H});
     }
   };
 
@@ -1030,16 +1070,11 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
   if (selectionFastRefresh_ && previousSelected_ >= 0 &&
       previousSelected_ < static_cast<int>(books_.size()) &&
-      selected_ >= 0 && selected_ < static_cast<int>(books_.size())) {
-    auto coverRect = [](const int index) {
-      const int col = index % GRID_COLS;
-      const int row = index / GRID_COLS;
-      return Rect{GRID_LEFT + col * (GRID_W + GRID_GAP_X),
-                  GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0), GRID_W, GRID_H};
-    };
-
-    const Rect oldRect = coverRect(previousSelected_);
-    const Rect newRect = coverRect(selected_);
+      selected_ >= 0 && selected_ < static_cast<int>(books_.size()) &&
+      (previousSelected_ == previewSelected_ || gridSlotForBook(previousSelected_) >= 0) &&
+      (selected_ == previewSelected_ || gridSlotForBook(selected_) >= 0)) {
+    const Rect oldRect = coverRectForBook(previousSelected_);
+    const Rect newRect = coverRectForBook(selected_);
     renderer.drawRect(oldRect.x - 4, oldRect.y - 4, oldRect.width + 8, oldRect.height + 8, 4, false);
     renderer.drawRect(newRect.x - 3, newRect.y - 3, newRect.width + 6, newRect.height + 6, 2, false);
     renderer.drawRect(newRect.x - 4, newRect.y - 4, newRect.width + 8, newRect.height + 8, 2, true);
@@ -1065,8 +1100,9 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
   }
 
   if (!books_.empty()) {
-    const GridBook& selectedBook = books_[std::clamp(selected_, 0, static_cast<int>(books_.size()) - 1)];
-    paintCover(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H}, false);
+    const int featuredIndex = std::clamp(previewSelected_, 0, static_cast<int>(books_.size()) - 1);
+    const GridBook& selectedBook = books_[featuredIndex];
+    paintCover(selectedBook, Rect{FEATURED_X, FEATURED_Y, FEATURED_W, FEATURED_H}, selected_ == featuredIndex);
 
     const int textW = std::max(40, width - FEATURED_TEXT_X - 22);
     const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, selectedBook.title.c_str(), textW, 3);
@@ -1185,12 +1221,14 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
       }
     }
 
-    for (int i = 0; i < static_cast<int>(books_.size()); ++i) {
-      const int col = i % GRID_COLS;
-      const int row = i / GRID_COLS;
+    for (int slot = 0; slot < 6; ++slot) {
+      const int bookIndex = gridBookIndices_[slot];
+      if (bookIndex < 0 || bookIndex >= static_cast<int>(books_.size())) continue;
+      const int col = slot % GRID_COLS;
+      const int row = slot / GRID_COLS;
       const int x = GRID_LEFT + col * (GRID_W + GRID_GAP_X);
       const int gy = GRID_TOP + row * (GRID_H + GRID_GAP_Y) + (row == 1 ? GRID_SECOND_ROW_EXTRA_Y : 0);
-      paintCover(books_[i], Rect{x, gy, GRID_W, GRID_H}, i == selected_);
+      paintCover(books_[bookIndex], Rect{x, gy, GRID_W, GRID_H}, bookIndex == selected_);
     }
   } else {
     drawCenteredIn(renderer, UI_12_FONT_ID, 20, width - 40, FEATURED_Y + 80,
