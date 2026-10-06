@@ -170,7 +170,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // UI Theme controls styling only. Home layout is selected independently.
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
-  enum HOME_LAYOUT { HOME_ORIGINAL = 0, HOME_COVER_GRID = 1, HOME_LAYOUT_COUNT };
+  enum HOME_LAYOUT { HOME_ORIGINAL = 0, HOME_COVER_GRID = 1, HOME_LAYOUT_COUNT };\n  enum LIBRARY_VIEW_MODE { LIBRARY_LIST = 0, LIBRARY_GRID = 1, LIBRARY_VIEW_MODE_COUNT };
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING {
