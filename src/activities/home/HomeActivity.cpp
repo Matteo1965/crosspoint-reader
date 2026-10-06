@@ -232,7 +232,9 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
       continue;
     }
 
-    recentBooks.push_back(book);
+    RecentBook displayBook = book;
+    displayBook.title = bookui::cleanDisplayedBookTitle(displayBook.title);
+    recentBooks.push_back(std::move(displayBook));
   }
 }
 
@@ -731,7 +733,13 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.displayBuffer();
 
-  if (!firstRenderDone) firstRenderDone = true; else if (!recentsLoaded && !recentsLoading) {
+  if (!firstRenderDone) {
+    firstRenderDone = true;
+    // The first frame intentionally paints before SD thumbnail generation, but
+    // it must schedule the follow-up pass itself. Otherwise cover generation
+    // waits for unrelated input (e.g. Up/Down) to trigger another render.
+    if (!recentsLoaded && !recentsLoading) requestUpdate();
+  } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);
   }
