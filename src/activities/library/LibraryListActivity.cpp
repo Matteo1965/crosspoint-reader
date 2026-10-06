@@ -518,6 +518,10 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
 }
 
 void LibraryListActivity::openGridView() {
+  if (SETTINGS.libraryViewMode != CrossPointSettings::LIBRARY_GRID) {
+    SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_GRID;
+    SETTINGS.saveToFile();
+  }
   if (!viewState) viewState = std::make_shared<LibraryViewState>();
   viewState->activeSortTab = activeTabIndex;
   viewState->descendingTabs = descendingTabs;
