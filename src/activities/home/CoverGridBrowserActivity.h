@@ -30,7 +30,7 @@ class CoverGridBrowserActivity final : public Activity {
     std::string thumbPath;
   };
 
-  static constexpr int PAGE_SIZE = 6;
+  static constexpr int PAGE_SIZE = 7;
 
   bool openIndex();
   bool rebuildIndex();
@@ -62,6 +62,9 @@ class CoverGridBrowserActivity final : public Activity {
   void paintCover(const GridBook& book, Rect rect, bool selectedFrame);
   void renderGrayscaleCovers();
   int hitGridCover(int x, int y) const;
+  void resetGridSlots();
+  int gridSlotForBook(int bookIndex) const;
+  Rect coverRectForBook(int bookIndex) const;
   bool hitFeaturedCover(int x, int y) const;
   bool hitSortTab(int x, int y, int& tab) const;
 
@@ -71,8 +74,9 @@ class CoverGridBrowserActivity final : public Activity {
   int pageStart_ = 0;
   int selected_ = 0;
   int previewSelected_ = 0;
+  int gridBookIndices_[6] = {-1, -1, -1, -1, -1, -1};
   int activeSortTab_ = 0;
-  uint8_t descendingTabs_ = 3u;  // Recent/New start newest-first; Title/Author ascending.
+  uint8_t descendingTabs_ = 2u;  // Recent ascending; New descending; Title/Author ascending.
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
