@@ -19,7 +19,11 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/BookOptionsMenu.h"
 #include "components/UITheme.h"
+#include "RecentBooksStore.h"
+#include "activities/util/ConfirmationActivity.h"
+#include "util/BookCacheUtils.h"
 #include "fontIds.h"
 #include "../reader/BookInfoActivity.h"
 #include "../util/BmpViewerActivity.h"
@@ -706,16 +710,84 @@ void CoverGridBrowserActivity::openSelectedCover() {
 
 void CoverGridBrowserActivity::showSelectedOptions() {
   if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
-  static constexpr const char* OPTIONS_HU[] = {"Fülszöveg", "Metaadatok", "Borító megjelenítése", "Megnyitás"};
-  static constexpr const char* OPTIONS_EN[] = {"Description", "Metadata", "Show cover", "Open"};
-  const char* const* options = I18N.getLanguage() == Language::HU ? OPTIONS_HU : OPTIONS_EN;
-  optionPopup_.showMultilineTitle(books_[selected_].title.c_str(), options, 4, 0, [this](const int choice) {
-    if (choice == 0) openSelectedInfo(false);
-    else if (choice == 1) openSelectedInfo(true);
-    else if (choice == 2) openSelectedCover();
-    else if (choice == 3) openSelectedBook();
-  });
+  showBookOptionsMenu(optionPopup_, books_[selected_].title.c_str(), false,
+                      [this](const BookOptionsAction action) {
+                        switch (action) {
+                          case BookOptionsAction::Description:
+                            openSelectedInfo(false);
+                            break;
+                          case BookOptionsAction::Metadata:
+                            openSelectedInfo(true);
+                            break;
+                          case BookOptionsAction::ShowCover:
+                            openSelectedCover();
+                            break;
+                          case BookOptionsAction::Open:
+                            openSelectedBook();
+                            break;
+                          case BookOptionsAction::Delete:
+                            promptDeleteSelected();
+                            break;
+                          case BookOptionsAction::RebuildLibrary:
+                            rebuildLibraryFromOptions();
+                            break;
+                          case BookOptionsAction::RemoveFromRecent:
+                            break;
+                        }
+                      });
   requestUpdate();
+}
+
+void CoverGridBrowserActivity::rebuildLibraryFromOptions() {
+  RenderLock lock(*this);
+  GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "Könyvtár frissítése…" : "Refreshing library…");
+  if (!rebuildIndex() || !openIndex()) {
+    LOG_ERR("GRID", "Cannot rebuild Library index");
+    requestUpdate(true);
+    return;
+  }
+  buildReadingShelves();
+  pageStart_ = 0;
+  selected_ = 0;
+  previewSelected_ = 0;
+  pinnedSortRow_ = -1;
+  pinnedBook_ = GridBook{};
+  loadPage();
+  index_.close();
+  thumbnailsReady_ = false;
+  ensurePageThumbs();
+  loadSelectedDetails();
+  requestUpdate(true);
+}
+
+void CoverGridBrowserActivity::promptDeleteSelected() {
+  if (selected_ < 0 || selected_ >= static_cast<int>(books_.size())) return;
+  const std::string path = books_[selected_].path;
+  const std::string title = books_[selected_].title;
+  index_.close();
+  auto confirmation =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title);
+  if (!confirmation) {
+    LOG_ERR("GRID", "OOM: delete confirmation");
+    return;
+  }
+
+  startActivityForResult(std::move(confirmation), [this, path](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      clearBookCache(path);
+      if (!Storage.remove(path.c_str())) {
+        LOG_ERR("GRID", "Cannot delete %s", path.c_str());
+      } else {
+        library::markLibraryIndexDirty();
+        if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
+      }
+    }
+    if (!result.isCancelled) {
+      rebuildLibraryFromOptions();
+    } else {
+      reopenAfterChild();
+    }
+  });
 }
 
 bool CoverGridBrowserActivity::hitSortTab(const int x, const int y, int& tab) const {
