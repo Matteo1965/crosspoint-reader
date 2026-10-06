@@ -553,6 +553,7 @@ void LibraryListActivity::openGridView() {
       activeTabIndex = std::clamp(viewState->activeSortTab, 0, TAB_SLOTS - 1);
       descendingTabs = viewState->descendingTabs;
       sortOrder = orderForTab(activeTabIndex, descendingTabs);
+      query = viewState->searchQuery;
     }
     resetAfterRebuild();
     auto& nav = activeNav();
