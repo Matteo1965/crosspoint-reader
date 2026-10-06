@@ -131,7 +131,7 @@ jobs:
           grep -Fq 'if (!pendingVirtualChapterJump) advancePastSkippedSpines(true);' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'int tabSideMarginPx() const override { return 28; }' src/activities/library/LibraryListActivity.h
           grep -Fq 'const GridBook featured = pinnedBook_;' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'descendingTabs_ = 2u' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'descendingTabs_ = 3u' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int featuredIndex = std::clamp(previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
