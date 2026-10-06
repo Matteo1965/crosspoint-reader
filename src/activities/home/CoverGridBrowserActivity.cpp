@@ -196,6 +196,8 @@ void CoverGridBrowserActivity::onEnter() {
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
+  pinnedSortRow_ = -1;
+  pinnedBook_ = GridBook{};
   activeSortTab_ = 0;
   descendingTabs_ = 2u;  // Recent ascending; New descending; Title/Author ascending.
   thumbnailsReady_ = false;
@@ -343,38 +345,48 @@ bool CoverGridBrowserActivity::loadPage() {
   if (total <= 0) {
     pageStart_ = 0;
     selected_ = 0;
+    previewSelected_ = 0;
+    pinnedSortRow_ = -1;
+    pinnedBook_ = GridBook{};
+    resetGridSlots();
     return true;
   }
 
-  pageStart_ = std::clamp(pageStart_, 0, ((total - 1) / PAGE_SIZE) * PAGE_SIZE);
-  const int count = std::min(PAGE_SIZE, total - pageStart_);
-  books_.reserve(count);
-
-  for (int i = 0; i < count; ++i) {
-    const uint16_t ordinal = ordinalForActiveRow(pageStart_ + i);
-    if (ordinal == 0xFFFF) continue;
-
+  auto readBookAt = [this](const int sortRow, GridBook& book) {
+    const uint16_t ordinal = ordinalForActiveRow(sortRow);
+    if (ordinal == 0xFFFF) return false;
     library::ClixRecord record{};
-    if (!index_.readRecord(ordinal, record)) continue;
-
-    GridBook book;
-    if (!index_.readPath(record, book.path)) continue;
+    if (!index_.readRecord(ordinal, record) || !index_.readPath(record, book.path)) return false;
     if (!index_.readTitle(record, book.title) || book.title.empty()) index_.readName(record, book.title);
     index_.readAuthor(record, book.author);
     if (book.title.empty()) book.title = book.path;
-
     Epub epub(book.path, "/.crosspoint");
     book.thumbPath = epub.getThumbBmpPath(thumbHeight());
-    books_.push_back(std::move(book));
+    book.sortRow = sortRow;
+    return true;
+  };
+
+  if (pinnedSortRow_ < 0 || pinnedSortRow_ >= total) {
+    pinnedSortRow_ = 0;
+    pinnedBook_ = GridBook{};
+    if (!readBookAt(pinnedSortRow_, pinnedBook_)) return false;
   }
 
-  if (books_.empty()) {
-    selected_ = 0;
-    previewSelected_ = 0;
-  } else {
-    selected_ = std::clamp(selected_, 0, static_cast<int>(books_.size()) - 1);
-    previewSelected_ = std::clamp(previewSelected_, 0, static_cast<int>(books_.size()) - 1);
+  // Grid paging uses six consecutive rows of the original order with the
+  // pinned book excluded. Nothing is moved or persisted in the actual index.
+  const int gridTotal = total - 1;
+  pageStart_ = gridTotal > 0 ? std::clamp(pageStart_, 0, ((gridTotal - 1) / 6) * 6) : 0;
+  books_.reserve(7);
+  books_.push_back(pinnedBook_);
+  for (int i = 0; i < 6 && pageStart_ + i < gridTotal; ++i) {
+    const int filteredRow = pageStart_ + i;
+    const int sortRow = filteredRow < pinnedSortRow_ ? filteredRow : filteredRow + 1;
+    GridBook book;
+    if (!readBookAt(sortRow, book)) continue;
+    books_.push_back(std::move(book));
   }
+  previewSelected_ = 0;
+  selected_ = 0;
   resetGridSlots();
   return true;
 }
@@ -535,6 +547,8 @@ bool CoverGridBrowserActivity::reopenAfterChild() {
   // the current six-book page.
   if (openIndex()) {
     buildReadingShelves();
+    pinnedSortRow_ = -1;
+    pinnedBook_ = GridBook{};
     loadPage();
     index_.close();
   }
@@ -555,6 +569,8 @@ void CoverGridBrowserActivity::selectSortTab(const int tab, const bool toggleIfA
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
+  pinnedSortRow_ = -1;
+  pinnedBook_ = GridBook{};
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -568,6 +584,8 @@ void CoverGridBrowserActivity::toggleSortDirection() {
   pageStart_ = 0;
   selected_ = 0;
   previewSelected_ = 0;
+  pinnedSortRow_ = -1;
+  pinnedBook_ = GridBook{};
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -598,14 +616,16 @@ void CoverGridBrowserActivity::moveSelection(const int delta) {
 }
 
 void CoverGridBrowserActivity::stepPage(const int delta) {
-  const int total = totalBooks();
-  if (total <= 0) return;
-  const int maxStart = ((total - 1) / PAGE_SIZE) * PAGE_SIZE;
-  const int nextStart = std::clamp(pageStart_ + delta * PAGE_SIZE, 0, maxStart);
+  const int gridTotal = std::max(0, totalBooks() - 1);
+  if (gridTotal <= 0) return;
+  const int maxStart = ((gridTotal - 1) / 6) * 6;
+  const int nextStart = std::clamp(pageStart_ + delta * 6, 0, maxStart);
   if (nextStart == pageStart_) return;
   pageStart_ = nextStart;
   selected_ = 0;
   previewSelected_ = 0;
+  previousSelected_ = -1;
+  selectionFastRefresh_ = false;
   if (!openIndex()) return;
   loadPage();
   index_.close();
@@ -816,10 +836,14 @@ void CoverGridBrowserActivity::loop() {
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (previewSelected_ != selected_) {
-      const int selectedSlot = gridSlotForBook(selected_);
-      const int oldPreview = previewSelected_;
-      previewSelected_ = selected_;
-      if (selectedSlot >= 0) gridBookIndices_[selectedSlot] = oldPreview;
+      if (selected_ > 0 && selected_ < static_cast<int>(books_.size())) {
+        std::swap(books_[0], books_[selected_]);
+        pinnedBook_ = books_[0];
+        pinnedSortRow_ = pinnedBook_.sortRow;
+        selected_ = 0;
+        previewSelected_ = 0;
+        resetGridSlots();
+      }
       loadSelectedDetails();
       selectionFastRefresh_ = false;
       previousSelected_ = -1;
@@ -856,10 +880,14 @@ void CoverGridBrowserActivity::loop() {
       if (selected_ == hit && previewSelected_ == hit) {
         openSelectedBook();
       } else if (selected_ == hit) {
-        const int selectedSlot = gridSlotForBook(hit);
-        const int oldPreview = previewSelected_;
-        previewSelected_ = hit;
-        if (selectedSlot >= 0) gridBookIndices_[selectedSlot] = oldPreview;
+        if (hit > 0) {
+          std::swap(books_[0], books_[hit]);
+          pinnedBook_ = books_[0];
+          pinnedSortRow_ = pinnedBook_.sortRow;
+          selected_ = 0;
+          previewSelected_ = 0;
+          resetGridSlots();
+        }
         loadSelectedDetails();
         selectionFastRefresh_ = false;
         previousSelected_ = -1;
@@ -1130,8 +1158,8 @@ void CoverGridBrowserActivity::render(RenderLock&&) {
 
     if (showListLine) {
       const int total = totalBooks();
-      const int first = total > 0 ? pageStart_ + 1 : 0;
-      const int last = total > 0 ? std::min(pageStart_ + static_cast<int>(books_.size()), total) : 0;
+      const int first = total > 1 ? pageStart_ + 1 : 0;
+      const int last = total > 1 ? std::min(pageStart_ + static_cast<int>(books_.size()) - 1, total - 1) : 0;
       char listText[48];
       if (I18N.getLanguage() == Language::HU) {
         snprintf(listText, sizeof(listText), "%d–%d könyv / %d könyv", first, last, total);
