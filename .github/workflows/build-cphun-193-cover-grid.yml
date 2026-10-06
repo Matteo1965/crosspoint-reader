@@ -1,5 +1,5 @@
-name: CPHUN-214 Cover Grid Render Fix Build (X4 dev)
-# CPHUN-214 queue restart
+name: CPHUN-215 Cover Grid Render Fix Build (X4 dev)
+# CPHUN-215 queue restart
 
 on:
   push:
@@ -13,14 +13,14 @@ on:
       - agent/cphun-199-grid3-debounced-gray
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
-      - agent/cphun-214-unified-library-controls
+      - agent/cphun-215-library-fixes
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cphun-214-unified-library-controls-${{ github.ref }}
+  group: cphun-215-library-fixes-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-214-X4
+            artifact: CPHUN-215-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261006-214-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261006-215-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -105,6 +105,11 @@ jobs:
           grep -Fq 'std::swap(books_[0], books_[selected_]);' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'delta * 6' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'backSortHoldActive' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'constexpr int NEW_TAB = 1;' src/activities/library/LibraryListActivity.cpp
+          grep -Fq '{"Legutóbbi", "Újdonságok", "Címek", "Szerzők"}' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'buildNewShelf()' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'frontTabHoldAction' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'const GridBook featured = pinnedBook_;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'descendingTabs_ = 2u' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
