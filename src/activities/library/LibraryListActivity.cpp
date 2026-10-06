@@ -80,6 +80,8 @@ void LibraryListActivity::onEnter() {
   // needs the card to itself.
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
+  backSortHoldActive = false;
+  previewEntry = -1;
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
 
@@ -264,8 +266,8 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   if (isStoreRow) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (entry >= static_cast<int>(books.size())) return;
-    path = books[static_cast<size_t>(entry)].path;
-    title = books[static_cast<size_t>(entry)].title;
+    path = books[pinnedBookIndices[entry]].path;
+    title = books[pinnedBookIndices[entry]].title;
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -464,6 +466,7 @@ void LibraryListActivity::onTabAction(const int index) {
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
   if (index < 0 || index >= TAB_SLOTS) return;
+  previewEntry = -1;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   sortOrder = orderForTab(index, descendingTabs);
   // The filter and the overlap rows hold positions in the old order, so they
@@ -716,46 +719,59 @@ bool LibraryListActivity::handleButtons() {
   // armed as suppressed by wasLongPressed() and consumed globally by
   // ActivityManager::loop() before any activity runs, so it cannot land in
   // the freshly opened confirmation and select its default.
+  // CPHUN-214: the Back key owns sort reversal on both library views.
+  // The raw held-state latch is necessary because wasLongPressed is supported
+  // only for Confirm by the input manager.
+  if (backSortHoldActive) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) backSortHoldActive = false;
+    return true;
+  }
+  if (mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    backSortHoldActive = true;
+    if (!degraded) toggleSortDirection();
+    return true;
+  }
+
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
-      if (!degraded) toggleSortDirection();
-    } else if (isRecentSort(sortOrder)) {
+      if (count > 0) {
+        nav.selected = 1;
+        requestUpdate();
+      }
+    } else if (count > 0 && !groupsCollapsed) {
       showRecentBookOptions(selectedEntry());
-    } else if (deleteEligible()) {
-      if (count > 0) promptDeleteBook(selectedEntry());
-    } else if (!groupsCollapsed && groupable()) {
-      collapseGroups(selectedEntry());
-    } else {
-      activateIndex(selectedEntry());
+    } else if (groupsCollapsed) {
+      expandGroup(selectedEntry());
     }
     return true;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (!query.empty()) {
-      query.clear();
-      applyFilter();
-      nav.selected = 0;
-      nav.top = 0;
-      requestUpdate();
-    } else if (groupsCollapsed) {
-      restoreExpandedList();
-    } else if (!tabsFocused() && !degraded) {
-      // Keep the current list and viewport while returning focus to the tabs.
-      nav.selected = 0;
-      requestUpdate();
-    } else {
-      onGoHome();
-    }
+    onGoHome();
     return true;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      stepTab(1);
+      if (count > 0) {
+        nav.selected = 1;
+        previewEntry = -1;
+        requestUpdate();
+      }
       return true;
     }
-    if (count > 0) activateIndex(selectedEntry());
+    if (count > 0) {
+      const int entry = selectedEntry();
+      if (groupsCollapsed) {
+        expandGroup(entry);
+      } else if (previewEntry == entry) {
+        openSelectedBook();
+      } else {
+        previewEntry = entry;
+        requestUpdate();
+      }
+    }
     return true;
   }
 
@@ -1018,11 +1034,12 @@ void LibraryListActivity::drawFooter() {
   drawPositionReadout();
   drawHoldHelp();
 
-  const bool backGoesHome = tabsFocused() && !groupsCollapsed && query.empty();
-  const char* backLabel = backGoesHome ? tr(STR_HOME) : tr(STR_BACK);
-  const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
+  const char* backLabel = tr(STR_BACK);
+  const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT)
+      : (!tabsFocused() && previewEntry == selectedEntry() ? tr(STR_OPEN)
+          : (I18N.getLanguage() == Language::HU ? "Előnézet" : "Preview"));
   const bool canSearch = tabsFocused() && !degraded;
-  const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tr(STR_TOGGLE) : confirmLabel,
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel,
                                             canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
