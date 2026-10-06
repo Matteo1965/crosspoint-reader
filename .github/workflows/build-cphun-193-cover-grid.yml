@@ -107,7 +107,7 @@ jobs:
           grep -Fq 'backSortHoldActive' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'descendingTabs_ = 2u' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
-          grep -Fq 'gridBookIndices_[selectedSlot] = oldPreview;' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int featuredIndex = std::clamp(previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'book.thumbPath = epub.getThumbBmpPath(thumbHeight());' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'previewMatchesCursor' src/activities/home/CoverGridBrowserActivity.cpp
