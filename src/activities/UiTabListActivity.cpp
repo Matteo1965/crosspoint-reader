@@ -3,6 +3,10 @@
 #include <GfxRenderer.h>
 
 #include <cassert>
+#include <array>
+#include <algorithm>
+
+#include "fontIds.h"
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -173,6 +177,55 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   if (!tabUnderlineOnly() && tabsFocused && !metrics.tabPillFullSlot) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
+  if (tabUnderlineOnly() && count == 4) {
+    // Match CoverGridBrowserActivity::calculateSortTabLayout(): measure the
+    // actual UI_10 labels, keep the first/last text at the 28 px boundaries,
+    // and proportion the middle slots by measured text width. Each TabBar call
+    // is only as wide as the label itself, so FreeInkUI has no reason to
+    // ellipsize "Legutóbbi / Újdonságok / Címek / Szerzők".
+    std::array<int, 4> measured{};
+    std::array<int, 4> slotX{};
+    std::array<int, 4> slotW{};
+    int totalMeasured = 0;
+    for (int i = 0; i < 4; ++i) {
+      measured[i] = std::max(1, renderer.getTextAdvanceX(UI_10_FONT_ID, tabs[i].label, EpdFontFamily::REGULAR));
+      totalMeasured += measured[i];
+      tabs[i].indicator = fui::TabIndicator::None;
+    }
+    const int left = static_cast<int>(tabRect.x) + 28;
+    const int right = static_cast<int>(tabRect.x + tabRect.width) - 28;
+    const int available = std::max(4, right - left);
+    int x = left;
+    int allocated = 0;
+    for (int i = 0; i < 4; ++i) {
+      const int width = i == 3 ? available - allocated
+                               : std::max(1, (available * measured[i]) / std::max(1, totalMeasured));
+      slotX[i] = x;
+      slotW[i] = width;
+      x += width;
+      allocated += width;
+    }
+    for (int i = 0; i < 4; ++i) {
+      int textX = slotX[i] + std::max(0, (slotW[i] - measured[i]) / 2);
+      if (i == 0) textX = left;
+      if (i == 3) textX = right - measured[i];
+      fui::TabBarProps singleProps = tabProps;
+      singleProps.tabs = &tabs[i];
+      singleProps.count = 1;
+      singleProps.divider = false;
+      singleProps.contentInset = fui::Insets{2, 0, 2, 0};
+      fui::tabBar(screen.frame(),
+                  fui::Rect{static_cast<int16_t>(textX), tabRect.y,
+                            static_cast<int16_t>(measured[i]), static_cast<int16_t>(tabRect.height - 1)},
+                  singleProps);
+    }
+    screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - 1), tabRect.width, 1},
+                         fui::Paint::solid(fui::Color::Black));
+    const int customBottomSpacing = tabBottomSpacingPx();
+    screen.spacer(static_cast<int16_t>(customBottomSpacing >= 0 ? customBottomSpacing : metrics.verticalSpacing));
+    return;
+  }
+
   int widthTotal = 0;
   bool weightedTabs = count > 0;
   for (int i = 0; i < count; ++i) {
