@@ -12,6 +12,8 @@
 #include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
+class Epub;
+
 // One Library screen: every indexed book on the card shown by recency, title,
 // or author. The Recent shelf orders by file modification time (when a book
 // landed on the card) and pins the recently OPENED books from RecentBooksStore
