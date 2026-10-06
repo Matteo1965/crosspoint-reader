@@ -2685,7 +2685,11 @@ void EpubReaderActivity::renderBook() {
 
   if (currentSpineIndex < 0) currentSpineIndex = 0;
   if (currentSpineIndex > epub->getSpineItemsCount()) currentSpineIndex = epub->getSpineItemsCount();
-  advancePastSkippedSpines(true);
+  // A virtual chapter row targets a position INSIDE the selected spine.
+  // Keep that spine pinned until the percent jump has been resolved; running
+  // the generic skipped-spine advance here can otherwise redirect the jump to
+  // the following real chapter before the virtual target is applied.
+  if (!pendingVirtualChapterJump) advancePastSkippedSpines(true);
 
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     return;
