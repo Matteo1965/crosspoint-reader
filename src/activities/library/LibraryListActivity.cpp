@@ -519,7 +519,7 @@ int LibraryListActivity::listCount() const { return groupsCollapsed ? static_cas
 // unfiltered and unpinned, so the shelf costs nothing when nothing is typed.
 // With pins active, entries below pinnedCount() belong to the store and must
 // not reach this; the rest walk past the pinned books' own sort rows.
-uint16_t LibraryListActivity::ordinalForShelfRow(const int row) const {
+uint16_t LibraryListActivity::ordinalForShelfRow(const int row) {
   if (row < 0) return 0xFFFF;
   if (activeTabIndex == NEW_TAB) {
     if (row >= static_cast<int>(newOrdinals.size())) return 0xFFFF;
