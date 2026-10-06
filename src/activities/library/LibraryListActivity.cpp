@@ -841,14 +841,10 @@ void LibraryListActivity::navigateButtons() {
   const int count = listCount();
   auto& nav = activeNav();
   buttonNavigator.onNextRelease([this, count] {
-    if (count > 0) moveRingTo(ringPos() == count ? 1 : ringPos() + 1);
+    if (count > 0) moveRingTo(ringPos() <= 0 || ringPos() == count ? 1 : ringPos() + 1);
   });
   buttonNavigator.onPreviousRelease([this, count] {
-    if (tabsFocused() && !degraded) {
-      openSearch();
-    } else if (count > 0) {
-      moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
-    }
+    if (count > 0) moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
   });
   // #3/#4 long press is handled once per hold in handleButtons(), matching Cover Grid.
   buttonNavigator.onNextContinuous([] {});
@@ -1083,8 +1079,6 @@ void LibraryListActivity::drawFooter() {
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT)
       : (!tabsFocused() && previewEntry == selectedEntry() ? tr(STR_OPEN)
           : (I18N.getLanguage() == Language::HU ? "Előnézet" : "Preview"));
-  const bool canSearch = tabsFocused() && !degraded;
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel,
-                                            canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
