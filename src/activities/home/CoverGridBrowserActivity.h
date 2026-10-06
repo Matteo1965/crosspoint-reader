@@ -9,13 +9,14 @@
 
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "activities/library/LibraryViewState.h"
 
 class Epub;
 struct Rect;
 
 class CoverGridBrowserActivity final : public Activity {
  public:
-  CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
+  CoverGridBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, LibraryViewStatePtr viewState = {}, bool integrated = false);
 
   void onEnter() override;
   void onExit() override;
@@ -81,7 +82,7 @@ class CoverGridBrowserActivity final : public Activity {
   int previewSelected_ = 0;
   int gridBookIndices_[6] = {-1, -1, -1, -1, -1, -1};
   int activeSortTab_ = 0;
-  uint8_t descendingTabs_ = 2u;  // Recent ascending; New descending; Title/Author ascending.
+  uint8_t descendingTabs_ = 3u;  // Recent ascending; New descending; Title/Author ascending.
   bool thumbnailsReady_ = false;
   bool thumbnailsLoading_ = false;
   int previousSelected_ = -1;
@@ -89,6 +90,8 @@ class CoverGridBrowserActivity final : public Activity {
   int sidePageHoldAction_ = 0;  // -1=PageBack, +1=PageForward; consume release after long hold.
   int frontTabHoldAction_ = 0;  // -1=previous tab, +1=next tab; consume front-button release.
   bool backSortHoldActive_ = false;  // Consume Back release after long-hold sort reversal.
+  LibraryViewStatePtr viewState_;
+  bool integrated_ = false;
   std::vector<uint16_t> recentOrdinals_;
   std::vector<uint16_t> newOrdinals_;
   OptionPopup optionPopup_;
