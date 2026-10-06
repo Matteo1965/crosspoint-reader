@@ -32,6 +32,7 @@
 #include "components/icons/transfer.h"
 #include "components/icons/settings2.h"
 #include "fontIds.h"
+#include "util/BookTitleUtils.h"
 
 namespace {
 struct CoverGridLayout {
@@ -69,20 +70,6 @@ std::string asciiLowerCopy(std::string value) {
   return value;
 }
 
-std::string cleanDisplayedBookTitle(std::string title) {
-  title = trimCopy(title);
-  const std::string lower = asciiLowerCopy(title);
-  static constexpr const char* suffixes[] = {"ok", "x4", "korr", "jav"};
-  for (const char* suffix : suffixes) {
-    const size_t n = std::char_traits<char>::length(suffix);
-    if (lower.size() < n || lower.compare(lower.size() - n, n, suffix) != 0) continue;
-    const size_t start = lower.size() - n;
-    if (start > 0 && lower[start - 1] != ' ' && lower[start - 1] != '\t') continue;
-    title = trimCopy(title.substr(0, start));
-    break;
-  }
-  return title;
-}
 
 int scaledCalibrePageCount(const int referencePages, const GfxRenderer& renderer) {
   if (referencePages <= 0) return 0;
@@ -1214,7 +1201,7 @@ void HomeActivity::renderCoverGrid() {
 
     const int textX = layout.left + layout.coverW + 22;  // 182 px on 480-wide X4
     const int textW = std::max(40, width - textX - 34);   // 264 px on 480-wide X4
-    const std::string displayTitle = cleanDisplayedBookTitle(recentBooks[0].title);
+    const std::string displayTitle = bookui::cleanDisplayedBookTitle(recentBooks[0].title);
     const auto title = renderer.wrappedText(UI_12_FONT_ID, displayTitle.c_str(), textW, 4);
     int titleY = layout.featuredY + 12;
     for (const auto& line : title) {
