@@ -8,6 +8,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
+#include <Memory.h>
 
 #include <Arduino.h>
 #include <algorithm>
