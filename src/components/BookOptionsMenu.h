@@ -17,13 +17,15 @@ enum class BookOptionsAction : uint8_t {
   RemoveFromRecent,
   Delete,
   RebuildLibrary,
+  SwitchView,
 };
 
 inline void showBookOptionsMenu(OptionPopup& popup, const char* title, const bool includeRemoveFromRecent,
+                                const char* switchViewLabel,
                                 std::function<void(BookOptionsAction)> onSelect) {
   const bool hu = I18N.getLanguage() == Language::HU;
-  const char* options[7] = {};
-  std::array<BookOptionsAction, 7> actions{};
+  const char* options[8] = {};
+  std::array<BookOptionsAction, 8> actions{};
   int count = 0;
 
   options[count] = hu ? "Fülszöveg" : "Description";
@@ -38,6 +40,11 @@ inline void showBookOptionsMenu(OptionPopup& popup, const char* title, const boo
   if (includeRemoveFromRecent) {
     options[count] = tr(STR_REMOVE_FROM_RECENTS);
     actions[count++] = BookOptionsAction::RemoveFromRecent;
+  }
+
+  if (switchViewLabel && *switchViewLabel) {
+    options[count] = switchViewLabel;
+    actions[count++] = BookOptionsAction::SwitchView;
   }
 
   options[count] = tr(STR_DELETE);
