@@ -75,4 +75,10 @@ const char* libraryIndexPath();
 bool markLibraryIndexDirty();
 bool isLibraryIndexDirty();
 
+// Lightweight EPUB-only SD change detection for the configured Library root.
+// Non-EPUB changes (screenshots, TXT, firmware, etc.) do not affect this.
+bool libraryRootAvailable(const char* rootPath);
+bool libraryContentChanged(const char* rootPath);
+bool updateLibraryFingerprint(const char* rootPath);
+
 }  // namespace library
