@@ -138,6 +138,15 @@ void LibraryListActivity::onEnter() {
   requestUpdate(true);
 }
 
+void LibraryListActivity::loop() {
+  if (openPersistedGridOnNextLoop) {
+    openPersistedGridOnNextLoop = false;
+    openGridView();
+    return;
+  }
+  UiTabListActivity::loop();
+}
+
 void LibraryListActivity::onExit() {
   index.close();
   newOrdinals.clear();
@@ -519,7 +528,11 @@ void LibraryListActivity::openGridView() {
     index.open(library::libraryIndexPath());
     return;
   }
-  startActivityForResult(std::move(grid), [this](const ActivityResult&) {
+  startActivityForResult(std::move(grid), [this](const ActivityResult& result) {
+    if (!result.isCancelled && std::holds_alternative<MenuResult>(result.data)) {
+      SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_LIST;
+      SETTINGS.saveToFile();
+    }
     if (!index.open(library::libraryIndexPath())) {
       LOG_ERR("LIB", "cannot reopen library index after Grid");
       return;
