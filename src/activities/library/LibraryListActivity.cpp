@@ -348,7 +348,7 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (entry >= static_cast<int>(books.size())) return;
     path = books[pinnedBookIndices[entry]].path;
-    title = books[pinnedBookIndices[entry]].title;
+    title = bookui::cleanDisplayedBookTitle(books[pinnedBookIndices[entry]].title);
   } else {
     if (!index.isOpen()) return;
     const uint16_t ordinal = ordinalForShelfRow(rowFor(entry));
