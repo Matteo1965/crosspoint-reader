@@ -41,6 +41,9 @@ class UiTabListActivity : public UiListActivity {
   virtual int tabGapPx() const { return 0; }
   virtual int tabHorizontalInsetPx() const { return -1; }
   virtual int tabBottomSpacingPx() const { return -1; }
+  // Optional compact header style used by Library: regular text, no pill,
+  // active tab marked only by a bottom underline.
+  virtual bool tabUnderlineOnly() const { return false; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;
   // Advance the active tab by direction (continuous-hold navigation; also what
