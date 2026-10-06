@@ -103,7 +103,7 @@ void LibraryListActivity::onEnter() {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     rebuildIndex();
-    if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot open library index");
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   }
   degraded = index.isOpen() && index.ranksDegraded();
   if (index.isOpen() && index.dedupDegraded()) {
@@ -272,7 +272,7 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   const bool isStoreRow = entry < pinnedCount();
   if (isStoreRow) {
     const auto& books = RECENT_BOOKS.getBooks();
-    if (entry >= static_cast<int>(books.size()) return;
+    if (entry >= static_cast<int>(books.size())) return;
     path = books[pinnedBookIndices[entry]].path;
     title = books[pinnedBookIndices[entry]].title;
   } else {
@@ -328,7 +328,7 @@ void LibraryListActivity::promptRebuildIndex() {
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
   index.close();
   rebuildIndex();
-  if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot open library index");
+  if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   resetAfterRebuild();
   requestUpdate(true);
 }
@@ -355,13 +355,13 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
       makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title);
   if (!confirmation) {
     LOG_ERR("LIB", "OOM: recent removal confirmation");
-    if (reopenIndex && !index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
     return;
   }
 
   startActivityForResult(std::move(confirmation), [this, path, reopenIndex](const ActivityResult& result) {
     swallowHeldReleases();
-    if (reopenIndex && !index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
     if (!result.isCancelled && RECENT_BOOKS.removeByPath(path)) {
       resolvePinned();
       closeRouting();
@@ -401,7 +401,7 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title);
   if (!confirmation) {
     LOG_ERR("LIB", "OOM: delete confirmation");
-    if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
     return;
   }
 
@@ -415,12 +415,12 @@ void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const 
       if (!result.isCancelled) {
         LOG_DBG("LIB", "deleting %s", path.c_str());
         clearBookCache(path);
-        if (!Storage.remove(path.c_str()) LOG_ERR("LIB", "cannot delete %s", path.c_str());
+        if (!Storage.remove(path.c_str())) LOG_ERR("LIB", "cannot delete %s", path.c_str());
         if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
         GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
         rebuildIndex();
       }
-      if (!index.open(library::libraryIndexPath()) LOG_ERR("LIB", "cannot reopen library index");
+      if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
       if (!result.isCancelled) {
         resetAfterRebuild();
       }
@@ -521,7 +521,7 @@ int LibraryListActivity::listCount() const { return groupsCollapsed ? static_cas
 uint16_t LibraryListActivity::ordinalForShelfRow(const int row) const {
   if (row < 0) return 0xFFFF;
   if (activeTabIndex == NEW_TAB) {
-    if (row >= static_cast<int>(newOrdinals.size()) return 0xFFFF;
+    if (row >= static_cast<int>(newOrdinals.size())) return 0xFFFF;
     const bool descending = (descendingTabs & static_cast<uint8_t>(1u << NEW_TAB)) != 0;
     const size_t pos = descending ? newOrdinals.size() - 1 - static_cast<size_t>(row) : static_cast<size_t>(row);
     return newOrdinals[pos];
@@ -580,7 +580,7 @@ bool LibraryListActivity::buildGroupStarts() {
   if (groupCapacity < count) {
     auto starts = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(count));
     if (!starts) {
-      LOG_ERR("LIB", "cannot allocate %u-byte group map", static_cast<unsigned>(count * sizeof(uint16_t));
+      LOG_ERR("LIB", "cannot allocate %u-byte group map", static_cast<unsigned>(count * sizeof(uint16_t)));
       return false;
     }
     groupStarts = std::move(starts);
@@ -609,7 +609,7 @@ bool LibraryListActivity::buildGroupStarts() {
     if (startsGroup) groupStarts[groupCount++] = static_cast<uint16_t>(entry);
   }
   LOG_DBG("LIB", "group map: %u groups, %u bytes", static_cast<unsigned>(groupCount),
-          static_cast<unsigned>(groupCapacity * sizeof(uint16_t));
+          static_cast<unsigned>(groupCapacity * sizeof(uint16_t)));
   return groupCount > 0;
 }
 
@@ -670,7 +670,7 @@ void LibraryListActivity::applyFilter() {
 
   auto matches = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(total));
   if (!matches) {
-    LOG_ERR("LIB", "cannot allocate %u-byte search result buffer", static_cast<unsigned>(total * sizeof(uint16_t));
+    LOG_ERR("LIB", "cannot allocate %u-byte search result buffer", static_cast<unsigned>(total * sizeof(uint16_t)));
     filterFailed = true;
     return;
   }
