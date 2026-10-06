@@ -83,6 +83,7 @@ LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManag
   descendingTabs = viewState->descendingTabs;
   sortOrder = orderForTab(activeTabIndex, descendingTabs);
   query = viewState->searchQuery;
+  openPersistedGridOnNextLoop = SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID;
   // Three short tab labels: a full-slot pill would stretch across a third of
   // the screen, so cap it at the label plus padding (slots stay put).
   tabPillMaxPad = 16;
