@@ -197,6 +197,8 @@ class LibraryListActivity final : public UiTabListActivity {
 
   bool lockNextConfirmRelease = false;
   bool lockNextBackRelease = false;
+  bool backSortHoldActive = false;
+  int previewEntry = -1;
 
   // Row options modal (Recent long-press menu); owned here so it outlives the
   // touch event that opened it.
