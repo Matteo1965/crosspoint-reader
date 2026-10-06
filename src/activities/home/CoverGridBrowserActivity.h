@@ -50,6 +50,11 @@ class CoverGridBrowserActivity final : public Activity {
   void stepSortTab(int delta);
 
   int totalBooks() const;
+  int rawTotalBooks() const;
+  uint16_t ordinalForUnfilteredActiveRow(int row);
+  void applyFilter();
+  void openSearch();
+  void clearSearch();
   int globalSelection() const;
   void moveSelection(int delta);
   void stepPage(int delta);
@@ -94,6 +99,7 @@ class CoverGridBrowserActivity final : public Activity {
   bool integrated_ = false;
   std::vector<uint16_t> recentOrdinals_;
   std::vector<uint16_t> newOrdinals_;
+  std::vector<uint16_t> filteredRows_;
   OptionPopup optionPopup_;
   int featuredProgressTenths_ = -1;
   int featuredCurrentPage_ = 0;
