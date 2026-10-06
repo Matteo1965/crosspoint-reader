@@ -95,7 +95,17 @@ void LibraryListActivity::onEnter() {
   // its persistence write never overlaps the long-lived index reader.
   if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
 
-  // Rebuild when the index is missing, invalid, or was built with the other
+  // Detect only EPUB changes below the configured Library folder. Changes to
+  // screenshots/TXT/firmware elsewhere on the card do not touch the shelf.
+  if (!library::libraryRootAvailable(SETTINGS.libraryRootFolder)) {
+    GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU ? "A Könyvtár mappa nem található"
+                                                               : "Library folder not found");
+    index.close();
+    return;
+  }
+  if (library::libraryContentChanged(SETTINGS.libraryRootFolder)) library::markLibraryIndexDirty();
+
+  // Rebuild when the index is missing, stale, or was built with the other
   // metadata mode. Otherwise entering the screen stays instant.
   const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
   const bool rebuildNeeded = library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath()) ||
@@ -127,7 +137,7 @@ void LibraryListActivity::onExit() {
 
 bool LibraryListActivity::rebuildIndex() {
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
+  const bool ok = library::buildLibraryIndex(SETTINGS.libraryRootFolder, stats, SETTINGS.libraryUseMetadata != 0);
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;
