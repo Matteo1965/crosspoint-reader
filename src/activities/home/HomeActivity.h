@@ -62,6 +62,9 @@ class HomeActivity final : public Activity {
   void showHomeBookOptions(int index);
   void openHomeBookInfo(int index, bool metadata);
   void openHomeBookCover(int index);
+  void promptRemoveHomeRecent(int index);
+  void promptDeleteHomeBook(int index);
+  void refreshHomeRecentsAfterRemoval(int preferredIndex);
   void reopenHomeAfterChild();
 
   int getMenuItemCount() const;
