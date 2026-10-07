@@ -57,9 +57,9 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  constexpr int featuredW = 210;
-  constexpr int featuredH = 352;
-  return {left, coverW, coverH, featuredW, featuredH, 38, 408, gapX, columns, 640};
+  constexpr int featuredW = 220;
+  constexpr int featuredH = 350;
+  return {left, coverW, coverH, featuredW, featuredH, 38, 404, gapX, columns, 640};
 }
 
 std::string trimCopy(std::string value) {
@@ -154,7 +154,7 @@ int HomeActivity::gridBookLimit() const { return 4; }
 
 int HomeActivity::gridThumbHeight(int index) const {
   const auto layout = coverGridLayout(renderer);
-  // Featured cover: 210x352. Small covers: 132x220.
+  // Featured cover: 220x350. Small covers: 132x220.
   return index == 0 ? layout.featuredH : layout.coverH;
 }
 
@@ -350,10 +350,10 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF &&
       !coverGridActive();
   for (RecentBook& book : recentBooks) {
-    // RoundedRaff's 340x510 Home cover uses a 567px-high legacy thumbnail:
-    // the generator's fixed 0.6 aspect ratio yields 340px width. The renderer
-    // center-crops the extra source height into the requested 340x510 frame.
-    const int thumbHeight = coverGridActive() ? gridThumbHeight(progress) : (roundedRaffHome ? 567 : coverHeight);
+    // RoundedRaff's 330x500 Home cover uses a 550px-high legacy thumbnail:
+    // the generator's fixed 0.6 aspect ratio yields 330px width. The renderer
+    // center-crops the extra source height into the requested 330x500 frame.
+    const int thumbHeight = coverGridActive() ? gridThumbHeight(progress) : (roundedRaffHome ? 550 : coverHeight);
     bool success = true;
 
     if (FsHelpers::hasEpubExtension(book.path)) {
@@ -621,7 +621,7 @@ void HomeActivity::loop() {
   if (roundedRaffHome && useLibraryHomeMenu()) {
     // CPHUN-224: two rows / two columns. Left items are left aligned,
     // right items are right aligned. Keep touch targets generous around the labels.
-    constexpr int rowY[2] = {642, 695};
+    constexpr int rowY[2] = {636, 691};
     constexpr int leftX = 52;
     constexpr int cellW = 180;
     constexpr int cellH = 48;
@@ -726,9 +726,9 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   if (roundedRaffHome && useLibraryHomeMenu()) {
-    // Reading progress below the centered 340x510 cover.
+    // Reading progress below the centered 330x500 cover.
     constexpr int progressX = 72;
-    constexpr int progressY = 624;
+    constexpr int progressY = 614;
     constexpr int progressW = 340;
     constexpr int progressH = 8;
     if (!recentBooks.empty()) {
@@ -748,7 +748,7 @@ void HomeActivity::render(RenderLock&&) {
     // row 2 y=695: Másolás / Beállítások
     constexpr int leftTextX = 72;
     constexpr int rightTextX = 412;
-    constexpr int menuTextY[2] = {650, 703};
+    constexpr int menuTextY[2] = {644, 699};
     const int menuSelection = selectorIndex - static_cast<int>(recentBooks.size());
     const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
     for (int i = 0; i < static_cast<int>(menuItems.size()); ++i) {
@@ -1130,6 +1130,28 @@ bool HomeActivity::renderGridGrayscaleCovers() {
 void HomeActivity::previewGridBook(const int index) {
   if (index <= 0 || index >= static_cast<int>(recentBooks.size())) return;
   std::swap(recentBooks[0], recentBooks[index]);
+
+  // Only the newly featured book needs the large-cover caches. The three
+  // small 220px thumbnails remain untouched and are reused as-is.
+  if (FsHelpers::hasEpubExtension(recentBooks[0].path)) {
+    Epub epub(recentBooks[0].path, "/.crosspoint");
+    const int featuredHeight = gridThumbHeight(0);
+    const std::string bwPath = epub.getThumbBmpPath(featuredHeight);
+    const std::string grayPath = epub.getGridThumbBmpPath(featuredHeight);
+    const bool needBw = !validBmpFile(bwPath);
+    const bool needGray = !validBmpFile(grayPath);
+    if (needBw || needGray) {
+      if (Storage.exists(bwPath.c_str()) && needBw) Storage.remove(bwPath.c_str());
+      if (Storage.exists(grayPath.c_str()) && needGray) Storage.remove(grayPath.c_str());
+      bool loaded = epub.load(false, true);
+      if (!loaded) loaded = epub.load(true, true);
+      if (loaded) {
+        if (needBw) epub.generateThumbBmp(featuredHeight);
+        if (needGray) epub.generateGridThumbBmp(featuredHeight);
+      }
+    }
+  }
+
   selectorIndex = 0;
   loadFeaturedProgress();
   gridFrameValid = false;
@@ -1242,7 +1264,7 @@ void HomeActivity::loopCoverGrid() {
     }
   }
 
-  constexpr int menuRowY[2] = {642, 701};
+  constexpr int menuRowY[2] = {644, 699};
   constexpr int menuLeftX = 52;
   constexpr int menuCellW = 180;
   constexpr int menuCellH = 48;
@@ -1277,18 +1299,19 @@ void HomeActivity::renderCoverGrid() {
   const int height = renderer.getScreenHeight();
   const int bookCount = static_cast<int>(recentBooks.size());
 
-  auto drawMenu = [this, &layout, width, height, bookCount]() {
+  auto drawMenu = [this, &layout, &metrics, width, height, bookCount]() {
     std::vector<const char*> labels;
     if (I18N.getLanguage() == Language::HU) {
       labels = {"Könyvtár", "Böngésző", "Másolás", "Beállítások"};
     } else {
       labels = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
     }
-    renderer.fillRect(0, layout.menuTop, width, std::max(0, height - layout.menuTop), false);
+    const int menuBottom = std::max(layout.menuTop, height - metrics.buttonHintsHeight);
+    renderer.fillRect(0, layout.menuTop, width, std::max(0, menuBottom - layout.menuTop), false);
 
     constexpr int leftTextX = 72;
     constexpr int rightTextX = 412;
-    constexpr int menuTextY[2] = {650, 709};
+    constexpr int menuTextY[2] = {652, 707};
     const int menuSelection = selectorIndex >= bookCount ? selectorIndex - bookCount : -1;
     const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
     for (int i = 0; i < 4; ++i) {
@@ -1338,8 +1361,8 @@ void HomeActivity::renderCoverGrid() {
   if (!recentBooks.empty()) {
     paintGridCover(0, Rect{layout.left, layout.featuredY, layout.featuredW, layout.featuredH});
 
-    const int textX = layout.left + layout.featuredW + 22;  // 260 px on 480-wide X4
-    const int textW = std::max(40, width - textX - 34);      // 186 px on 480-wide X4
+    const int textX = layout.left + layout.featuredW + 22;  // 270 px on 480-wide X4
+    const int textW = std::max(40, width - textX - 34);      // 176 px on 480-wide X4
     const std::string displayTitle = bookui::cleanDisplayedBookTitle(recentBooks[0].title);
     const auto title = renderer.wrappedText(UI_12_FONT_ID, displayTitle.c_str(), textW, 4);
     int titleY = layout.featuredY + 12;
