@@ -139,7 +139,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         hasCover = false;
       } else {
         const std::string coverBmpPath =
-            UITheme::getCoverThumbPath(coverPath, RoundedRaffMetrics::values.homeCoverHeight);
+            UITheme::getCoverThumbPath(coverPath, 540);
 
         // First time: load cover from SD and render
         HalFile file;
