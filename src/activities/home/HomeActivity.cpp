@@ -609,30 +609,51 @@ void HomeActivity::loop() {
   }
 
   const bool includeContinueReading = metrics.homeContinueReadingInMenu && !useLibraryHomeMenu();
-  const int menuTop = metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
-  const int renderedMenuSelection =
-      includeContinueReading ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size());
-  const int renderedMenuCount =
-      menuCount - (includeContinueReading ? 0 : static_cast<int>(recentBooks.size()));
-  int menuRow = -1;
-  // Row height from the theme, not the metrics table: RoundedRaff draws
-  // font-derived rows and the touch grid must match the visuals exactly.
-  const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
-                                              0, INT32_MAX, menuRowHeight);
-  if (menuTouch != MappedInputManager::RowTouch::None) {
-    const int touchedIndex =
-        includeContinueReading ? menuRow : menuRow + static_cast<int>(recentBooks.size());
-    if (menuTouch == MappedInputManager::RowTouch::Down) {
-      if (selectorIndex != touchedIndex) {
-        selectorIndex = touchedIndex;
-        requestUpdate();
+  const bool roundedRaffHome =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
+
+  if (roundedRaffHome && useLibraryHomeMenu()) {
+    // CPHUN-224: two rows / two columns. Left items are left aligned,
+    // right items are right aligned. Keep touch targets generous around the labels.
+    constexpr int rowY[2] = {612, 669};
+    constexpr int leftX = 40;
+    constexpr int cellW = 200;
+    constexpr int cellH = 48;
+    for (int i = 0; i < 4; ++i) {
+      const int col = i & 1;
+      const int row = i >> 1;
+      const int x = col == 0 ? leftX : renderer.getScreenWidth() - leftX - cellW;
+      if (mappedInput.wasTapInRect(x, rowY[row], cellW, cellH)) {
+        selectorIndex = static_cast<int>(recentBooks.size()) + i;
+        activateSelection();
+        return;
       }
-    } else {
-      selectorIndex = touchedIndex;
-      activateSelection();
     }
-    return;
+  } else {
+    const int menuTop = metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+    const int renderedMenuCount =
+        menuCount - (includeContinueReading ? 0 : static_cast<int>(recentBooks.size()));
+    int menuRow = -1;
+    // Row height from the theme, not the metrics table: RoundedRaff draws
+    // font-derived rows and the touch grid must match the visuals exactly.
+    const int menuRowHeight = GUI.getMenuRowHeight(renderer);
+    const auto menuTouch =
+        mappedInput.rowTouch(menuRow, menuTop, menuRowHeight + metrics.menuSpacing, renderedMenuCount,
+                             0, INT32_MAX, menuRowHeight);
+    if (menuTouch != MappedInputManager::RowTouch::None) {
+      const int touchedIndex =
+          includeContinueReading ? menuRow : menuRow + static_cast<int>(recentBooks.size());
+      if (menuTouch == MappedInputManager::RowTouch::Down) {
+        if (selectorIndex != touchedIndex) {
+          selectorIndex = touchedIndex;
+          requestUpdate();
+        }
+      } else {
+        selectorIndex = touchedIndex;
+        activateSelection();
+      }
+      return;
+    }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -679,14 +700,12 @@ void HomeActivity::render(RenderLock&&) {
   std::vector<UIIcon> menuIcons;
   const bool includeContinueReading = metrics.homeContinueReadingInMenu && !useLibraryHomeMenu();
   if (useLibraryHomeMenu()) {
-    if (coverGridActive()) {
-      const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
-      menuItems = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
-      menuIcons = {Library, Recent, Folder, Transfer, Settings};
+    if (I18N.getLanguage() == Language::HU) {
+      menuItems = {"Könyvtár", "Böngésző", "Másolás", "Beállítások"};
     } else {
       menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
-      menuIcons = {Library, Folder, Transfer, Settings};
     }
+    menuIcons = {Library, Folder, Transfer, Settings};
   } else {
     menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
     menuIcons = {Folder, Recent, Transfer, Settings};
@@ -700,15 +719,54 @@ void HomeActivity::render(RenderLock&&) {
     }
   }
 
-  GUI.drawButtonMenu(
-      renderer,
-      Rect{0, metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing + 20 +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      includeContinueReading ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size()),
-      [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+  if (roundedRaffHome && useLibraryHomeMenu()) {
+    // Reading progress below the enlarged 480 px cover.
+    constexpr int progressX = 78;
+    constexpr int progressY = 594;
+    constexpr int progressW = 324;
+    constexpr int progressH = 7;
+    if (!recentBooks.empty()) {
+      renderer.fillRect(progressX, progressY, progressW, progressH, false);
+      renderer.drawRect(progressX, progressY, progressW, progressH, true);
+      if (featuredProgressTenths >= 0) {
+        const int innerW = progressW - 2;
+        const int fillW = (innerW * std::clamp(featuredProgressTenths, 0, 1000) + 500) / 1000;
+        if (fillW > 0) {
+          renderer.fillRectDither(progressX + 1, progressY + 1, fillW, progressH - 2, Color::DarkGray);
+        }
+      }
+    }
+
+    // CPHUN-224 Home menu geometry:
+    // row 1 y=620: Könyvtár / Böngésző
+    // row 2 y=677: Másolás / Beállítások
+    constexpr int leftTextX = 64;
+    constexpr int rightTextX = 416;
+    constexpr int menuTextY[2] = {620, 677};
+    const int menuSelection = selectorIndex - static_cast<int>(recentBooks.size());
+    const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
+    for (int i = 0; i < static_cast<int>(menuItems.size()); ++i) {
+      const std::string label = menuItems[i];
+      const int textW = renderer.getTextWidth(UI_12_FONT_ID, label.c_str(), EpdFontFamily::BOLD);
+      const int x = (i & 1) == 0 ? leftTextX : rightTextX - textW;
+      const int y = menuTextY[i >> 1];
+      const bool selected = menuSelection == i;
+      if (selected) {
+        renderer.fillRoundedRect(x - 10, y - 5, textW + 20, lineH + 10, 16, Color::Black);
+      }
+      renderer.drawText(UI_12_FONT_ID, x, y, label.c_str(), !selected, EpdFontFamily::BOLD);
+    }
+  } else {
+    GUI.drawButtonMenu(
+        renderer,
+        Rect{0, metrics.homeTopPadding + 20 + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+             pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing + 20 +
+                           metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
+        static_cast<int>(menuItems.size()),
+        includeContinueReading ? selectorIndex : selectorIndex - static_cast<int>(recentBooks.size()),
+        [&menuItems](int index) { return std::string(menuItems[index]); },
+        [&menuIcons](int index) { return menuIcons[index]; });
+  }
 
   const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
                                             tr(STR_DIR_DOWN));
@@ -1042,7 +1100,7 @@ void HomeActivity::loopCoverGrid() {
   const auto layout = coverGridLayout(renderer);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int bookCount = static_cast<int>(recentBooks.size());
-  const int navCount = bookCount + 5;
+  const int navCount = bookCount + 4;
 
   auto activate = [this, bookCount]() {
     if (selectorIndex < bookCount) {
@@ -1125,7 +1183,7 @@ void HomeActivity::loopCoverGrid() {
 
   int menuRow = -1;
   const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 5, 0,
+  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 4, 0,
                                               INT32_MAX, menuRowHeight);
   if (menuTouch != MappedInputManager::RowTouch::None) {
     selectorIndex = bookCount + menuRow;
@@ -1155,13 +1213,16 @@ void HomeActivity::renderCoverGrid() {
   const int bookCount = static_cast<int>(recentBooks.size());
 
   auto drawMenu = [this, &metrics, &layout, width, height, bookCount]() {
-    const char* gridLabel = I18N.getLanguage() == Language::HU ? "Borítórács" : "Cover Grid";
-    std::vector<const char*> labels = {tr(STR_LIBRARY), gridLabel, tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER),
-                                       tr(STR_SETTINGS_TITLE)};
-    std::vector<UIIcon> icons = {Library, Recent, Folder, Transfer, Settings};
+    std::vector<const char*> labels;
+    if (I18N.getLanguage() == Language::HU) {
+      labels = {"Könyvtár", "Böngésző", "Másolás", "Beállítások"};
+    } else {
+      labels = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+    }
+    std::vector<UIIcon> icons = {Library, Folder, Transfer, Settings};
     const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
     renderer.fillRect(0, layout.menuTop, width, menuHeight, false);
-    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 5,
+    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 4,
                        selectorIndex >= bookCount ? selectorIndex - bookCount : -1,
                        [&labels](int index) { return std::string(labels[index]); },
                        [&icons](int index) { return icons[index]; });
