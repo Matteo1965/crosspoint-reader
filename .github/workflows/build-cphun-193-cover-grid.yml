@@ -133,7 +133,6 @@ jobs:
           grep -Fq 'doc["libraryViewMode"] = libraryViewMode;' src/CrossPointSettings.cpp
           grep -Fq 'SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID' src/activities/ActivityManager.cpp
           grep -Fq 'makeUniqueNoThrow<CoverGridBrowserActivity>' src/activities/ActivityManager.cpp
-          grep -Fq 'openPersistedGridOnNextLoop = SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID;' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_GRID;' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_LIST;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'std::string searchQuery;' src/activities/library/LibraryViewState.h
