@@ -41,9 +41,9 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 55,
-                                 // Hungarian Edition home cover enlarged after removing the separate Continue Reading row.
-                                 .homeCoverHeight = 400,
-                                 .homeCoverTileHeight = 400,
+                                 // Hungarian Edition Home: enlarged single cover (approx. 324x480 on X4).
+                                 .homeCoverHeight = 480,
+                                 .homeCoverTileHeight = 480,
                                  .homeRecentBooksCount = 1,
                                  .homeContinueReadingInMenu = true,
                                  .homeMenuTopOffset = 32,
