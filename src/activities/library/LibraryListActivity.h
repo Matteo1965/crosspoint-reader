@@ -39,7 +39,6 @@ class LibraryListActivity final : public UiTabListActivity {
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
 
  protected:
   // --- UiListActivity / UiTabListActivity contract ---------------------------
@@ -113,7 +112,6 @@ class LibraryListActivity final : public UiTabListActivity {
   static void rebuildActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   LibraryViewStatePtr viewState;
-  bool openPersistedGridOnNextLoop = false;
 
   // Data
   void applyFilter();
