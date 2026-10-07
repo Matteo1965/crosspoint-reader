@@ -1,5 +1,5 @@
-name: CPHUN-223 Library Search + View Persistence Build (X4 dev)
-# CPHUN-223 Library/List/Grid persistence and shared search
+name: CPHUN-224 Home Layout + Last-Read Grid Build (X4 dev)
+# CPHUN-224 RoundedRaff Home layout + last-read Cover Grid selection
 
 on:
   push:
@@ -34,7 +34,7 @@ jobs:
         include:
           - env: default
             label: X4
-            artifact: CPHUN-223-X4
+            artifact: CPHUN-224-X4
             firmware: firmware.bin
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261007-223-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261007-224-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -151,6 +151,11 @@ jobs:
           grep -Fq 'const GridBook featured = pinnedBook_;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'descendingTabs_ = 3u' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'initialFeaturedSortRow()' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq 'RECENT_BOOKS.getBooks()' src/activities/home/CoverGridBrowserActivity.cpp
+          grep -Fq '{"Könyvtár", "Böngésző", "Másolás", "Beállítások"}' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressX = 78;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressY = 594;' src/activities/home/HomeActivity.cpp
+          grep -Fq '&CrossPointSettings::removeReadBooksFromRecents' src/activities/settings/SettingsActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int featuredIndex = std::clamp(previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
