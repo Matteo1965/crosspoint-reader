@@ -158,14 +158,8 @@ int HomeActivity::gridThumbHeight(int index) const {
 
 int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
   if (useLibraryHomeMenu()) {
-    if (coverGridActive()) {
-      if (item == HomeMenuItem::LIBRARY) return 0;
-      if (item == HomeMenuItem::COVER_GRID_BROWSER) return 1;
-      if (item == HomeMenuItem::FILE_BROWSER) return 2;
-      if (item == HomeMenuItem::FILE_TRANSFER) return 3;
-      if (item == HomeMenuItem::SETTINGS_MENU) return 4;
-      return 0;
-    }
+    // The Cover Grid is a Library view, not a separate Home menu destination.
+    // Both RoundedRaff Home variants expose the same four primary actions.
     if (item == HomeMenuItem::LIBRARY) return 0;
     if (item == HomeMenuItem::FILE_BROWSER) return 1;
     if (item == HomeMenuItem::FILE_TRANSFER) return 2;
@@ -187,14 +181,6 @@ int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
 
 HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
   if (useLibraryHomeMenu()) {
-    if (coverGridActive()) {
-      if (idx == 0) return HomeMenuItem::LIBRARY;
-      if (idx == 1) return HomeMenuItem::COVER_GRID_BROWSER;
-      if (idx == 2) return HomeMenuItem::FILE_BROWSER;
-      if (idx == 3) return HomeMenuItem::FILE_TRANSFER;
-      if (idx == 4) return HomeMenuItem::SETTINGS_MENU;
-      return HomeMenuItem::NONE;
-    }
     if (idx == 0) return HomeMenuItem::LIBRARY;
     if (idx == 1) return HomeMenuItem::FILE_BROWSER;
     if (idx == 2) return HomeMenuItem::FILE_TRANSFER;
@@ -211,7 +197,7 @@ HomeMenuItem HomeActivity::indexToMenuItem(const int idx) const {
 }
 
 int HomeActivity::getMenuItemCount() const {
-  int count = useLibraryHomeMenu() ? (coverGridActive() ? 5 : 4) : 4 + (hasOpdsServers ? 1 : 0);
+  int count = useLibraryHomeMenu() ? 4 : 4 + (hasOpdsServers ? 1 : 0);
   count += static_cast<int>(recentBooks.size());
   return count;
 }
@@ -415,7 +401,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
-  if (coverGridActive()) loadFeaturedProgress();
+  const bool roundedRaffHome =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
+  if (coverGridActive() || roundedRaffHome) loadFeaturedProgress();
   recentsLoaded = true;
   recentsLoading = false;
   if (coverGridActive()) {
