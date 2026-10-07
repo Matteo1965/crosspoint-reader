@@ -393,24 +393,36 @@ int CoverGridBrowserActivity::thumbHeight() const {
   return 220;
 }
 
-int CoverGridBrowserActivity::initialFeaturedSortRow() const {
+int CoverGridBrowserActivity::initialFeaturedSortRow() {
   const int total = totalBooks();
   if (total <= 0) return -1;
 
-  // On Recent, the featured cover is semantic, not merely "row zero":
-  // always pin the most recently read book. recentOrdinals_ is stored
-  // oldest -> newest, while ordinalForActiveRow() applies the visible
-  // direction. Therefore newest is row 0 in descending mode and the last
-  // visible row in ascending mode.
-  if (activeSortTab_ == 0) {
-    const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
-    if (!viewState_ || viewState_->searchQuery.empty()) return desc ? 0 : total - 1;
-
-    // With an active search, pin the newest matching Recent result.
-    // filteredRows_ stores positions in the unfiltered active order.
-    return desc ? 0 : total - 1;
+  // CPHUN-224: the featured/selected book is identified by the authoritative
+  // recent-book store, not by the current sort direction. This keeps the same
+  // last-read book highlighted for Recent/New/Title/Author and for both
+  // ascending and descending order.
+  const auto& recents = RECENT_BOOKS.getBooks();
+  for (const auto& recent : recents) {
+    if (!FsHelpers::hasEpubExtension(recent.path)) continue;
+    for (int row = 0; row < total; ++row) {
+      const uint16_t ordinal = ordinalForActiveRow(row);
+      if (ordinal == 0xFFFF) continue;
+      library::ClixRecord record{};
+      std::string path;
+      if (!index_.readRecord(ordinal, record) || !index_.readPath(record, path)) continue;
+      if (path == recent.path) return row;
+    }
+    // The first valid EPUB in recent.json is the last-read book. If an active
+    // Library search filters it out, do not silently pin an older recent book.
+    break;
   }
 
+  // Fallback if recent.json is empty/stale or the last-read book is outside
+  // the current filtered result set.
+  if (activeSortTab_ == 0) {
+    const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
+    return desc ? 0 : total - 1;
+  }
   return 0;
 }
 
