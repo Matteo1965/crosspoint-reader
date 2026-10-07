@@ -393,6 +393,27 @@ int CoverGridBrowserActivity::thumbHeight() const {
   return 220;
 }
 
+int CoverGridBrowserActivity::initialFeaturedSortRow() const {
+  const int total = totalBooks();
+  if (total <= 0) return -1;
+
+  // On Recent, the featured cover is semantic, not merely "row zero":
+  // always pin the most recently read book. recentOrdinals_ is stored
+  // oldest -> newest, while ordinalForActiveRow() applies the visible
+  // direction. Therefore newest is row 0 in descending mode and the last
+  // visible row in ascending mode.
+  if (activeSortTab_ == 0) {
+    const bool desc = (descendingTabs_ & static_cast<uint8_t>(1u << activeSortTab_)) != 0;
+    if (!viewState_ || viewState_->searchQuery.empty()) return desc ? 0 : total - 1;
+
+    // With an active search, pin the newest matching Recent result.
+    // filteredRows_ stores positions in the unfiltered active order.
+    return desc ? 0 : total - 1;
+  }
+
+  return 0;
+}
+
 bool CoverGridBrowserActivity::loadPage() {
   books_.clear();
   thumbnailsReady_ = false;
@@ -425,9 +446,9 @@ bool CoverGridBrowserActivity::loadPage() {
   };
 
   if (pinnedSortRow_ < 0 || pinnedSortRow_ >= total) {
-    pinnedSortRow_ = 0;
+    pinnedSortRow_ = initialFeaturedSortRow();
     pinnedBook_ = GridBook{};
-    if (!readBookAt(pinnedSortRow_, pinnedBook_)) return false;
+    if (pinnedSortRow_ < 0 || !readBookAt(pinnedSortRow_, pinnedBook_)) return false;
   }
 
   // Grid paging uses six consecutive rows of the original order with the
