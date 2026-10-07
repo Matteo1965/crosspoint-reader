@@ -37,6 +37,7 @@ class CoverGridBrowserActivity final : public Activity {
   bool openIndex();
   bool rebuildIndex();
   bool loadPage();
+  int initialFeaturedSortRow() const;
   bool buildReadingShelves();
   uint16_t ordinalForActiveRow(int row);
   bool ensurePageThumbs();
