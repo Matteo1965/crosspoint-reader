@@ -39,6 +39,8 @@ struct CoverGridLayout {
   int left;
   int coverW;
   int coverH;
+  int featuredW;
+  int featuredH;
   int featuredY;
   int gridY;
   int gapX;
@@ -53,7 +55,9 @@ CoverGridLayout coverGridLayout(const GfxRenderer& renderer) {
   constexpr int columns = 3;
   constexpr int coverW = 132;
   constexpr int coverH = 220;
-  return {left, coverW, coverH, 38, 276, gapX, columns, 502};
+  constexpr int featuredW = 180;
+  constexpr int featuredH = 300;
+  return {left, coverW, coverH, featuredW, featuredH, 38, 358, gapX, columns, 630};
 }
 
 std::string trimCopy(std::string value) {
@@ -147,13 +151,9 @@ bool HomeActivity::useLibraryHomeMenu() const {
 int HomeActivity::gridBookLimit() const { return 4; }
 
 int HomeActivity::gridThumbHeight(int index) const {
-  (void)index;
   const auto layout = coverGridLayout(renderer);
-  // The legacy thumbnail generator uses width = height * 0.6. Generate the
-  // Cover Grid thumbnail tall enough that its width reaches the grid cell,
-  // then center-crop the excess height at render time. This keeps the normal
-  // RoundedRaff thumbnail cache untouched while guaranteeing full cell fill.
-  return (layout.coverW * 10 + 5) / 6;
+  // Featured cover: 180x300. Small covers: 132x220.
+  return index == 0 ? layout.featuredH : layout.coverH;
 }
 
 int HomeActivity::menuItemToIndex(const HomeMenuItem item) const {
@@ -619,9 +619,9 @@ void HomeActivity::loop() {
   if (roundedRaffHome && useLibraryHomeMenu()) {
     // CPHUN-224: two rows / two columns. Left items are left aligned,
     // right items are right aligned. Keep touch targets generous around the labels.
-    constexpr int rowY[2] = {612, 669};
-    constexpr int leftX = 40;
-    constexpr int cellW = 200;
+    constexpr int rowY[2] = {632, 687};
+    constexpr int leftX = 52;
+    constexpr int cellW = 180;
     constexpr int cellH = 48;
     for (int i = 0; i < 4; ++i) {
       const int col = i & 1;
@@ -724,11 +724,11 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   if (roundedRaffHome && useLibraryHomeMenu()) {
-    // Reading progress below the enlarged 480 px cover.
-    constexpr int progressX = 78;
-    constexpr int progressY = 594;
-    constexpr int progressW = 324;
-    constexpr int progressH = 7;
+    // Reading progress below the centered 340x510 cover.
+    constexpr int progressX = 72;
+    constexpr int progressY = 624;
+    constexpr int progressW = 340;
+    constexpr int progressH = 8;
     if (!recentBooks.empty()) {
       renderer.fillRect(progressX, progressY, progressW, progressH, false);
       renderer.drawRect(progressX, progressY, progressW, progressH, true);
@@ -741,12 +741,12 @@ void HomeActivity::render(RenderLock&&) {
       }
     }
 
-    // CPHUN-224 Home menu geometry:
-    // row 1 y=620: Könyvtár / Böngésző
-    // row 2 y=677: Másolás / Beállítások
-    constexpr int leftTextX = 64;
-    constexpr int rightTextX = 416;
-    constexpr int menuTextY[2] = {620, 677};
+    // Shared two-row Home menu geometry.
+    // row 1 y=640: Könyvtár / Böngésző
+    // row 2 y=695: Másolás / Beállítások
+    constexpr int leftTextX = 72;
+    constexpr int rightTextX = 412;
+    constexpr int menuTextY[2] = {640, 695};
     const int menuSelection = selectorIndex - static_cast<int>(recentBooks.size());
     const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
     for (int i = 0; i < static_cast<int>(menuItems.size()); ++i) {
@@ -983,11 +983,13 @@ bool HomeActivity::renderGridGrayscaleCovers() {
     }
     if (!validBmpFile(path)) return;
 
-    const int x = index == 0
+    const bool featured = index == 0;
+    const int x = featured
                       ? layout.left
                       : layout.left + ((static_cast<int>(index) - 1) % layout.columns) * (layout.coverW + layout.gapX);
-    const int y = index == 0 ? layout.featuredY : layout.gridY;
-    const Rect rect{x, y, layout.coverW, layout.coverH};
+    const int y = featured ? layout.featuredY : layout.gridY;
+    const Rect rect{x, y, featured ? layout.featuredW : layout.coverW,
+                    featured ? layout.featuredH : layout.coverH};
 
     HalFile file;
     if (!Storage.openFileForRead("HOME", path, file)) return;
@@ -1132,10 +1134,13 @@ void HomeActivity::loopCoverGrid() {
   int longY = -1;
   if (mappedInput.wasScreenLongPress(longX, longY)) {
     for (int i = 0; i < bookCount; ++i) {
-      const int x = i == 0 ? layout.left
-                           : layout.left + ((i - 1) % layout.columns) * (layout.coverW + layout.gapX);
-      const int y = i == 0 ? layout.featuredY : layout.gridY;
-      if (longX >= x && longX < x + layout.coverW && longY >= y && longY < y + layout.coverH) {
+      const bool featured = i == 0;
+      const int x = featured ? layout.left
+                             : layout.left + ((i - 1) % layout.columns) * (layout.coverW + layout.gapX);
+      const int y = featured ? layout.featuredY : layout.gridY;
+      const int w = featured ? layout.featuredW : layout.coverW;
+      const int h = featured ? layout.featuredH : layout.coverH;
+      if (longX >= x && longX < x + w && longY >= y && longY < y + h) {
         selectorIndex = i;
         showHomeBookOptions(i);
         return;
@@ -1175,25 +1180,32 @@ void HomeActivity::loopCoverGrid() {
   }
 
   for (int i = 0; i < bookCount; ++i) {
-    const int x = i == 0 ? layout.left
-                         : layout.left + ((i - 1) % layout.columns) * (layout.coverW + layout.gapX);
-    const int y = i == 0 ? layout.featuredY : layout.gridY;
-    if (mappedInput.wasTapInRect(x, y, layout.coverW, layout.coverH)) {
+    const bool featured = i == 0;
+    const int x = featured ? layout.left
+                           : layout.left + ((i - 1) % layout.columns) * (layout.coverW + layout.gapX);
+    const int y = featured ? layout.featuredY : layout.gridY;
+    const int w = featured ? layout.featuredW : layout.coverW;
+    const int h = featured ? layout.featuredH : layout.coverH;
+    if (mappedInput.wasTapInRect(x, y, w, h)) {
       selectorIndex = i;
       activate();
       return;
     }
   }
 
-  int menuRow = -1;
-  const int menuRowHeight = GUI.getMenuRowHeight(renderer);
-  const auto menuTouch = mappedInput.rowTouch(menuRow, layout.menuTop, menuRowHeight + metrics.menuSpacing, 4, 0,
-                                              INT32_MAX, menuRowHeight);
-  if (menuTouch != MappedInputManager::RowTouch::None) {
-    selectorIndex = bookCount + menuRow;
-    if (menuTouch == MappedInputManager::RowTouch::Tap) activate();
-    else requestUpdate();
-    return;
+  constexpr int menuRowY[2] = {632, 687};
+  constexpr int menuLeftX = 52;
+  constexpr int menuCellW = 180;
+  constexpr int menuCellH = 48;
+  for (int i = 0; i < 4; ++i) {
+    const int col = i & 1;
+    const int row = i >> 1;
+    const int x = col == 0 ? menuLeftX : renderer.getScreenWidth() - menuLeftX - menuCellW;
+    if (mappedInput.wasTapInRect(x, menuRowY[row], menuCellW, menuCellH)) {
+      selectorIndex = bookCount + i;
+      activate();
+      return;
+    }
   }
 
 
@@ -1209,36 +1221,50 @@ void HomeActivity::renderCoverGrid() {
   // first, then allow exactly one complete page render.
   if (!recentsLoaded && !recentsLoading) {
     firstRenderDone = true;
-    loadRecentCovers(layout.coverH);
+    loadRecentCovers(layout.featuredH);
     return;
   }
   const int width = renderer.getScreenWidth();
   const int height = renderer.getScreenHeight();
   const int bookCount = static_cast<int>(recentBooks.size());
 
-  auto drawMenu = [this, &metrics, &layout, width, height, bookCount]() {
+  auto drawMenu = [this, &layout, width, height, bookCount]() {
     std::vector<const char*> labels;
     if (I18N.getLanguage() == Language::HU) {
       labels = {"Könyvtár", "Böngésző", "Másolás", "Beállítások"};
     } else {
       labels = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
     }
-    std::vector<UIIcon> icons = {Library, Folder, Transfer, Settings};
-    const int menuHeight = std::max(0, height - layout.menuTop - metrics.buttonHintsHeight - 6);
-    renderer.fillRect(0, layout.menuTop, width, menuHeight, false);
-    GUI.drawButtonMenu(renderer, Rect{0, layout.menuTop, width, menuHeight}, 4,
-                       selectorIndex >= bookCount ? selectorIndex - bookCount : -1,
-                       [&labels](int index) { return std::string(labels[index]); },
-                       [&icons](int index) { return icons[index]; });
+    renderer.fillRect(0, layout.menuTop, width, std::max(0, height - layout.menuTop), false);
+
+    constexpr int leftTextX = 72;
+    constexpr int rightTextX = 412;
+    constexpr int menuTextY[2] = {640, 695};
+    const int menuSelection = selectorIndex >= bookCount ? selectorIndex - bookCount : -1;
+    const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
+    for (int i = 0; i < 4; ++i) {
+      const std::string label = labels[i];
+      const int textW = renderer.getTextWidth(UI_12_FONT_ID, label.c_str(), EpdFontFamily::BOLD);
+      const int x = (i & 1) == 0 ? leftTextX : rightTextX - textW;
+      const int y = menuTextY[i >> 1];
+      const bool selected = menuSelection == i;
+      if (selected) {
+        renderer.fillRoundedRect(x - 10, y - 5, textW + 20, lineH + 10, 16, Color::Black);
+      }
+      renderer.drawText(UI_12_FONT_ID, x, y, label.c_str(), !selected, EpdFontFamily::BOLD);
+    }
   };
 
   if (gridFrameValid && recentsLoaded) {
     auto outlineBook = [this, &layout](const int selected, const bool black) {
       if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
-      const int x = selected == 0 ? layout.left
-                                  : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
-      const int y = selected == 0 ? layout.featuredY : layout.gridY;
-      renderer.drawRect(x - 3, y - 3, layout.coverW + 6, layout.coverH + 6, 2, black);
+      const bool featured = selected == 0;
+      const int x = featured ? layout.left
+                             : layout.left + ((selected - 1) % layout.columns) * (layout.coverW + layout.gapX);
+      const int y = featured ? layout.featuredY : layout.gridY;
+      const int w = featured ? layout.featuredW : layout.coverW;
+      const int h = featured ? layout.featuredH : layout.coverH;
+      renderer.drawRect(x - 3, y - 3, w + 6, h + 6, 2, black);
     };
 
     if (previousGridSelection != selectorIndex) {
@@ -1258,10 +1284,10 @@ void HomeActivity::renderCoverGrid() {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, width, std::max(0, 32 - metrics.topPadding)}, nullptr);
 
   if (!recentBooks.empty()) {
-    paintGridCover(0, Rect{layout.left, layout.featuredY, layout.coverW, layout.coverH});
+    paintGridCover(0, Rect{layout.left, layout.featuredY, layout.featuredW, layout.featuredH});
 
-    const int textX = layout.left + layout.coverW + 22;  // 182 px on 480-wide X4
-    const int textW = std::max(40, width - textX - 34);   // 264 px on 480-wide X4
+    const int textX = layout.left + layout.featuredW + 22;  // 230 px on 480-wide X4
+    const int textW = std::max(40, width - textX - 34);      // 216 px on 480-wide X4
     const std::string displayTitle = bookui::cleanDisplayedBookTitle(recentBooks[0].title);
     const auto title = renderer.wrappedText(UI_12_FONT_ID, displayTitle.c_str(), textW, 4);
     int titleY = layout.featuredY + 12;
@@ -1354,7 +1380,7 @@ void HomeActivity::renderCoverGrid() {
     firstRenderDone = true;
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
-    loadRecentCovers(layout.coverH);
+    loadRecentCovers(layout.featuredH);
   }
 }
 
