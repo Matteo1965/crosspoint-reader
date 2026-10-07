@@ -407,8 +407,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
-  const bool roundedRaffHome =
-      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF;
   if (coverGridActive() || roundedRaffHome) loadFeaturedProgress();
   recentsLoaded = true;
   recentsLoading = false;
