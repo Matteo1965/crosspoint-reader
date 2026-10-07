@@ -14,6 +14,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
+#include "home/CoverGridBrowserActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
@@ -215,7 +216,12 @@ void ActivityManager::goToFileBrowser(std::string path) {
 }
 
 void ActivityManager::goToLibrary() {
-  auto activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
+  std::unique_ptr<Activity> activity;
+  if (SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID) {
+    activity = makeUniqueNoThrow<CoverGridBrowserActivity>(renderer, mappedInput);
+  } else {
+    activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
+  }
   if (!activity) {
     LOG_ERR("ACT", "OOM: library activity");
     return;
