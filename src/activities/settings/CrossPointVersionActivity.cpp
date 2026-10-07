@@ -21,10 +21,12 @@ std::string hungarianEditionLabel() {
   const size_t firstDash = buildId.find('-');
   const size_t secondDash = firstDash == std::string::npos ? std::string::npos : buildId.find('-', firstDash + 1);
   const size_t thirdDash = secondDash == std::string::npos ? std::string::npos : buildId.find('-', secondDash + 1);
-  if (secondDash == std::string::npos || thirdDash == std::string::npos || thirdDash <= secondDash + 1) {
+  if (secondDash == std::string::npos || secondDash + 1 >= buildId.size()) {
     return "Hungarian Edition";
   }
-  return "Hungarian Edition v." + buildId.substr(secondDash + 1, thirdDash - secondDash - 1);
+  const size_t versionEnd = thirdDash == std::string::npos ? buildId.size() : thirdDash;
+  if (versionEnd <= secondDash + 1) return "Hungarian Edition";
+  return "Hungarian Edition v." + buildId.substr(secondDash + 1, versionEnd - secondDash - 1);
 }
 
 }  // namespace
@@ -203,25 +205,18 @@ void CrossPointVersionActivity::render(RenderLock&&) {
     drawWrapped(UI_12_FONT_ID, hu ? "Újdonságok és javítások" : "New features and fixes", true);
     y += bodyLineHeight;
     const char* updates[] = {
-        hu ? "- Könyvtár nézet és Borítórács főoldal" : "- Library view and Cover Grid home",
-        hu ? "- KOReader szinkron és rejtett elemek" : "- KOReader sync and hidden elements",
-        hu ? "- Továbbfejlesztett lábjegyzet-kezelés" : "- Improved footnote handling",
-        hu ? "- Fejezet újraindexelés és beállítások" : "- Chapter reindexing and settings",
-        hu ? "- SD Font memória javítások" : "- SD font memory improvements",
-        hu ? "- X4 és X4 Classic kompatibilitás" : "- X4 and X4 Classic compatibility",
-        hu ? "- Javított árnyalatú képmegjelenítés" : "- Improved image tonality",
+        hu ? "- Új Könyvtár: Listanézet és 6+1 Borítórács" : "- New Library: List view and 6+1 Cover Grid",
+        hu ? "- Könyv gyorsmenü hosszú gombnyomással" : "- Book quick menu with long button press",
+        hu ? "- Könyvkeresés és rendezés" : "- Book search and sorting",
+        hu ? "- Új 1 borítós és 3+1 Főmenü" : "- New single-cover and 3+1 Home screen",
+        hu ? "- Javított grayscale borítók és alvóképernyő" : "- Improved grayscale covers and sleep screen",
+        hu ? "- Magyar elválasztás és optikai tördelés" : "- Hungarian hyphenation and optical typesetting",
+        hu ? "- Betűköz-optimalizálás és SD-font javítások" : "- Letter-spacing optimization and SD-font fixes",
+        hu ? "- Magyar szótár és KOReader szinkronizálás" : "- Hungarian dictionary and KOReader synchronization",
+        hu ? "- X4 / X4 Classic kompatibilitási és stabilitási javítások"
+           : "- X4 / X4 Classic compatibility and stability fixes",
     };
     for (const char* update : updates) drawWrapped(UI_12_FONT_ID, update);
-
-    y += bodyLineHeight;
-    drawWrapped(UI_12_FONT_ID, "CrossPoint 1.6.5:", true);
-    const char* releaseUpdates[] = {
-        hu ? "- Rövid gombnyomás és lista kirajzolás" : "- Short press and list redraw",
-        hu ? "- Alvóképernyő átlátszóság" : "- Sleep-screen transparency",
-        hu ? "- Pontosabb fejezet pozíciók" : "- More accurate chapter positions",
-        hu ? "- Stabilitási és kompatibilitási javítások" : "- Stability and compatibility fixes",
-    };
-    for (const char* update : releaseUpdates) drawWrapped(UI_12_FONT_ID, update);
   }
 
   const auto labels =
