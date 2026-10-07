@@ -58,6 +58,10 @@ void SettingsActivity::rebuildSettingsLists() {
 
   for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+    // CPHUN-224: hide the legacy "Befejezett könyv törlése" setting from
+    // the device Settings UI. Keep the persisted field/API intact for
+    // compatibility with existing settings files.
+    if (setting.valuePtr == &CrossPointSettings::removeReadBooksFromRecents) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does
       // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
