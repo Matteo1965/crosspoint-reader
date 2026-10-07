@@ -1,5 +1,5 @@
-name: CPHUN-224 Home Layout + Last-Read Grid Build (X4 dev)
-# CPHUN-224 RoundedRaff Home layout + last-read Cover Grid selection
+name: CrossPoint Hungarian Edition 1.6.5 Public Build (X4 + X4 Classic)
+# Public Hungarian Edition release build for X4 and X4 Classic
 
 on:
   push:
@@ -33,10 +33,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - env: default
+          - env: gh_release
             label: X4
-            artifact: CPHUN-224-X4
-            firmware: firmware.bin
+            artifact: CrossPoint-HungarianEdition-1.6.5-X4
+            firmware: firmware-x4.bin
+          - env: x4c-gh_release
+            label: X4 Classic
+            artifact: CrossPoint-HungarianEdition-1.6.5-X4-Classic
+            firmware: firmware-x4-classic.bin
 
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +54,8 @@ jobs:
 
           # This is a direct source build. No CPHUN reconstruction or source
           # mutation scripts run before compilation.
-          grep -Fq 'CPHUN-261007-224-EXP' src/CPHUNBuildId.h
+          grep -Fq 'CPHUN-261007-224' src/CPHUNBuildId.h
+          ! grep -Fq 'CPHUN-261007-224-EXP' src/CPHUNBuildId.h
 
           # CPHUN-191 persistence is real source now.
           grep -Fq 'letterSpacingLimitPercent != 10' src/CrossPointSettings.cpp
@@ -172,6 +177,11 @@ jobs:
           grep -Fq 'UITheme::getCoverThumbPath(coverPath, 550)' src/components/themes/roundedraff/RoundedRaffTheme.cpp
           grep -Fq 'coverWidth = 330;' src/components/themes/roundedraff/RoundedRaffTheme.cpp
           grep -Fq '.homeCoverHeight = 500' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -Fq 'Új Könyvtár: Listanézet és 6+1 Borítórács' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'Könyv gyorsmenü hosszú gombnyomással' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'Könyvkeresés és rendezés' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'X4 / X4 Classic kompatibilitási és stabilitási javítások' src/activities/settings/CrossPointVersionActivity.cpp
+          grep -Fq 'versionEnd = thirdDash == std::string::npos ? buildId.size() : thirdDash;' src/activities/settings/CrossPointVersionActivity.cpp
           grep -Fq '&CrossPointSettings::removeReadBooksFromRecents' src/activities/settings/SettingsActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
