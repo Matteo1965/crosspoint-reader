@@ -131,7 +131,8 @@ jobs:
           grep -Fq 'if (!pendingVirtualChapterJump) advancePastSkippedSpines(true);' src/activities/reader/EpubReaderActivity.cpp
           grep -Fq 'libraryViewMode = LIBRARY_LIST' src/CrossPointSettings.h
           grep -Fq 'doc["libraryViewMode"] = libraryViewMode;' src/CrossPointSettings.cpp
-          grep -Fq 'openPersistedGridOnNextLoop' src/activities/library/LibraryListActivity.cpp
+          grep -Fq 'SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID' src/activities/ActivityManager.cpp
+          grep -Fq 'makeUniqueNoThrow<CoverGridBrowserActivity>' src/activities/ActivityManager.cpp
           grep -Fq 'openPersistedGridOnNextLoop = SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID;' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_GRID;' src/activities/library/LibraryListActivity.cpp
           grep -Fq 'SETTINGS.libraryViewMode = CrossPointSettings::LIBRARY_LIST;' src/activities/home/CoverGridBrowserActivity.cpp
@@ -150,6 +151,7 @@ jobs:
           grep -Fq 'int tabSideMarginPx() const override { return 28; }' src/activities/library/LibraryListActivity.h
           grep -Fq 'const GridBook featured = pinnedBook_;' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'descendingTabs_ = 3u' src/activities/home/CoverGridBrowserActivity.h
+          grep -Fq 'initialFeaturedSortRow()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'const int featuredIndex = std::clamp(previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
