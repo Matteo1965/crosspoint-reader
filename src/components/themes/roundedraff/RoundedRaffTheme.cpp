@@ -122,7 +122,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
   const int tileY = rect.y;
   const bool hasContinueReading = !recentBooks.empty();
   if (coverWidth == 0) {
-    coverWidth = RoundedRaffMetrics::values.homeCoverHeight * 0.6;
+    coverWidth = 330;
   }
   const int imgY = tileY + (tileHeight - RoundedRaffMetrics::values.homeCoverHeight) / 2 + 14;
   const int tileX = RoundedRaffMetrics::values.contentSidePadding;
@@ -139,7 +139,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         hasCover = false;
       } else {
         const std::string coverBmpPath =
-            UITheme::getCoverThumbPath(coverPath, 567);
+            UITheme::getCoverThumbPath(coverPath, 550);
 
         // First time: load cover from SD and render
         HalFile file;
@@ -149,8 +149,8 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
             coverWidth = bitmap.getWidth();
             const int coverX = tileX + (tileWidth - coverWidth) / 2;
 
-            // Keep the source cover centered inside the 340x510 frame.
-            // The generated thumbnail is 340x567, so crop the excess height
+            // Keep the source cover centered inside the 330x500 frame.
+            // The generated thumbnail is 330x550, so crop the excess height
             // symmetrically instead of stretching or top-aligning it.
             const float imageRatio = static_cast<float>(bitmap.getWidth()) / bitmap.getHeight();
             const float targetRatio = static_cast<float>(coverWidth) / RoundedRaffMetrics::values.homeCoverHeight;
