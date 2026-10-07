@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/HomeActivity.cpp
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
-          grep -Fq 'featuredW, featuredH, 38, 358' src/activities/home/HomeActivity.cpp
+          grep -Fq 'featuredW, featuredH, 38, 408' src/activities/home/HomeActivity.cpp
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'gridBookIndices_[6]' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'pinnedSortRow_' src/activities/home/CoverGridBrowserActivity.h
@@ -158,10 +158,14 @@ jobs:
           grep -Fq 'constexpr int progressY = 624;' src/activities/home/HomeActivity.cpp
           grep -Fq 'constexpr int progressW = 340;' src/activities/home/HomeActivity.cpp
           grep -Fq 'constexpr int progressH = 8;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int featuredW = 180;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int featuredH = 300;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'return {left, coverW, coverH, featuredW, featuredH, 38, 358, gapX, columns, 630};' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int menuTextY[2] = {640, 695};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredW = 210;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredH = 352;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'return {left, coverW, coverH, featuredW, featuredH, 38, 408, gapX, columns, 640};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int menuTextY[2] = {650, 703};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int menuTextY[2] = {650, 709};' src/activities/home/HomeActivity.cpp
+          grep -Fq '"Eltávolítás a legutóbbiak közül", "Törlés"' src/activities/home/HomeActivity.cpp
+          grep -Fq 'promptRemoveHomeRecent(index)' src/activities/home/HomeActivity.cpp
+          grep -Fq 'promptDeleteHomeBook(index)' src/activities/home/HomeActivity.cpp
           grep -Fq '.homeCoverHeight = 510' src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -Fq '&CrossPointSettings::removeReadBooksFromRecents' src/activities/settings/SettingsActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
