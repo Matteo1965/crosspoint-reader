@@ -1255,7 +1255,10 @@ void HomeActivity::renderCoverGrid() {
     }
   };
 
-  if (gridFrameValid && recentsLoaded) {
+  // A modal popup must bypass the cached Grid fast-path so it is actually
+  // painted. Otherwise loop() switches to popup input handling while the
+  // screen still shows the unchanged Grid, which looks like a firmware freeze.
+  if (gridFrameValid && recentsLoaded && !optionPopup_.isActive()) {
     auto outlineBook = [this, &layout](const int selected, const bool black) {
       if (selected < 0 || selected >= static_cast<int>(recentBooks.size())) return;
       const bool featured = selected == 0;
