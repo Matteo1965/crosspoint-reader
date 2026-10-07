@@ -139,7 +139,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
         hasCover = false;
       } else {
         const std::string coverBmpPath =
-            UITheme::getCoverThumbPath(coverPath, 540);
+            UITheme::getCoverThumbPath(coverPath, 567);
 
         // First time: load cover from SD and render
         HalFile file;
@@ -148,8 +148,22 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             coverWidth = bitmap.getWidth();
             const int coverX = tileX + (tileWidth - coverWidth) / 2;
-            renderer.drawBitmap(bitmap, coverX, imgY, coverWidth, RoundedRaffMetrics::values.homeCoverHeight);
-            renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
+
+            // Keep the source cover centered inside the 340x510 frame.
+            // The generated thumbnail is 340x567, so crop the excess height
+            // symmetrically instead of stretching or top-aligning it.
+            const float imageRatio = static_cast<float>(bitmap.getWidth()) / bitmap.getHeight();
+            const float targetRatio = static_cast<float>(coverWidth) / RoundedRaffMetrics::values.homeCoverHeight;
+            float cropX = 0.0f;
+            float cropY = 0.0f;
+            if (imageRatio > targetRatio) {
+              cropX = std::max(0.0f, 1.0f - targetRatio / imageRatio);
+            } else if (imageRatio < targetRatio) {
+              cropY = std::max(0.0f, 1.0f - imageRatio / targetRatio);
+            }
+            renderer.drawBitmap(bitmap, coverX, imgY, coverWidth, RoundedRaffMetrics::values.homeCoverHeight,
+                                cropX, cropY);
+            renderer.maskRoundedRectOutsideCorners(coverX, imgY, coverWidth,
                                                    RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                    Color::LightGray);
           } else {
