@@ -344,8 +344,14 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   Rect popupRect;
 
   int progress = 0;
+  const bool roundedRaffHome =
+      static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::ROUNDEDRAFF &&
+      !coverGridActive();
   for (RecentBook& book : recentBooks) {
-    const int thumbHeight = coverGridActive() ? gridThumbHeight(progress) : coverHeight;
+    // RoundedRaff's 324x480 Home cover uses a 540px-high legacy thumbnail:
+    // the generator's fixed 0.6 aspect ratio yields exactly 324px width, and
+    // the renderer shows a 480px-high crop in the requested Home geometry.
+    const int thumbHeight = coverGridActive() ? gridThumbHeight(progress) : (roundedRaffHome ? 540 : coverHeight);
     bool success = true;
 
     if (FsHelpers::hasEpubExtension(book.path)) {
