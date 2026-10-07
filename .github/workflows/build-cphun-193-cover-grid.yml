@@ -154,8 +154,15 @@ jobs:
           grep -Fq 'initialFeaturedSortRow()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'RECENT_BOOKS.getBooks()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq '{"Könyvtár", "Böngésző", "Másolás", "Beállítások"}' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int progressX = 78;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int progressY = 594;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressX = 72;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressY = 624;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressW = 340;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressH = 8;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredW = 180;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredH = 300;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'return {left, coverW, coverH, featuredW, featuredH, 38, 358, gapX, columns, 630};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int menuTextY[2] = {640, 695};' src/activities/home/HomeActivity.cpp
+          grep -Fq '.homeCoverHeight = 510' src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -Fq '&CrossPointSettings::removeReadBooksFromRecents' src/activities/settings/SettingsActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
