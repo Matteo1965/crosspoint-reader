@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/HomeActivity.cpp
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
-          grep -Fq 'featuredW, featuredH, 38, 408' src/activities/home/HomeActivity.cpp
+          grep -Fq 'featuredW, featuredH, 38, 404' src/activities/home/HomeActivity.cpp
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'gridBookIndices_[6]' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'pinnedSortRow_' src/activities/home/CoverGridBrowserActivity.h
@@ -155,18 +155,23 @@ jobs:
           grep -Fq 'RECENT_BOOKS.getBooks()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq '{"Könyvtár", "Böngésző", "Másolás", "Beállítások"}' src/activities/home/HomeActivity.cpp
           grep -Fq 'constexpr int progressX = 72;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int progressY = 624;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int progressY = 614;' src/activities/home/HomeActivity.cpp
           grep -Fq 'constexpr int progressW = 340;' src/activities/home/HomeActivity.cpp
           grep -Fq 'constexpr int progressH = 8;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int featuredW = 210;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int featuredH = 352;' src/activities/home/HomeActivity.cpp
-          grep -Fq 'return {left, coverW, coverH, featuredW, featuredH, 38, 408, gapX, columns, 640};' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int menuTextY[2] = {650, 703};' src/activities/home/HomeActivity.cpp
-          grep -Fq 'constexpr int menuTextY[2] = {650, 709};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredW = 220;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int featuredH = 350;' src/activities/home/HomeActivity.cpp
+          grep -Fq 'return {left, coverW, coverH, featuredW, featuredH, 38, 404, gapX, columns, 640};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int menuTextY[2] = {644, 699};' src/activities/home/HomeActivity.cpp
+          grep -Fq 'constexpr int menuTextY[2] = {652, 707};' src/activities/home/HomeActivity.cpp
           grep -Fq '"Eltávolítás a legutóbbiak közül", "Törlés"' src/activities/home/HomeActivity.cpp
           grep -Fq 'promptRemoveHomeRecent(index)' src/activities/home/HomeActivity.cpp
           grep -Fq 'promptDeleteHomeBook(index)' src/activities/home/HomeActivity.cpp
-          grep -Fq '.homeCoverHeight = 510' src/components/themes/roundedraff/RoundedRaffTheme.h
+          grep -Fq 'const int menuBottom = std::max(layout.menuTop, height - metrics.buttonHintsHeight);' src/activities/home/HomeActivity.cpp
+          grep -Fq 'epub.generateThumbBmp(featuredHeight);' src/activities/home/HomeActivity.cpp
+          grep -Fq 'epub.generateGridThumbBmp(featuredHeight);' src/activities/home/HomeActivity.cpp
+          grep -Fq 'UITheme::getCoverThumbPath(coverPath, 550)' src/components/themes/roundedraff/RoundedRaffTheme.cpp
+          grep -Fq 'coverWidth = 330;' src/components/themes/roundedraff/RoundedRaffTheme.cpp
+          grep -Fq '.homeCoverHeight = 500' src/components/themes/roundedraff/RoundedRaffTheme.h
           grep -Fq '&CrossPointSettings::removeReadBooksFromRecents' src/activities/settings/SettingsActivity.cpp
           grep -Fq 'resetGridSlots()' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'pinnedBook_ = books_[0];' src/activities/home/CoverGridBrowserActivity.cpp
