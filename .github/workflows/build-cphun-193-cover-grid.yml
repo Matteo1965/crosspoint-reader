@@ -99,7 +99,7 @@ jobs:
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/HomeActivity.cpp
           grep -Fq 'GrayscaleMode::Absolute' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'supportsStripGrayscale()' src/activities/home/HomeActivity.cpp
-          grep -Fq 'coverH, 38, 276' src/activities/home/HomeActivity.cpp
+          grep -Fq 'featuredW, featuredH, 38, 358' src/activities/home/HomeActivity.cpp
           grep -Fq 'previewSelected_' src/activities/home/CoverGridBrowserActivity.cpp
           grep -Fq 'gridBookIndices_[6]' src/activities/home/CoverGridBrowserActivity.h
           grep -Fq 'pinnedSortRow_' src/activities/home/CoverGridBrowserActivity.h
