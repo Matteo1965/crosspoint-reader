@@ -83,7 +83,6 @@ LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManag
   descendingTabs = viewState->descendingTabs;
   sortOrder = orderForTab(activeTabIndex, descendingTabs);
   query = viewState->searchQuery;
-  openPersistedGridOnNextLoop = SETTINGS.libraryViewMode == CrossPointSettings::LIBRARY_GRID;
   // Three short tab labels: a full-slot pill would stretch across a third of
   // the screen, so cap it at the label plus padding (slots stay put).
   tabPillMaxPad = 16;
@@ -138,15 +137,6 @@ void LibraryListActivity::onEnter() {
   // menu): ignore its release, or we would open whatever sits at row 0.
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   requestUpdate(true);
-}
-
-void LibraryListActivity::loop() {
-  if (openPersistedGridOnNextLoop) {
-    openPersistedGridOnNextLoop = false;
-    openGridView();
-    return;
-  }
-  UiTabListActivity::loop();
 }
 
 void LibraryListActivity::onExit() {
