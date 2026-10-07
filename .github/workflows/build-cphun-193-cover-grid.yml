@@ -14,6 +14,7 @@ on:
       - agent/cphun-200-grid3-abc-test
       - agent/cphun-201-grid3-cphun192-render
       - agent/cphun-222-library-view-persistence
+      - agent/cphun-224-home-layout
   workflow_dispatch:
 
 permissions:
