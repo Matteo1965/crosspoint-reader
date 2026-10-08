@@ -608,6 +608,22 @@ jobs:
           name: cp-kobo-028-clara-bw-display-inventory
           if-no-files-found: ignore
           path: cp-kobo-028-clara-bw-display-inventory.zip
+      - name: Package and validate CP-KOBO-029 display inventory logger
+        run: |
+          mkdir -p qa-clara-029/crosspoint
+          cp scripts/kobo_clara_bw_029_display_inventory.sh qa-clara-029/crosspoint/display-inventory-029.sh
+          sh -n qa-clara-029/crosspoint/display-inventory-029.sh
+          printf '%s\n' 'menu_item:main:Clara BW Display Info 029:cmd_spawn:quiet:exec /bin/sh /mnt/onboard/.adds/crosspoint/display-inventory-029.sh' > qa-clara-029/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-029: fresh read-only display inventory and report diagnostic.' 'Extract the inner zip if GitHub Actions provides a zip inside a zip.' 'Copy crosspoint/display-inventory-029.sh to the existing Kobo .adds/crosspoint/ folder.' 'Add only the single NickelMenu line to .adds/nm/; keep KOReader and prior entries.' 'Launch Clara BW Display Info 029; allow it to finish before connecting USB.' 'Retrieve .adds/crosspoint/logs/clara-bw-display-inventory-029.txt.' 'Preserves earlier CP-KOBO-028 report. No FBInk execution or framebuffer writing.' > qa-clara-029/README.txt
+          chmod +x qa-clara-029/crosspoint/display-inventory-029.sh
+          cd qa-clara-029 && zip -r ../cp-kobo-029-display-inventory-logger.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-029 diagnostics bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-029-display-inventory-logger
+          if-no-files-found: ignore
+          path: cp-kobo-029-display-inventory-logger.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
