@@ -459,6 +459,27 @@ jobs:
           name: cp-kobo-021-static-arm-diagnostic
           if-no-files-found: ignore
           path: qa-clara-static-arm/
+      - name: Package CP-KOBO-022 manual Clara BW diagnostic
+        run: |
+          mkdir -p qa-clara-022/crosspoint
+          cp qa-clara-static-arm/clara-bw-probe-static-armhf qa-clara-022/crosspoint/
+          cp scripts/kobo_clara_bw_diagnostic.sh qa-clara-022/crosspoint/diagnostic.sh
+          cp scripts/kobo_clara_bw_022_README.txt qa-clara-022/README.txt
+          cp scripts/kobo_clara_bw_022_nickelmenu.txt qa-clara-022/nickelmenu-entry.txt
+          chmod +x qa-clara-022/crosspoint/clara-bw-probe-static-armhf
+          chmod +x qa-clara-022/crosspoint/diagnostic.sh
+          sh -n qa-clara-022/crosspoint/diagnostic.sh
+          arm-linux-gnueabihf-readelf -h qa-clara-022/crosspoint/clara-bw-probe-static-armhf | grep -q 'Machine:.*ARM'
+          test -s qa-clara-022/README.txt
+          cd qa-clara-022
+          zip -r ../cp-kobo-022-clara-bw-manual-probe.zip .
+      - name: Upload CP-KOBO-022 diagnostic install bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-022-clara-bw-manual-probe
+          if-no-files-found: ignore
+          path: cp-kobo-022-clara-bw-manual-probe.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
