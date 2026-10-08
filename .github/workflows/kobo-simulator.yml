@@ -331,6 +331,23 @@ jobs:
           name: cp-kobo-014-arm-migration-inventory
           if-no-files-found: ignore
           path: qa-clara-arm-migration/
+      - name: Validate CP-KOBO-015 portable Kobo HAL contract
+        run: |
+          mkdir -p qa-clara-hal
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_platform_test.cpp -o qa-clara-hal/test-native
+          qa-clara-hal/test-native | tee qa-clara-hal/result.txt
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_platform_test.cpp -o qa-clara-hal/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-hal/test-armhf > qa-clara-hal/arm-elf-header.txt
+          grep -q 'Machine:.*ARM' qa-clara-hal/arm-elf-header.txt
+      - name: Upload CP-KOBO-015 HAL contract evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-015-portable-hal-contract
+          if-no-files-found: ignore
+          path: |
+            qa-clara-hal/result.txt
+            qa-clara-hal/arm-elf-header.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
