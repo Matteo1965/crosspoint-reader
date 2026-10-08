@@ -382,6 +382,25 @@ jobs:
           path: |
             qa-clara-evdev-decoder/result.txt
             qa-clara-evdev-decoder/arm-elf-header.txt
+      - name: Validate CP-KOBO-018 FBInk PNM display sink
+        run: |
+          mkdir -p qa-clara-fbink-cpp
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_fbink_sink_test.cpp -o qa-clara-fbink-cpp/test-native
+          qa-clara-fbink-cpp/test-native qa-clara-fbink-cpp/frame.pgm | tee qa-clara-fbink-cpp/result.txt
+          python -c 'from pathlib import Path; p=Path("qa-clara-fbink-cpp/frame.pgm"); assert p.stat().st_size==len(b"P5\n1072 1448\n255\n")+1072*1448'
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_fbink_sink_test.cpp -o qa-clara-fbink-cpp/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-fbink-cpp/test-armhf > qa-clara-fbink-cpp/arm-elf-header.txt
+          grep -q 'Machine:.*ARM' qa-clara-fbink-cpp/arm-elf-header.txt
+      - name: Upload CP-KOBO-018 FBInk output evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-018-fbink-cpp-output
+          if-no-files-found: ignore
+          path: |
+            qa-clara-fbink-cpp/result.txt
+            qa-clara-fbink-cpp/arm-elf-header.txt
+            qa-clara-fbink-cpp/frame.pgm
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
