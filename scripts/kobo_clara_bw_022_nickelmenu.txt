@@ -1,0 +1,1 @@
+menu_item:main:Clara BW HW Probe:cmd_spawn:quiet:exec /mnt/onboard/.adds/crosspoint/diagnostic.sh
