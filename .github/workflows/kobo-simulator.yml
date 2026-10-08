@@ -1,0 +1,158 @@
+name: Kobo Port - Linux Simulator
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/kobo-port
+    paths:
+      - 'platformio.kobo-sim.ini'
+      - '.github/workflows/kobo-simulator.yml'
+      - 'src/**'
+      - 'lib/**'
+      - 'freeink-sdk'
+      - 'scripts/**'
+
+jobs:
+  simulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Hungarian Edition and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install native simulator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libssl-dev libcurl4-openssl-dev pkg-config xvfb xauth
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+      - name: Compile Linux simulator
+        run: pio run -c platformio.ini -c platformio.kobo-sim.ini -e simulator
+      - name: Smoke test simulator under virtual display
+        run: |
+          mkdir -p fs_/books qa-artifacts
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='6500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='3500:qa-artifacts/startup.bmp' \
+          timeout 20s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator/program > qa-artifacts/simulator.log 2>&1
+          result=$?
+          set -e
+          cat qa-artifacts/simulator.log
+          echo "Simulator exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Simulator did not finish cleanly (exit $result)"
+            exit 1
+          fi
+          test -s qa-artifacts/startup.bmp || { echo "::error::Startup screenshot was not generated"; exit 1; }
+          file qa-artifacts/startup.bmp
+      - name: Upload simulator smoke-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-001-startup-screenshot-and-log
+          if-no-files-found: ignore
+          path: qa-artifacts/
+      - name: Compile touch-capable simulator
+        run: pio run -c platformio.ini -c platformio.kobo-sim.ini -e simulator_kobo_touch
+      - name: Test simulated touch and capture screens
+        run: |
+          mkdir -p qa-touch fs_/books
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='2500:TAP:240,530;7500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1600:qa-touch/initial.bmp;5200:qa-touch/after-tap.bmp' \
+          timeout 22s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-touch/touch.log 2>&1
+          result=$?
+          set -e
+          cat qa-touch/touch.log
+          echo "Touch simulator exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Touch simulator exit status $result"
+            exit 1
+          fi
+          test -s qa-touch/initial.bmp && test -s qa-touch/after-tap.bmp || {
+            echo "::error::Missing touch test screenshot"
+            exit 1
+          }
+          file qa-touch/*.bmp
+      - name: Upload touch simulation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-002-touch-screenshots-and-log
+          if-no-files-found: ignore
+          path: qa-touch/
+      - name: Exercise Hungarian RoundedRaff touch gestures
+        run: |
+          mkdir -p fs_/.crosspoint qa-gestures
+          printf '%s\n' '{"language":"HU","uiTheme":3,"touchReaderControls":1}' > fs_/.crosspoint/settings.json
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='2500:TAP:240,530;4200:SWIPE:420,380,70,380,500;6100:SWIPE:70,380,420,380,500;7800:TAP:240,530,1200;10500:BACK;12500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1800:qa-gestures/01-home-hu.bmp;3600:qa-gestures/02-after-settings-tap.bmp;5500:qa-gestures/03-after-swipe-left.bmp;7200:qa-gestures/04-after-swipe-right.bmp;9400:qa-gestures/05-after-long-press.bmp;11600:qa-gestures/06-after-back.bmp' \
+          timeout 25s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-gestures/gestures.log 2>&1
+          result=$?
+          set -e
+          cat qa-gestures/gestures.log
+          echo "Gesture test exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Gesture simulator did not finish cleanly ($result)"
+            exit 1
+          fi
+          for n in 01 02 03 04 05 06; do
+            ls qa-gestures/"$n"-*.bmp >/dev/null || { echo "::error::Missing screenshot $n"; exit 1; }
+          done
+          file qa-gestures/*.bmp
+      - name: Upload Hungarian gesture test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-003-hungarian-touch-gestures
+          if-no-files-found: ignore
+          path: qa-gestures/
+      - name: Generate original Hungarian multi-page EPUB
+        run: |
+          python scripts/kobo_test_epub.py
+          unzip -t fs_/books/CP-KOBO-004-magyar-teszt.epub
+      - name: Explore EPUB navigation and page-turn touch
+        run: |
+          mkdir -p qa-reader
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='1800:ENTER;3400:ENTER;5000:ENTER;7800:TAP:420,450;9800:SWIPE:420,430,60,430,400;11800:SWIPE:60,430,420,430,400;14000:TAP:240,400,1200;16700:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1300:qa-reader/01-home.bmp;2900:qa-reader/02-first-enter.bmp;4400:qa-reader/03-second-enter.bmp;6900:qa-reader/04-third-enter.bmp;9000:qa-reader/05-after-tap.bmp;11100:qa-reader/06-after-left-swipe.bmp;13100:qa-reader/07-after-right-swipe.bmp;15500:qa-reader/08-after-long-touch.bmp' \
+          timeout 28s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-reader/reader.log 2>&1
+          result=$?
+          set -e
+          cat qa-reader/reader.log
+          echo "EPUB exploratory test exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Reader simulator quit unexpectedly ($result)"
+            exit 1
+          fi
+          test -s qa-reader/08-after-long-touch.bmp || { echo "::error::Reader screenshots missing"; exit 1; }
+          file qa-reader/*.bmp
+      - name: Upload EPUB navigation screenshots and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-004-hungarian-epub-reader
+          if-no-files-found: ignore
+          path: qa-reader/
+      - name: Upload diagnostic build files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-001-simulator-diagnostics
+          if-no-files-found: ignore
+          path: |
+            .pio/build/simulator/program
+            .pio/build/simulator_kobo_touch/program
+            .pio/build/simulator/*.elf
+            .pio/build/simulator/*.map
