@@ -298,6 +298,25 @@ jobs:
           path: |
             qa-clara-launcher/refusal.log
             qa-clara-launcher/normal.json
+      - name: Build CP-KOBO-013 ARM Linux adapter diagnostic
+        run: |
+          sudo apt-get install -y g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+          mkdir -p qa-clara-arm
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_adapter_test.cpp -o qa-clara-arm/clara-bw-adapter-armhf
+          file qa-clara-arm/clara-bw-adapter-armhf | tee qa-clara-arm/binary-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-arm/clara-bw-adapter-armhf > qa-clara-arm/elf-header.txt
+          arm-linux-gnueabihf-readelf -d qa-clara-arm/clara-bw-adapter-armhf > qa-clara-arm/dynamic-libs.txt
+          grep -q 'Machine:.*ARM' qa-clara-arm/elf-header.txt
+          grep -q 'ELF32' qa-clara-arm/elf-header.txt
+          grep -q 'ARM' qa-clara-arm/binary-type.txt
+          printf '%s\n' 'ARM cross-compilation passed. Diagnostic adapter ONLY, not a full Kobo CrossPoint application.' | tee qa-clara-arm/README.txt
+      - name: Upload CP-KOBO-013 ARM diagnostic binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-013-armhf-adapter-diagnostic
+          if-no-files-found: ignore
+          path: qa-clara-arm/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
