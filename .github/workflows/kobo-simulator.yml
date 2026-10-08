@@ -176,6 +176,20 @@ jobs:
           name: cp-kobo-v224-crosspoint-version-menu
           if-no-files-found: ignore
           path: qa-version/
+      - name: Validate Kobo Clara BW display scaling and touch coordinates
+        run: |
+          python -m pip install pillow
+          python scripts/kobo_clara_bw_geometry.py --source qa-version/05-version-candidate.bmp --output qa-clara-bw
+          test -s qa-clara-bw/clara-bw-1072x1448.png
+          test -s qa-clara-bw/clara-bw-touch-targets.png
+          cat qa-clara-bw/geometry.json
+      - name: Upload Clara BW geometry evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-006-clara-bw-geometry
+          if-no-files-found: ignore
+          path: qa-clara-bw/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
