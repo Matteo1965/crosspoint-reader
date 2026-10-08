@@ -319,8 +319,13 @@ void setup() {
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
+#ifdef SIMULATOR
+      // The Linux simulator has no physical power-button duration to verify.
+      if (!gpio.verifyPowerButtonWakeup()) {
+#else
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
+#endif
         powerManager.startDeepSleep(gpio);
       }
       break;
