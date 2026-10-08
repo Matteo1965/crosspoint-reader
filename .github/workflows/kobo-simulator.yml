@@ -24,7 +24,7 @@ jobs:
       - name: Install native simulator dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libsdl2-dev libssl-dev libcurl4-openssl-dev pkg-config
+          sudo apt-get install -y libsdl2-dev libssl-dev libcurl4-openssl-dev pkg-config xvfb xauth
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -33,6 +33,31 @@ jobs:
         run: python -m pip install --upgrade platformio
       - name: Compile Linux simulator
         run: pio run -c platformio.ini -c platformio.kobo-sim.ini -e simulator
+      - name: Smoke test simulator under virtual display
+        run: |
+          mkdir -p fs_/books qa-artifacts
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='6500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='3500:qa-artifacts/startup.bmp' \
+          timeout 20s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator/program > qa-artifacts/simulator.log 2>&1
+          result=$?
+          set -e
+          cat qa-artifacts/simulator.log
+          echo "Simulator exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Simulator did not finish cleanly (exit $result)"
+            exit 1
+          fi
+          test -s qa-artifacts/startup.bmp || { echo "::error::Startup screenshot was not generated"; exit 1; }
+          file qa-artifacts/startup.bmp
+      - name: Upload simulator smoke-test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-001-startup-screenshot-and-log
+          if-no-files-found: ignore
+          path: qa-artifacts/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
