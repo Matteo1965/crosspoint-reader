@@ -529,6 +529,28 @@ jobs:
           name: cp-kobo-024-clara-bw-corner-calibration
           if-no-files-found: ignore
           path: cp-kobo-024-clara-bw-corner-calibration.zip
+      - name: Package CP-KOBO-025 raw evdev logger
+        run: |
+          mkdir -p qa-clara-025/crosspoint
+          arm-linux-gnueabihf-g++ -std=c++17 -Os -Wall -Wextra -Werror -static scripts/clara_bw_raw_evdev_probe.cpp -o qa-clara-025/crosspoint/clara-bw-raw-evdev-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-025/crosspoint/clara-bw-raw-evdev-armhf > qa-clara-025/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-025/crosspoint/clara-bw-raw-evdev-armhf > qa-clara-025/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-025/elf-header.txt
+          if grep -q 'INTERP' qa-clara-025/program-headers.txt; then exit 1; fi
+          g++ -std=c++17 -Os -Wall -Wextra -Werror scripts/clara_bw_raw_evdev_probe.cpp -o qa-clara-025/raw-host
+          cp scripts/kobo_clara_bw_025_raw.sh qa-clara-025/crosspoint/raw-events.sh
+          sh -n qa-clara-025/crosspoint/raw-events.sh
+          printf '%s\n' 'menu_item:main:Clara BW Raw Touch:cmd_spawn:quiet:exec /mnt/onboard/.adds/crosspoint/raw-events.sh' > qa-clara-025/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-025: 30-second raw touch event trace; no input grab or display write.' 'Add line from nickelmenu-entry.txt into existing NickelMenu config; never replace it.' 'Copy crosspoint/* to KOBOeReader/.adds/crosspoint/.' 'From NickelMenu run Clara BW Raw Touch, then tap screen 3-5 times during the next 30 s.' 'Nickel also reacts to taps. Avoid sensitive dialogs or deleting books.' 'Retrieve KOBOeReader/.adds/crosspoint/logs/clara-bw-raw-events.txt.' 'Logs raw timestamps and event values. No book data is read. Review log before sharing.' > qa-clara-025/README.txt
+          chmod +x qa-clara-025/crosspoint/clara-bw-raw-evdev-armhf qa-clara-025/crosspoint/raw-events.sh
+          cd qa-clara-025 && zip -r ../cp-kobo-025-clara-bw-raw-events.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-025 raw touch diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-025-clara-bw-raw-events
+          if-no-files-found: ignore
+          path: cp-kobo-025-clara-bw-raw-events.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
