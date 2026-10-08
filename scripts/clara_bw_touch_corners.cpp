@@ -1,4 +1,4 @@
-// CP-KOBO-024: read-only four-corner evdev touch calibration.
+// CP-KOBO-026: read-only four-corner evdev touch calibration.
 // Reads event1 without EVIOCGRAB. Record one contact per prompt.
 // Interrupt via physical power button or Ctrl-C; no display writes.
 #include <linux/input.h>
@@ -20,7 +20,7 @@ int main(int argc,char**argv){
  int fd=open(device,O_RDONLY|O_NONBLOCK|O_CLOEXEC);
  if(fd<0){std::printf("ERROR open %s: %s\n",device,std::strerror(errno));return 2;}
  char name[128]={}; ioctl(fd,EVIOCGNAME(sizeof(name)),name);
- std::printf("CP-KOBO-024 device=%s name=%s\n",device,name);std::fflush(stdout);
+ std::printf("CP-KOBO-026 device=%s name=%s\n",device,name);std::fflush(stdout);
  int stage=0;int x=-1,y=-1;bool active=false,down=false,hasx=false,hasy=false;
  for(;stage<4 && !stop_flag;){
   std::printf("TOUCH %s (one finger), then release; no onscreen markers\n",places[stage]);std::fflush(stdout);
@@ -40,6 +40,15 @@ int main(int argc,char**argv){
      }else if(e.code==ABS_MT_POSITION_X){x=e.value;hasx=true;}
      else if(e.code==ABS_MT_POSITION_Y){y=e.value;hasy=true;}
     }
+    // Clara BW cyttsp5_mt reports finger release as BTN_TOUCH=0,
+    // without emitting ABS_MT_TRACKING_ID=-1 (CP-KOBO-025 real-device trace).
+    if(e.type==EV_KEY&&e.code==BTN_TOUCH){
+      if(e.value==1) active=true;
+      else if(e.value==0){
+        if(active&&down&&hasx&&hasy) captured=true;
+        active=false; down=false;
+      }
+    }
     if(e.type==EV_SYN&&e.code==SYN_REPORT&&active&&hasx&&hasy) down=true;
     if(captured)break;
    }
@@ -48,6 +57,6 @@ int main(int argc,char**argv){
   std::printf("RESULT %s X=%d Y=%d\n",places[stage],x,y);std::fflush(stdout);stage++;
  }
  close(fd);
- if(stage==4){std::puts("CP-KOBO-024 calibration finished");return 0;}
- std::puts("CP-KOBO-024 interrupted");return 5;
+ if(stage==4){std::puts("CP-KOBO-026 calibration finished");return 0;}
+ std::puts("CP-KOBO-026 interrupted");return 5;
 }
