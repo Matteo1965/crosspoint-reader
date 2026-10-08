@@ -157,7 +157,7 @@ jobs:
           mkdir -p qa-version fs_/.crosspoint
           printf '%s\n' '{"language":"HU","uiTheme":3,"touchReaderControls":1}' > fs_/.crosspoint/settings.json
           set +e
-          CROSSPOINT_SIM_INPUT_SCRIPT='2200:TAP:340,636;4500:TAP:420,72;6500:SWIPE:240,680,240,220,500;8400:TAP:230,420;11000:QUIT' \
+          CROSSPOINT_SIM_INPUT_SCRIPT='2200:TAP:340,710;4500:TAP:420,72;6500:SWIPE:240,680,240,220,500;8400:TAP:230,420;11000:QUIT' \
           CROSSPOINT_SIM_SCREENSHOTS='1600:qa-version/01-home.bmp;3900:qa-version/02-after-menu.bmp;5800:qa-version/03-system-tab.bmp;7900:qa-version/04-system-list.bmp;10200:qa-version/05-version-candidate.bmp' \
           timeout 23s xvfb-run -a -s '-screen 0 1600x1200x24' \
             .pio/build/simulator_kobo_touch/program > qa-version/version.log 2>&1
