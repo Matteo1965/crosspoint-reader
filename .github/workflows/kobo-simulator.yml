@@ -422,6 +422,24 @@ jobs:
             qa-clara-integration/watchdog.json
             qa-clara-integration/arm-elf-header.txt
             qa-clara-integration/after-touch.pgm
+      - name: Build CP-KOBO-020 read-only Kobo ARM probe
+        run: |
+          mkdir -p qa-clara-device-probe
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_device_probe.cpp -o qa-clara-device-probe/probe-host
+          qa-clara-device-probe/probe-host > qa-clara-device-probe/host-result.txt
+          grep -q 'CP-KOBO-020 probe finished (read-only)' qa-clara-device-probe/host-result.txt
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_device_probe.cpp -o qa-clara-device-probe/clara-bw-probe-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-device-probe/clara-bw-probe-armhf > qa-clara-device-probe/arm-elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-device-probe/clara-bw-probe-armhf > qa-clara-device-probe/arm-program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-device-probe/arm-elf-header.txt
+          printf '%s\n' 'READ-ONLY ARM PROBE; NOT a Kobo app installer. Dynamic loader and libc compatibility must be checked before executing on Clara BW.' > qa-clara-device-probe/README.txt
+      - name: Upload CP-KOBO-020 ARM device probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-020-clara-bw-readonly-arm-probe
+          if-no-files-found: ignore
+          path: qa-clara-device-probe/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
