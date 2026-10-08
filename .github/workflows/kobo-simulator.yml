@@ -58,6 +58,36 @@ jobs:
           name: cp-kobo-001-startup-screenshot-and-log
           if-no-files-found: ignore
           path: qa-artifacts/
+      - name: Compile touch-capable simulator
+        run: pio run -c platformio.ini -c platformio.kobo-sim.ini -e simulator_kobo_touch
+      - name: Test simulated touch and capture screens
+        run: |
+          mkdir -p qa-touch fs_/books
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='2500:TAP:240,530;7500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1600:qa-touch/initial.bmp;5200:qa-touch/after-tap.bmp' \
+          timeout 22s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-touch/touch.log 2>&1
+          result=$?
+          set -e
+          cat qa-touch/touch.log
+          echo "Touch simulator exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Touch simulator exit status $result"
+            exit 1
+          fi
+          test -s qa-touch/initial.bmp && test -s qa-touch/after-tap.bmp || {
+            echo "::error::Missing touch test screenshot"
+            exit 1
+          }
+          file qa-touch/*.bmp
+      - name: Upload touch simulation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-002-touch-screenshots-and-log
+          if-no-files-found: ignore
+          path: qa-touch/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,5 +96,6 @@ jobs:
           if-no-files-found: ignore
           path: |
             .pio/build/simulator/program
+            .pio/build/simulator_kobo_touch/program
             .pio/build/simulator/*.elf
             .pio/build/simulator/*.map
