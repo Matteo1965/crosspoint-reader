@@ -1806,7 +1806,11 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
 void GfxRenderer::displayWindow(int x, int y, int width, int height) const {
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, width, height, panelWidth, panelHeight);
   if (!mem.valid) return;
+#ifdef SIMULATOR
+  display.displayWindow(mem.x, mem.y, mem.w, mem.h);
+#else
   display.displayWindow(mem.x, mem.y, mem.w, mem.h, fadingFix);
+#endif
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
