@@ -116,6 +116,35 @@ jobs:
           name: cp-kobo-003-hungarian-touch-gestures
           if-no-files-found: ignore
           path: qa-gestures/
+      - name: Generate original Hungarian multi-page EPUB
+        run: |
+          python scripts/kobo_test_epub.py
+          unzip -t fs_/books/CP-KOBO-004-magyar-teszt.epub
+      - name: Explore EPUB navigation and page-turn touch
+        run: |
+          mkdir -p qa-reader
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='1800:ENTER;3400:ENTER;5000:ENTER;7800:TAP:420,450;9800:SWIPE:420,430,60,430,400;11800:SWIPE:60,430,420,430,400;14000:TAP:240,400,1200;16700:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1300:qa-reader/01-home.bmp;2900:qa-reader/02-first-enter.bmp;4400:qa-reader/03-second-enter.bmp;6900:qa-reader/04-third-enter.bmp;9000:qa-reader/05-after-tap.bmp;11100:qa-reader/06-after-left-swipe.bmp;13100:qa-reader/07-after-right-swipe.bmp;15500:qa-reader/08-after-long-touch.bmp' \
+          timeout 28s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-reader/reader.log 2>&1
+          result=$?
+          set -e
+          cat qa-reader/reader.log
+          echo "EPUB exploratory test exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Reader simulator quit unexpectedly ($result)"
+            exit 1
+          fi
+          test -s qa-reader/08-after-long-touch.bmp || { echo "::error::Reader screenshots missing"; exit 1; }
+          file qa-reader/*.bmp
+      - name: Upload EPUB navigation screenshots and log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-004-hungarian-epub-reader
+          if-no-files-found: ignore
+          path: qa-reader/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
