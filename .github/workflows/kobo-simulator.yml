@@ -551,6 +551,27 @@ jobs:
           name: cp-kobo-025-clara-bw-raw-events
           if-no-files-found: ignore
           path: cp-kobo-025-clara-bw-raw-events.zip
+      - name: Package CP-KOBO-026 corrected corner detection
+        run: |
+          mkdir -p qa-clara-026/crosspoint
+          arm-linux-gnueabihf-g++ -std=c++17 -Os -Wall -Wextra -Werror -static scripts/clara_bw_touch_corners.cpp -o qa-clara-026/crosspoint/clara-bw-touch-corners-026-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-026/crosspoint/clara-bw-touch-corners-026-armhf > qa-clara-026/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-026/crosspoint/clara-bw-touch-corners-026-armhf > qa-clara-026/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-026/elf-header.txt
+          if grep -q 'INTERP' qa-clara-026/program-headers.txt; then exit 1; fi
+          cp scripts/kobo_clara_bw_026_corners.sh qa-clara-026/crosspoint/touch-corners-026.sh
+          sh -n qa-clara-026/crosspoint/touch-corners-026.sh
+          printf '%s\n' 'menu_item:main:Clara BW Corners 026:cmd_spawn:quiet:exec /mnt/onboard/.adds/crosspoint/touch-corners-026.sh' > qa-clara-026/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-026: corrected read-only four-corner calibration (BTN_TOUCH release).' 'Copy crosspoint/* into .adds/crosspoint/; do not overwrite existing NickelMenu config.' 'Add line from nickelmenu-entry.txt to .adds/nm/.' 'Run Clara BW Corners 026, then tap TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT; lift each time.' 'Nickel will also respond to taps. Use a harmless screen.' 'Read .adds/crosspoint/logs/clara-bw-touch-corners-026.txt after the test.' 'No root, EVIOCGRAB, framebuffer writes or Nickel stop.' > qa-clara-026/README.txt
+          chmod +x qa-clara-026/crosspoint/*
+          cd qa-clara-026 && zip -r ../cp-kobo-026-clara-bw-corners-fixed.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-026 corrected corner diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-026-clara-bw-corners-fixed
+          if-no-files-found: ignore
+          path: cp-kobo-026-clara-bw-corners-fixed.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
