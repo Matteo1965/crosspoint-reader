@@ -572,6 +572,26 @@ jobs:
           name: cp-kobo-026-clara-bw-corners-fixed
           if-no-files-found: ignore
           path: cp-kobo-026-clara-bw-corners-fixed.zip
+      - name: Validate CP-KOBO-027 measured Clara BW touch calibration
+        run: |
+          mkdir -p qa-clara-027
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=undefined -fno-omit-frame-pointer scripts/clara_bw_measured_calibration_test.cpp -o qa-clara-027/test-native
+          qa-clara-027/test-native | tee qa-clara-027/result.txt
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -static scripts/clara_bw_measured_calibration_test.cpp -o qa-clara-027/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-027/test-armhf > qa-clara-027/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-027/test-armhf > qa-clara-027/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-027/elf-header.txt
+          if grep -q 'INTERP' qa-clara-027/program-headers.txt; then exit 1; fi
+      - name: Upload CP-KOBO-027 calibration test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-027-measured-touch-calibration
+          if-no-files-found: ignore
+          path: |
+            qa-clara-027/result.txt
+            qa-clara-027/elf-header.txt
+            qa-clara-027/program-headers.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
