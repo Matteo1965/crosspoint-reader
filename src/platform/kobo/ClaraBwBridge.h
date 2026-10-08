@@ -15,17 +15,33 @@ struct TouchCalibration {
     int minX=0, maxX=kPanelWidth-1, minY=0, maxY=kPanelHeight-1;
     bool swapAxes=false, invertX=false, invertY=false;
 };
+// CP-KOBO-027: verified from the Clara BW cyttsp5_mt four-corner log.
+// Raw MT X: 0..1447 (top to bottom); raw MT Y: 0..1071 (right to left).
+inline TouchCalibration claraBwMeasuredTouchCalibration() noexcept {
+    TouchCalibration c;
+    c.minX=0; c.maxX=1447;
+    c.minY=0; c.maxY=1071;
+    c.swapAxes=true;
+    c.invertX=true;   // applied after axis swap
+    c.invertY=false;
+    return c;
+}
 inline std::optional<Point> calibrate(RawTouch raw, TouchCalibration c) noexcept {
     if (!raw.pressed || c.maxX <= c.minX || c.maxY <= c.minY) return std::nullopt;
     if (raw.x < c.minX || raw.x > c.maxX || raw.y < c.minY || raw.y > c.maxY) return std::nullopt;
-    const int normalX = (raw.x - c.minX) * (kPanelWidth-1) / (c.maxX-c.minX);
-    const int normalY = (raw.y - c.minY) * (kPanelHeight-1) / (c.maxY-c.minY);
-    // When axes are swapped, scale the swapped range to the destination
-    // dimension rather than using raw pixel coordinates interchangeably.
-    int px = c.swapAxes ? normalY*(kPanelWidth-1)/(kPanelHeight-1) : normalX;
-    int py = c.swapAxes ? normalX*(kPanelHeight-1)/(kPanelWidth-1) : normalY;
-    if (c.invertX) px=kPanelWidth-1-px;
-    if (c.invertY) py=kPanelHeight-1-py;
+    // Scale the *source* axis directly into its post-swap display dimension.
+    // The old implementation scaled to the unswapped dimension first, then
+    // rescaled, losing precision and yielding incorrect swapped coordinates.
+    auto scale=[](int value,int minimum,int maximum,int extent) noexcept -> int {
+        return static_cast<int>((static_cast<int64_t>(value-minimum)*(extent-1))/
+                                (maximum-minimum));
+    };
+    int px=c.swapAxes ? scale(raw.y,c.minY,c.maxY,kPanelWidth)
+                      : scale(raw.x,c.minX,c.maxX,kPanelWidth);
+    int py=c.swapAxes ? scale(raw.x,c.minX,c.maxX,kPanelHeight)
+                      : scale(raw.y,c.minY,c.maxY,kPanelHeight);
+    if(c.invertX) px=kPanelWidth-1-px;
+    if(c.invertY) py=kPanelHeight-1-py;
     return Point{px,py};
 }
 inline std::optional<Point> touchToLogical(RawTouch raw, TouchCalibration c) noexcept {
