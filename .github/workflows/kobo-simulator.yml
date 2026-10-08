@@ -317,6 +317,20 @@ jobs:
           name: cp-kobo-013-armhf-adapter-diagnostic
           if-no-files-found: ignore
           path: qa-clara-arm/
+      - name: Assess CP-KOBO-014 CrossPoint ARM migration dependencies
+        run: |
+          mkdir -p qa-clara-arm-migration
+          python -m py_compile scripts/kobo_arm_migration_inventory.py
+          python scripts/kobo_arm_migration_inventory.py --root . --out qa-clara-arm-migration/dependencies.json
+          python -c 'import json; d=json.load(open("qa-clara-arm-migration/dependencies.json")); assert d["files_with_markers"]>0; assert any(r["path"]=="src/main.cpp" for r in d["files"]); print(d["categories"])'
+          printf '%s\n' 'Porting inventory only. This CI job does NOT build the full ARM CrossPoint app.' > qa-clara-arm-migration/STATUS.txt
+      - name: Upload CP-KOBO-014 source migration inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-014-arm-migration-inventory
+          if-no-files-found: ignore
+          path: qa-clara-arm-migration/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
