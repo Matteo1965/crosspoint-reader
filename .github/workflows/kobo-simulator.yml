@@ -646,6 +646,24 @@ jobs:
           name: cp-kobo-030-log-write-diagnostics
           if-no-files-found: ignore
           path: cp-kobo-030-log-write-diagnostics.zip
+      - name: Validate and package CP-KOBO-031 synchronous display diagnostic
+        run: |
+          mkdir -p qa-clara-031/crosspoint
+          cp scripts/kobo_clara_bw_031_sync_display.sh qa-clara-031/crosspoint/display-sync-031.sh
+          cp scripts/kobo_clara_bw_031_status.sh qa-clara-031/crosspoint/status-031.sh
+          sh -n qa-clara-031/crosspoint/display-sync-031.sh
+          sh -n qa-clara-031/crosspoint/status-031.sh
+          printf '%s\n' 'menu_item:main:Clara BW Display 031:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/display-sync-031.sh' 'menu_item:main:Clara BW Status 031:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-031.sh' > qa-clara-031/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-031: synchronous read-only display inventory with NickelMenu completion dialog.' 'Copy files in crosspoint/ into Kobo .adds/crosspoint/.' 'Add both NickelMenu entries to a NEW file in .adds/nm/; do not overwrite existing config.' 'Launch Clara BW Display 031; NickelMenu waits at most 9 seconds and displays script output.' 'Only trust DIAGNOSZTIKA KESZ and USB csatlakoztathato. after successful completion.' 'If NickelMenu shows a timeout or error, check Clara BW Status 031 before USB reconnect.' 'Retrieve .adds/crosspoint/logs/clara-bw-display-031.txt after a DONE status.' 'This performs no FBInk execution, framebuffer writes, firmware modifications, or Nickel stop.' > qa-clara-031/README.txt
+          chmod +x qa-clara-031/crosspoint/*
+          cd qa-clara-031 && zip -r ../cp-kobo-031-sync-display-notification.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-031 synchronous diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-031-sync-display-notification
+          if-no-files-found: ignore
+          path: cp-kobo-031-sync-display-notification.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
