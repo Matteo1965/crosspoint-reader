@@ -381,11 +381,13 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
     } else {
       rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     }
+#ifndef SIMULATOR
     const bool nudgeOffRight =
         I18N.getLanguage() == Language::HU &&
         (tab_ == Tab::Layout || tab_ == Tab::Style) &&
         rowValues_[i] == tr(STR_STATE_OFF);
     rowItems_[i].valueOffsetX = nudgeOffRight ? 4 : 0;
+#endif
   }
 
   fui::ListProps props;
