@@ -538,8 +538,10 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   for (size_t i = 0; i < settings.size(); i++) {
     rowValues_[i] = settingValueText(settings[i]);
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+#ifndef SIMULATOR
     rowItems_[i].valueOffsetX =
         (I18N.getLanguage() == Language::HU && rowValues_[i] == tr(STR_STATE_ON)) ? 2 : 0;
+#endif
   }
 
   fui::ListProps props;
