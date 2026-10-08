@@ -34,9 +34,10 @@ int main(int argc,char**argv) {
    while(read(fd,&e,sizeof(e))==sizeof(e)){
      // Record a bounded number of events while always draining device input.
      if(count<4000){
-       std::printf("EV %lu sec=%lld usec=%lld type=%u code=%u value=%d\n",
-         count,static_cast<long long>(e.time.tv_sec),static_cast<long long>(e.time.tv_usec),
-         e.type,e.code,e.value);
+       const auto elapsed_ms=std::chrono::duration_cast<std::chrono::milliseconds>(
+         clock::now()-(end-std::chrono::seconds(30))).count();
+       std::printf("EV %lu elapsed_ms=%lld type=%u code=%u value=%d\n",
+         count,static_cast<long long>(elapsed_ms),e.type,e.code,e.value);
        std::fflush(stdout);
      }
      ++count;
