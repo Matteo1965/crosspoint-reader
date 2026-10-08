@@ -1,0 +1,45 @@
+name: Kobo Port - Linux Simulator
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/kobo-port
+    paths:
+      - 'platformio.kobo-sim.ini'
+      - '.github/workflows/kobo-simulator.yml'
+      - 'src/**'
+      - 'lib/**'
+      - 'freeink-sdk'
+      - 'scripts/**'
+
+jobs:
+  simulator:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Hungarian Edition and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install native simulator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libssl-dev libcurl4-openssl-dev pkg-config
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+      - name: Compile Linux simulator
+        run: pio run -c platformio.ini -c platformio.kobo-sim.ini -e simulator
+      - name: Upload diagnostic build files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-001-simulator-diagnostics
+          if-no-files-found: ignore
+          path: |
+            .pio/build/simulator/program
+            .pio/build/simulator/*.elf
+            .pio/build/simulator/*.map
