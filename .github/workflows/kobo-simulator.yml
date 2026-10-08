@@ -88,6 +88,34 @@ jobs:
           name: cp-kobo-002-touch-screenshots-and-log
           if-no-files-found: ignore
           path: qa-touch/
+      - name: Exercise Hungarian RoundedRaff touch gestures
+        run: |
+          mkdir -p fs_/.crosspoint qa-gestures
+          printf '%s\n' '{"language":"HU","uiTheme":3,"touchReaderControls":1}' > fs_/.crosspoint/settings.json
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='2500:TAP:240,530;4200:SWIPE:420,380,70,380,500;6100:SWIPE:70,380,420,380,500;7800:TAP:240,530,1200;10500:BACK;12500:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1800:qa-gestures/01-home-hu.bmp;3600:qa-gestures/02-after-settings-tap.bmp;5500:qa-gestures/03-after-swipe-left.bmp;7200:qa-gestures/04-after-swipe-right.bmp;9400:qa-gestures/05-after-long-press.bmp;11600:qa-gestures/06-after-back.bmp' \
+          timeout 25s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-gestures/gestures.log 2>&1
+          result=$?
+          set -e
+          cat qa-gestures/gestures.log
+          echo "Gesture test exit status: $result"
+          if [ "$result" -ne 0 ]; then
+            echo "::error::Gesture simulator did not finish cleanly ($result)"
+            exit 1
+          fi
+          for n in 01 02 03 04 05 06; do
+            ls qa-gestures/"$n"-*.bmp >/dev/null || { echo "::error::Missing screenshot $n"; exit 1; }
+          done
+          file qa-gestures/*.bmp
+      - name: Upload Hungarian gesture test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-003-hungarian-touch-gestures
+          if-no-files-found: ignore
+          path: qa-gestures/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
