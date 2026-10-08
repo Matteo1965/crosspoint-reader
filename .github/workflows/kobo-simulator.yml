@@ -1,9 +1,9 @@
-name: Kobo Port - Linux Simulator
+name: Kobo v224 - Linux Simulator
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/kobo-port
+      - feature/kobo-v224
     paths:
       - 'platformio.kobo-sim.ini'
       - '.github/workflows/kobo-simulator.yml'
@@ -145,6 +145,29 @@ jobs:
           name: cp-kobo-004-hungarian-epub-reader
           if-no-files-found: ignore
           path: qa-reader/
+      - name: Probe CrossPoint version menu on v224
+        run: |
+          mkdir -p qa-version fs_/.crosspoint
+          printf '%s\n' '{"language":"HU","uiTheme":3,"touchReaderControls":1}' > fs_/.crosspoint/settings.json
+          set +e
+          CROSSPOINT_SIM_INPUT_SCRIPT='2200:TAP:240,680;4500:TAP:420,72;6500:SWIPE:240,680,240,220,500;8400:TAP:230,420;11000:QUIT' \
+          CROSSPOINT_SIM_SCREENSHOTS='1600:qa-version/01-home.bmp;3900:qa-version/02-after-menu.bmp;5800:qa-version/03-system-tab.bmp;7900:qa-version/04-system-list.bmp;10200:qa-version/05-version-candidate.bmp' \
+          timeout 23s xvfb-run -a -s '-screen 0 1600x1200x24' \
+            .pio/build/simulator_kobo_touch/program > qa-version/version.log 2>&1
+          result=$?
+          set -e
+          cat qa-version/version.log
+          echo "Version menu exploratory test exit status: $result"
+          test "$result" -eq 0
+          test -s qa-version/05-version-candidate.bmp
+          file qa-version/*.bmp
+      - name: Upload v224 version-menu evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-v224-crosspoint-version-menu
+          if-no-files-found: ignore
+          path: qa-version/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
