@@ -202,6 +202,25 @@ jobs:
           name: cp-kobo-007-clara-bw-adapter
           if-no-files-found: ignore
           path: qa-clara-adapter/result.txt
+      - name: Validate read-only Clara BW Linux hardware probe
+        run: |
+          mkdir -p qa-clara-probe/fixture/sys/class/graphics/fb0
+          mkdir -p qa-clara-probe/fixture/proc/bus/input qa-clara-probe/fixture/proc/device-tree
+          printf '1072,1448\n' > qa-clara-probe/fixture/sys/class/graphics/fb0/virtual_size
+          printf '8\n' > qa-clara-probe/fixture/sys/class/graphics/fb0/bits_per_pixel
+          printf '1072\n' > qa-clara-probe/fixture/sys/class/graphics/fb0/stride
+          printf 'mock_fb\n' > qa-clara-probe/fixture/sys/class/graphics/fb0/name
+          printf 'N: Name="Mock Clara Touch"\nH: Handlers=event0 mouse0\n' > qa-clara-probe/fixture/proc/bus/input/devices
+          printf 'Mock Kobo Clara BW\n' > qa-clara-probe/fixture/proc/device-tree/model
+          python scripts/kobo_clara_bw_probe.py --root qa-clara-probe/fixture --output qa-clara-probe/inventory.json
+          python -c 'import json; d=json.load(open("qa-clara-probe/inventory.json")); assert d["framebuffers"][0]["virtual_size"]=="1072,1448"; assert d["input_devices"][0]["name"]=="Mock Clara Touch"; assert not d["fbink_present"]'
+      - name: Upload Clara BW probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-008-readonly-linux-probe
+          if-no-files-found: ignore
+          path: qa-clara-probe/inventory.json
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
