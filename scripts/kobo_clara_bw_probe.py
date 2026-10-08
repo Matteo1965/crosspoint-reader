@@ -33,7 +33,7 @@ def inspect(root):
         name = next((line[3:].strip() for line in block.splitlines() if line.startswith("N: ")), "")
         handlers = next((line[3:].strip() for line in block.splitlines() if line.startswith("H: ")), "")
         if name.startswith("Name="):
-            name = name[len("Name="):].strip().strip(\'"\')
+            name = name[len("Name="):].strip().strip(chr(34))
         if handlers.startswith("Handlers="):
             handlers = handlers[len("Handlers="):]
         blocks.append({"name":name, "handlers":handlers})
