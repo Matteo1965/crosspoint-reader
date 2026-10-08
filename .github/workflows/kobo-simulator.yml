@@ -221,6 +221,19 @@ jobs:
           name: cp-kobo-008-readonly-linux-probe
           if-no-files-found: ignore
           path: qa-clara-probe/inventory.json
+      - name: Validate CP-KOBO-009 read-only evdev axis probe
+        run: |
+          mkdir -p qa-clara-evdev
+          python -m py_compile scripts/kobo_clara_bw_evdev_probe.py
+          python scripts/kobo_clara_bw_evdev_probe.py --device /dev/null --device /does/not/exist --output qa-clara-evdev/probe.json
+          python -c 'import json; d=json.load(open("qa-clara-evdev/probe.json")); assert len(d["devices"]) == 2; assert all("error" not in a or isinstance(a["error"],str) for a in d["devices"]); assert d["devices"][1]["error"].startswith("FileNotFoundError")'
+      - name: Upload CP-KOBO-009 read-only evdev probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-009-evdev-readonly-probe
+          if-no-files-found: ignore
+          path: qa-clara-evdev/probe.json
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
