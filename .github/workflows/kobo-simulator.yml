@@ -348,6 +348,23 @@ jobs:
           path: |
             qa-clara-hal/result.txt
             qa-clara-hal/arm-elf-header.txt
+      - name: Validate CP-KOBO-016 no-I/O Linux bridge
+        run: |
+          mkdir -p qa-clara-bridge
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_bridge_test.cpp -o qa-clara-bridge/test-native
+          qa-clara-bridge/test-native | tee qa-clara-bridge/result.txt
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_bridge_test.cpp -o qa-clara-bridge/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-bridge/test-armhf > qa-clara-bridge/arm-elf-header.txt
+          grep -q 'Machine:.*ARM' qa-clara-bridge/arm-elf-header.txt
+      - name: Upload CP-KOBO-016 bridge results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-016-display-touch-bridge
+          if-no-files-found: ignore
+          path: |
+            qa-clara-bridge/result.txt
+            qa-clara-bridge/arm-elf-header.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
