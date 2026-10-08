@@ -273,6 +273,31 @@ jobs:
           name: cp-kobo-011-exit-watchdog
           if-no-files-found: ignore
           path: qa-clara-supervisor/*.json
+      - name: Validate CP-KOBO-012 guarded NickelMenu launcher
+        run: |
+          mkdir -p qa-clara-launcher/app
+          cp scripts/kobo_clara_bw_supervisor.py qa-clara-launcher/app/supervisor.py
+          cp scripts/kobo_clara_bw_start.sh qa-clara-launcher/app/start.sh
+          sh -n qa-clara-launcher/app/start.sh
+          printf '#!/bin/sh\nexit 0\n' > qa-clara-launcher/app/crosspoint-kobo
+          chmod +x qa-clara-launcher/app/crosspoint-kobo
+          if CROSSPOINT_APP_DIR="$PWD/qa-clara-launcher/app" sh qa-clara-launcher/app/start.sh > qa-clara-launcher/refusal.log 2>&1; then
+            echo "::error::Launcher allowed execution without device opt-in"
+            exit 1
+          fi
+          grep -q 'launch disabled' qa-clara-launcher/refusal.log
+          CROSSPOINT_ENABLE_KOBO_LAUNCH=1 CROSSPOINT_TEST_LIMIT=2 CROSSPOINT_APP_DIR="$PWD/qa-clara-launcher/app" sh qa-clara-launcher/app/start.sh
+          python -c 'import json; d=json.load(open("qa-clara-launcher/app/logs/last-run.json")); assert d["mode"]=="normal_exit" and d["exit_code"]==0 and d["nickel_restored"] is False'
+          cp qa-clara-launcher/app/logs/last-run.json qa-clara-launcher/normal.json
+      - name: Upload CP-KOBO-012 launch safety evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-012-nickelmenu-launcher
+          if-no-files-found: ignore
+          path: |
+            qa-clara-launcher/refusal.log
+            qa-clara-launcher/normal.json
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
