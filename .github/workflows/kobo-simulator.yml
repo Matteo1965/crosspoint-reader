@@ -401,6 +401,27 @@ jobs:
             qa-clara-fbink-cpp/result.txt
             qa-clara-fbink-cpp/arm-elf-header.txt
             qa-clara-fbink-cpp/frame.pgm
+      - name: Validate CP-KOBO-019 touch-to-display integration and watchdog
+        run: |
+          mkdir -p qa-clara-integration
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_integration_test.cpp -o qa-clara-integration/test-native
+          python scripts/kobo_clara_bw_supervisor.py --execute --limit 120 --output qa-clara-integration/watchdog.json -- qa-clara-integration/test-native qa-clara-integration/after-touch.pgm | tee qa-clara-integration/result.txt
+          python -c 'import json; d=json.load(open("qa-clara-integration/watchdog.json")); assert d["mode"]=="normal_exit" and d["exit_code"]==0 and not d["nickel_restored"]'
+          python -c 'from pathlib import Path; p=Path("qa-clara-integration/after-touch.pgm"); assert p.stat().st_size==len(b"P5\n1072 1448\n255\n")+1072*1448'
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_integration_test.cpp -o qa-clara-integration/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-integration/test-armhf > qa-clara-integration/arm-elf-header.txt
+          grep -q 'Machine:.*ARM' qa-clara-integration/arm-elf-header.txt
+      - name: Upload CP-KOBO-019 integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-019-touch-display-watchdog
+          if-no-files-found: ignore
+          path: |
+            qa-clara-integration/result.txt
+            qa-clara-integration/watchdog.json
+            qa-clara-integration/arm-elf-header.txt
+            qa-clara-integration/after-touch.pgm
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
