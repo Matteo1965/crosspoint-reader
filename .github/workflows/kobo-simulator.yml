@@ -21,6 +21,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+      - name: Use SDK revision with Linux simulator libraries
+        run: |
+          git -C freeink-sdk fetch origin 425d200a8ea447326b4b9696e4e47dc84ad9d7f6
+          git -C freeink-sdk checkout --detach 425d200a8ea447326b4b9696e4e47dc84ad9d7f6
+          git -C freeink-sdk submodule update --init --recursive
+          test -d freeink-sdk/libs/network/JsonSax
+          test -d freeink-sdk/libs/network/CatalogList
       - name: Install native simulator dependencies
         run: |
           sudo apt-get update
