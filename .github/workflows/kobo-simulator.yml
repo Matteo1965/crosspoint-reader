@@ -251,6 +251,28 @@ jobs:
           name: cp-kobo-010-fbink-dry-run
           if-no-files-found: ignore
           path: qa-clara-fbink/dry-run.json
+      - name: Validate CP-KOBO-011 independent exit watchdog
+        run: |
+          mkdir -p qa-clara-supervisor
+          python -m py_compile scripts/kobo_clara_bw_supervisor.py
+          python scripts/kobo_clara_bw_supervisor.py --execute --limit 3 --output qa-clara-supervisor/normal.json -- python -c 'print("normal exit")'
+          python -c 'import json; d=json.load(open("qa-clara-supervisor/normal.json")); assert d["mode"]=="normal_exit" and d["exit_code"]==0 and not d["nickel_restored"]'
+          if python scripts/kobo_clara_bw_supervisor.py --execute --limit 0.5 --grace 0.3 --output qa-clara-supervisor/timeout.json -- python -c 'import time; time.sleep(20)'; then
+            echo "::error::Hanging child unexpectedly reported success"
+            exit 1
+          fi
+          python -c 'import json; d=json.load(open("qa-clara-supervisor/timeout.json")); assert d["mode"]=="timeout" and not d["nickel_restored"] and d["duration_seconds"]<5'
+          if python scripts/kobo_clara_bw_supervisor.py -- python -c 'print("unexpected")' >/dev/null 2>&1; then
+            echo "::error::Child started without explicit --execute"
+            exit 1
+          fi
+      - name: Upload CP-KOBO-011 supervisor evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-011-exit-watchdog
+          if-no-files-found: ignore
+          path: qa-clara-supervisor/*.json
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
