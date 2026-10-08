@@ -624,6 +624,28 @@ jobs:
           name: cp-kobo-029-display-inventory-logger
           if-no-files-found: ignore
           path: cp-kobo-029-display-inventory-logger.zip
+      - name: Build and package CP-KOBO-030 file-write diagnostics
+        run: |
+          mkdir -p qa-clara-030/crosspoint
+          arm-linux-gnueabihf-g++ -std=c++17 -Os -Wall -Wextra -Werror -static scripts/kobo_clara_bw_030_write_probe.cpp -o qa-clara-030/crosspoint/cp030-arm-write
+          arm-linux-gnueabihf-readelf -l qa-clara-030/crosspoint/cp030-arm-write > qa-clara-030/program-headers.txt
+          if grep -q 'INTERP' qa-clara-030/program-headers.txt; then exit 1; fi
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/kobo_clara_bw_030_write_probe.cpp -o qa-clara-030/native-test
+          qa-clara-030/native-test qa-clara-030/host-result.txt
+          grep -qx 'CP-KOBO-030 ARM WRITE OK' qa-clara-030/host-result.txt
+          cp scripts/kobo_clara_bw_030_log_test.sh qa-clara-030/crosspoint/log-test-030.sh
+          sh -n qa-clara-030/crosspoint/log-test-030.sh
+          printf '%s\n' 'menu_item:main:Clara BW Log Test 030:cmd_spawn:quiet:exec /bin/sh /mnt/onboard/.adds/crosspoint/log-test-030.sh' > qa-clara-030/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-030: isolate log corruption; no display writes, no FBInk, no Nickel changes.' 'Copy crosspoint/* into Kobo .adds/crosspoint and add the single NickelMenu config line.' 'Run Clara BW Log Test 030 once. Wait briefly before connecting USB.' 'Retrieve all four files from .adds/crosspoint/logs/cp030-*.txt.' 'The prior CP-KOBO-028 and -029 logs are not modified.' > qa-clara-030/README.txt
+          chmod +x qa-clara-030/crosspoint/*
+          cd qa-clara-030 && zip -r ../cp-kobo-030-log-write-diagnostics.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-030 logging diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-030-log-write-diagnostics
+          if-no-files-found: ignore
+          path: cp-kobo-030-log-write-diagnostics.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
