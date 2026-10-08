@@ -592,6 +592,22 @@ jobs:
             qa-clara-027/result.txt
             qa-clara-027/elf-header.txt
             qa-clara-027/program-headers.txt
+      - name: Package CP-KOBO-028 display inventory
+        run: |
+          mkdir -p qa-clara-028/crosspoint
+          cp scripts/kobo_clara_bw_028_display_inventory.sh qa-clara-028/crosspoint/display-inventory.sh
+          sh -n qa-clara-028/crosspoint/display-inventory.sh
+          printf '%s\n' 'menu_item:main:Clara BW Display Info:cmd_spawn:quiet:exec /bin/sh /mnt/onboard/.adds/crosspoint/display-inventory.sh' > qa-clara-028/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-028: read-only display and FBInk discovery.' 'Copy crosspoint/display-inventory.sh into Kobo .adds/crosspoint/.' 'Add NickelMenu line from nickelmenu-entry.txt to existing .adds/nm/ configuration (do NOT replace).' 'Run Clara BW Display Info from NickelMenu.' 'Retrieve .adds/crosspoint/logs/clara-bw-display-inventory.txt via USB.' 'This script does not execute fbink, write framebuffer, change firmware or stop Nickel.' > qa-clara-028/README.txt
+          chmod +x qa-clara-028/crosspoint/display-inventory.sh
+          cd qa-clara-028 && zip -r ../cp-kobo-028-clara-bw-display-inventory.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-028 display inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-028-clara-bw-display-inventory
+          if-no-files-found: ignore
+          path: cp-kobo-028-clara-bw-display-inventory.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
