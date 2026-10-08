@@ -365,6 +365,23 @@ jobs:
           path: |
             qa-clara-bridge/result.txt
             qa-clara-bridge/arm-elf-header.txt
+      - name: Validate CP-KOBO-017 synthetic evdev events
+        run: |
+          mkdir -p qa-clara-evdev-decoder
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_evdev_decoder_test.cpp -o qa-clara-evdev-decoder/test-native
+          qa-clara-evdev-decoder/test-native | tee qa-clara-evdev-decoder/result.txt
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror scripts/clara_bw_evdev_decoder_test.cpp -o qa-clara-evdev-decoder/test-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-evdev-decoder/test-armhf > qa-clara-evdev-decoder/arm-elf-header.txt
+          grep -q 'Machine:.*ARM' qa-clara-evdev-decoder/arm-elf-header.txt
+      - name: Upload CP-KOBO-017 evdev decoder results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-017-evdev-decoder
+          if-no-files-found: ignore
+          path: |
+            qa-clara-evdev-decoder/result.txt
+            qa-clara-evdev-decoder/arm-elf-header.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
