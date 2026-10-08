@@ -190,6 +190,18 @@ jobs:
           name: cp-kobo-006-clara-bw-geometry
           if-no-files-found: ignore
           path: qa-clara-bw/
+      - name: Validate Clara BW Variant A C++ adapter
+        run: |
+          mkdir -p qa-clara-adapter
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror -fsanitize=address,undefined -fno-omit-frame-pointer scripts/clara_bw_adapter_test.cpp -o qa-clara-adapter/adapter-test
+          ASAN_OPTIONS=detect_leaks=1 qa-clara-adapter/adapter-test | tee qa-clara-adapter/result.txt
+      - name: Upload Clara BW Variant A adapter test
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-007-clara-bw-adapter
+          if-no-files-found: ignore
+          path: qa-clara-adapter/result.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
