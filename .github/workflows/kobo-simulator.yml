@@ -440,6 +440,25 @@ jobs:
           name: cp-kobo-020-clara-bw-readonly-arm-probe
           if-no-files-found: ignore
           path: qa-clara-device-probe/
+      - name: Build CP-KOBO-021 static ARM diagnostic probe
+        run: |
+          mkdir -p qa-clara-static-arm
+          arm-linux-gnueabihf-g++ -std=c++17 -O2 -Wall -Wextra -Werror -static scripts/clara_bw_device_probe.cpp -o qa-clara-static-arm/clara-bw-probe-static-armhf
+          file qa-clara-static-arm/clara-bw-probe-static-armhf | tee qa-clara-static-arm/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-static-arm/clara-bw-probe-static-armhf > qa-clara-static-arm/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-static-arm/clara-bw-probe-static-armhf > qa-clara-static-arm/program-headers.txt
+          arm-linux-gnueabihf-readelf -d qa-clara-static-arm/clara-bw-probe-static-armhf > qa-clara-static-arm/dynamic-section.txt || true
+          grep -q 'Machine:.*ARM' qa-clara-static-arm/elf-header.txt
+          if grep -q 'INTERP' qa-clara-static-arm/program-headers.txt; then echo "::error::Dynamic interpreter still required"; exit 1; fi
+          if grep -q 'NEEDED' qa-clara-static-arm/dynamic-section.txt; then echo "::error::Shared library dependency present"; exit 1; fi
+          printf '%s\n' 'Static ARM probe only. Not yet run on Kobo Clara BW; kernel compatibility and access rights unverified.' > qa-clara-static-arm/README.txt
+      - name: Upload CP-KOBO-021 static ARM probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-021-static-arm-diagnostic
+          if-no-files-found: ignore
+          path: qa-clara-static-arm/
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
