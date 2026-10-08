@@ -480,6 +480,33 @@ jobs:
           name: cp-kobo-022-clara-bw-manual-probe
           if-no-files-found: ignore
           path: cp-kobo-022-clara-bw-manual-probe.zip
+      - name: Build CP-KOBO-023 Clara BW evdev axis bundle
+        run: |
+          mkdir -p qa-clara-023/crosspoint
+          arm-linux-gnueabihf-g++ -std=c++17 -Os -Wall -Wextra -Werror -static scripts/clara_bw_evdev_axes_device.cpp -o qa-clara-023/crosspoint/clara-bw-evdev-axes-armhf
+          arm-linux-gnueabihf-readelf -h qa-clara-023/crosspoint/clara-bw-evdev-axes-armhf > qa-clara-023/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-023/crosspoint/clara-bw-evdev-axes-armhf > qa-clara-023/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-023/elf-header.txt
+          if grep -q 'INTERP' qa-clara-023/program-headers.txt; then exit 1; fi
+          g++ -std=c++17 -Os -Wall -Wextra -Werror scripts/clara_bw_evdev_axes_device.cpp -o qa-clara-023/probe-host
+          if qa-clara-023/probe-host /dev/null > qa-clara-023/host-test.log 2>&1; then
+            grep -q 'CP-KOBO-023 evdev axis probe finished' qa-clara-023/host-test.log
+          else
+            echo 'Host probe failed on /dev/null'; exit 1
+          fi
+          cp scripts/kobo_clara_bw_023_touch.sh qa-clara-023/crosspoint/touch-axes.sh
+          sh -n qa-clara-023/crosspoint/touch-axes.sh
+          printf '%s\n' 'menu_item:main:Clara BW Touch Axes:cmd_spawn:quiet:exec /mnt/onboard/.adds/crosspoint/touch-axes.sh' > qa-clara-023/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-023 READ-ONLY TOUCH DIAGNOSTIC' 'Do not overwrite existing NickelMenu configuration.' 'Copy the two files inside crosspoint/ into .adds/crosspoint/ on Kobo.' 'Add nickelmenu-entry.txt line to your existing .adds/nm/ configuration.' 'Run Clara BW Touch Axes once; collect .adds/crosspoint/logs/clara-bw-touch-axes.txt.' 'This measures axis bounds only, NOT orientation. It does not stop Nickel or write display.' 'ARM binary is static but device execution has not yet been validated.' > qa-clara-023/README.txt
+          chmod +x qa-clara-023/crosspoint/clara-bw-evdev-axes-armhf qa-clara-023/crosspoint/touch-axes.sh
+          cd qa-clara-023 && zip -r ../cp-kobo-023-clara-bw-touch-axes.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-023 Clara BW touch axis bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-023-clara-bw-touch-axes
+          if-no-files-found: ignore
+          path: cp-kobo-023-clara-bw-touch-axes.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
