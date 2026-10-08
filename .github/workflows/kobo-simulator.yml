@@ -234,6 +234,23 @@ jobs:
           name: cp-kobo-009-evdev-readonly-probe
           if-no-files-found: ignore
           path: qa-clara-evdev/probe.json
+      - name: Validate CP-KOBO-010 FBInk dry-run integration
+        run: |
+          mkdir -p qa-clara-fbink
+          python -m py_compile scripts/kobo_clara_bw_fbink.py
+          python scripts/kobo_clara_bw_fbink.py --image qa-clara-bw/clara-bw-1072x1448.png --output qa-clara-fbink/dry-run.json
+          python -c 'import json; d=json.load(open("qa-clara-fbink/dry-run.json")); assert d["mode"]=="dry-run"; assert d["dimensions"]==[1072,1448]; assert d["command"][1:]==["-W","AUTO","-i",d["image"]]'
+          if python scripts/kobo_clara_bw_fbink.py --image qa-clara-bw/clara-bw-1072x1448.png --display >/dev/null 2>&1; then
+            echo "::error::FBInk display ran without explicit --allow-write"
+            exit 1
+          fi
+      - name: Upload CP-KOBO-010 FBInk dry-run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-010-fbink-dry-run
+          if-no-files-found: ignore
+          path: qa-clara-fbink/dry-run.json
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
