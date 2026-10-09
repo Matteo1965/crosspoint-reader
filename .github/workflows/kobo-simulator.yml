@@ -742,6 +742,30 @@ jobs:
             qa-clara-034/program-headers.txt
             qa-clara-034/dynamic-section.txt
             qa-clara-034/README.txt
+      - name: CP-KOBO-035 package guarded FBInk help-only device probe
+        run: |
+          mkdir -p qa-clara-035/crosspoint
+          test -f qa-clara-034/status.txt
+          grep -qx 'STATIC_ELF_PENDING_DEVICE_REVIEW' qa-clara-034/status.txt
+          cp qa-clara-034/fbink-candidate qa-clara-035/crosspoint/fbink-035
+          cp scripts/kobo_fbink_035_help_probe.sh qa-clara-035/crosspoint/help-probe-035.sh
+          sh -n qa-clara-035/crosspoint/help-probe-035.sh
+          chmod +x qa-clara-035/crosspoint/*
+          arm-linux-gnueabihf-readelf -l qa-clara-035/crosspoint/fbink-035 | tee qa-clara-035/elf-program-headers.txt
+          if grep -q INTERP qa-clara-035/elf-program-headers.txt; then echo 'Refusing dynamic binary'; exit 1; fi
+          arm-linux-gnueabihf-readelf -d qa-clara-035/crosspoint/fbink-035 > qa-clara-035/elf-dynamic.txt 2>&1 || true
+          if grep -q '(NEEDED)' qa-clara-035/elf-dynamic.txt; then echo 'Refusing external libraries'; exit 1; fi
+          sha256sum qa-clara-035/crosspoint/fbink-035 > qa-clara-035/sha256.txt
+          printf '%s\n' 'menu_item:main:Clara BW FBInk Help 035:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/help-probe-035.sh' > qa-clara-035/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-035 is a help-only compatibility probe. This is NOT a display test.' 'Copy crosspoint/fbink-035 and crosspoint/help-probe-035.sh into Kobo .adds/crosspoint/.' 'Add the single NickelMenu line from nickelmenu-entry.txt into a NEW file in .adds/nm/.' 'Keep all existing NickelMenu and KOReader configuration.' 'Launch Clara BW FBInk Help 035 once. Only the literal --help option is passed.' 'Source confirmed --help exits before fbink_open() and fbink_init().' 'After success message, retrieve .adds/crosspoint/logs/cp-kobo-035-help.txt and cp-kobo-035.status.' 'If timeout, do not immediately reconnect USB; use status and allow logging to finish.' 'DO NOT run fbink-035 directly or pass print/clear options; those may modify the display.' 'This package does not stop Nickel or install firmware.' > qa-clara-035/README.txt
+          cd qa-clara-035 && zip -r ../cp-kobo-035-fbink-help-only.zip crosspoint nickelmenu-entry.txt README.txt sha256.txt elf-program-headers.txt elf-dynamic.txt
+      - name: Upload CP-KOBO-035 FBInk help-only diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-035-fbink-help-only
+          if-no-files-found: ignore
+          path: cp-kobo-035-fbink-help-only.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
