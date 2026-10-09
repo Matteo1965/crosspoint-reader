@@ -920,6 +920,31 @@ jobs:
             qa-clara-050/elf-header.txt
             qa-clara-050/program-headers.txt
             qa-clara-050/README.txt
+      - name: CP-KOBO-051 build first manual FBInk initialization test
+        run: |
+          mkdir -p qa-clara-051/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_051_init_probe.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-051/crosspoint/fbink-init-051
+          file qa-clara-051/crosspoint/fbink-init-051 > qa-clara-051/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-051/crosspoint/fbink-init-051 > qa-clara-051/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-051/crosspoint/fbink-init-051 > qa-clara-051/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-051/elf-header.txt
+          ! grep -q INTERP qa-clara-051/program-headers.txt
+          cp scripts/kobo_fbink_051_launch.sh qa-clara-051/crosspoint/launch-051.sh
+          cp scripts/kobo_fbink_051_status.sh qa-clara-051/crosspoint/status-051.sh
+          sh -n qa-clara-051/crosspoint/launch-051.sh
+          sh -n qa-clara-051/crosspoint/status-051.sh
+          printf '%s\n' 'menu_item:main:Clara BW FBInk Init 051:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/launch-051.sh' 'menu_item:main:Clara BW Init Status 051:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-051.sh' > qa-clara-051/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-051: FIRST MANUAL FBInk INITIALIZATION TEST - EXPERIMENTAL.' 'There is a risk of an unresponsive Nickel screen. A normal hard reboot may be required.' 'The tool uses model 395 and framebuffer metadata preflight, FBFD_AUTO and a one-attempt marker.' 'No explicit framebuffer drawing/EPDC refresh/wakeup occurs in this probe.' 'Copy the 3 files under crosspoint into Kobo .adds/crosspoint/ and add NickelMenu lines to a new .adds/nm file.' 'Do not use the obsolete CP-KOBO-048 test. No firmware flashing or boot hooks.' 'Safely eject USB; launch once. Then verify Nickel navigation/touch and KOReader.' 'If screen breaks, stop testing; reboot by your usual safe procedure. Do not delete marker to retry.' 'After test provide logs/cp-kobo-051-state.txt, logs/cp-kobo-051-output.txt, and the marker file.' > qa-clara-051/README.txt
+          chmod +x qa-clara-051/crosspoint/*
+          cd qa-clara-051 && zip -r ../cp-kobo-051-first-init.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-051 first init package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-051-first-init
+          if-no-files-found: ignore
+          path: cp-kobo-051-first-init.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
