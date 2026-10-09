@@ -766,6 +766,30 @@ jobs:
           name: cp-kobo-035-fbink-help-only
           if-no-files-found: ignore
           path: cp-kobo-035-fbink-help-only.zip
+      - name: CP-KOBO-039 build read-only framebuffer ioctl probe
+        run: |
+          sudo apt-get install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+          mkdir -p qa-clara-039/crosspoint
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static scripts/kobo_fbvar_039.c -o qa-clara-039/crosspoint/fbvar-039
+          arm-linux-gnueabihf-readelf -h qa-clara-039/crosspoint/fbvar-039 > qa-clara-039/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-039/crosspoint/fbvar-039 > qa-clara-039/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-039/elf-header.txt
+          ! grep -q INTERP qa-clara-039/program-headers.txt
+          cp scripts/kobo_fbvar_039.sh qa-clara-039/crosspoint/display-039.sh
+          cp scripts/kobo_fbvar_039_status.sh qa-clara-039/crosspoint/status-039.sh
+          sh -n qa-clara-039/crosspoint/display-039.sh
+          sh -n qa-clara-039/crosspoint/status-039.sh
+          printf '%s\n' 'menu_item:main:Clara BW Framebuffer 039:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/display-039.sh' 'menu_item:main:Clara BW Status 039:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-039.sh' > qa-clara-039/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-039. Read-only FBIOGET_VSCREENINFO and FBIOGET_FSCREENINFO diagnostic.' 'Source uses O_RDONLY, not FBInk, mmap, framebuffer writes or FBIOPUT.' 'Copy files under crosspoint to Kobo .adds/crosspoint/; add NickelMenu lines in NEW config under .adds/nm/.' 'After completion and status DONE, upload .adds/crosspoint/logs/cp-kobo-039-framebuffer.txt and cp-kobo-039.status.' 'This device-level ioctl test is lower risk, not risk-free; avoid installing if Nickel is unstable.' > qa-clara-039/README.txt
+          chmod +x qa-clara-039/crosspoint/*
+          cd qa-clara-039 && zip -r ../cp-kobo-039-fbvar-readonly.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-039 read-only package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-039-fbvar-readonly
+          if-no-files-found: ignore
+          path: cp-kobo-039-fbvar-readonly.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
