@@ -830,6 +830,28 @@ jobs:
             qa-clara-043/elf-header.txt
             qa-clara-043/program-headers.txt
             qa-clara-043/README.txt
+      - name: CP-KOBO-046 compile guarded read-only FBFD_AUTO init (CI only)
+        run: |
+          mkdir -p qa-clara-046
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_046_auto_init_probe.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-046/init-probe
+          file qa-clara-046/init-probe > qa-clara-046/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-046/init-probe > qa-clara-046/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-046/init-probe > qa-clara-046/program-headers.txt
+          ! grep -q INTERP qa-clara-046/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-046/elf-header.txt
+          printf '%s\n' 'CP-KOBO-046 COMPILE ONLY; no executable included in artifact.' 'Preflight model 395 and CP039 framebuffer layout before FBFD_AUTO init.' 'Do NOT deploy until safety/recovery gates are completed.' > qa-clara-046/README.txt
+      - name: Upload CP-KOBO-046 compile evidence (no executable)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-046-auto-init-evidence
+          if-no-files-found: ignore
+          path: |
+            qa-clara-046/file-type.txt
+            qa-clara-046/elf-header.txt
+            qa-clara-046/program-headers.txt
+            qa-clara-046/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
