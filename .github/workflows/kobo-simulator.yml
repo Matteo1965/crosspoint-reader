@@ -970,6 +970,31 @@ jobs:
           name: cp-kobo-052-first-display
           if-no-files-found: ignore
           path: cp-kobo-052-first-display.zip
+      - name: CP-KOBO-053 build first CrossPoint Hungarian Edition screen preview
+        run: |
+          mkdir -p qa-clara-053/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_053_home_preview.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-053/crosspoint/home-053
+          file qa-clara-053/crosspoint/home-053 > qa-clara-053/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-053/crosspoint/home-053 > qa-clara-053/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-053/crosspoint/home-053 > qa-clara-053/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-053/elf-header.txt
+          ! grep -q INTERP qa-clara-053/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' 'if [ -e "$L/cp-kobo-053.attempted" ]; then echo "053 MAR FUTOTT"; exit 3; fi' 'if [ ! -x "$B/home-053" ]; then echo "053 binary missing"; exit 4; fi' '"$B/home-053" --explicit-init-risk-acknowledged > "$L/cp-kobo-053-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-053-output.txt"' 'sync' 'echo "CP-KOBO-053 exit=$rc; ellenorizd Nickel + KOReader"' 'exit "$rc"' > qa-clara-053/crosspoint/launch-053.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-053-state.txt" ]; then tail -n 8 "$L/cp-kobo-053-state.txt"; else echo "053 NO LOG"; fi' > qa-clara-053/crosspoint/status-053.sh
+          sh -n qa-clara-053/crosspoint/launch-053.sh
+          sh -n qa-clara-053/crosspoint/status-053.sh
+          printf '%s\n' 'menu_item:main:CrossPoint Home 053:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/launch-053.sh' 'menu_item:main:CrossPoint Home Status 053:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-053.sh' > qa-clara-053/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-053 first STATIC CrossPoint home screen preview; NO touch control and NO Nickel replacement.' 'Uses several small-area E Ink refreshes and can leave temporary text on the Nickel screen.' 'Text is ASCII transliteration because bundled bitmap glyphs may not cover Hungarian accents.' 'Copy the 3 files in crosspoint to .adds/crosspoint/. Place the two NickelMenu lines in a NEW file under .adds/nm/.' 'Eject USB safely; start once. Do not remove prior 051/052 markers.' 'If Nickel becomes unresponsive, stop and use normal device reboot. Verify Nickel and KOReader afterward.' 'Upload cp-kobo-053-state.txt and cp-kobo-053-output.txt and describe visible display.' > qa-clara-053/README.txt
+          chmod +x qa-clara-053/crosspoint/*
+          cd qa-clara-053 && zip -r ../cp-kobo-053-home-preview.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-053 home preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-053-home-preview
+          if-no-files-found: ignore
+          path: cp-kobo-053-home-preview.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
