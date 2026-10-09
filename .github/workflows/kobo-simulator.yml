@@ -664,6 +664,22 @@ jobs:
           name: cp-kobo-031-sync-display-notification
           if-no-files-found: ignore
           path: cp-kobo-031-sync-display-notification.zip
+      - name: CP-KOBO-032 audit pinned FBInk source (no device I/O)
+        run: |
+          mkdir -p qa-clara-032
+          git clone --filter=blob:none https://github.com/NiLuJe/FBInk.git qa-clara-032/fbink-source
+          git -C qa-clara-032/fbink-source checkout --detach 886f25f13368859ad8a899b88d04c26e19cda32e
+          python scripts/kobo_fbink_032_source_audit.py qa-clara-032/fbink-source qa-clara-032/source-audit.json
+          printf '%s\n' 'CP-KOBO-032 is SOURCE AUDIT ONLY.' 'FBInk has not been compiled for the Clara BW in this step.' 'No Kobo binary, firmware package, or display-writing command is included.' 'Next gate: inspect hwtcon support and use correct Kobo toolchain before any framebuffer test.' > qa-clara-032/README.txt
+      - name: Upload CP-KOBO-032 FBInk source audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-032-fbink-source-audit
+          if-no-files-found: ignore
+          path: |
+            qa-clara-032/source-audit.json
+            qa-clara-032/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
