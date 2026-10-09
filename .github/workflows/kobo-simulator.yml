@@ -790,6 +790,24 @@ jobs:
           name: cp-kobo-039-fbvar-readonly
           if-no-files-found: ignore
           path: cp-kobo-039-fbvar-readonly.zip
+      - name: CP-KOBO-042 package read-only model identification
+        run: |
+          mkdir -p qa-clara-042/crosspoint
+          cp scripts/kobo_model_042.sh qa-clara-042/crosspoint/model-042.sh
+          cp scripts/kobo_model_042_status.sh qa-clara-042/crosspoint/status-042.sh
+          sh -n qa-clara-042/crosspoint/model-042.sh
+          sh -n qa-clara-042/crosspoint/status-042.sh
+          printf '%s\n' 'menu_item:main:Clara BW Model 042:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/model-042.sh' 'menu_item:main:Clara BW Status 042:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-042.sh' > qa-clara-042/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-042: read-only Kobo model code from Nickel version file.' 'Copy crosspoint/*.sh into Kobo .adds/crosspoint/.' 'Add nickelmenu-entry.txt lines in a NEW file under .adds/nm/; do NOT overwrite KOReader settings.' 'Invoke Clara BW Model 042 only when disconnected from USB mass storage.' 'After completion, upload .adds/crosspoint/logs/cp-kobo-042-model.txt and cp-kobo-042.status.' 'No FBInk calls, no framebuffer access, no device modifications, no display refresh.' > qa-clara-042/README.txt
+          chmod +x qa-clara-042/crosspoint/*.sh
+          cd qa-clara-042 && zip -r ../cp-kobo-042-model-readonly.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-042 model probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-042-model-readonly
+          if-no-files-found: ignore
+          path: cp-kobo-042-model-readonly.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
