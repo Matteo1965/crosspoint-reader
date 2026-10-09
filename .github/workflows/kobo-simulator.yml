@@ -995,6 +995,30 @@ jobs:
           name: cp-kobo-053-home-preview
           if-no-files-found: ignore
           path: cp-kobo-053-home-preview.zip
+      - name: CP-KOBO-054 build home preview without NickelMenu output popup
+        run: |
+          mkdir -p qa-clara-054/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_054_home_preview.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-054/crosspoint/home-054
+          arm-linux-gnueabihf-readelf -h qa-clara-054/crosspoint/home-054 > qa-clara-054/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-054/crosspoint/home-054 > qa-clara-054/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-054/elf-header.txt
+          ! grep -q INTERP qa-clara-054/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' 'if [ -e "$L/cp-kobo-054.attempted" ]; then exit 3; fi' 'if [ ! -x "$B/home-054" ]; then exit 4; fi' '"$B/home-054" --explicit-init-risk-acknowledged > "$L/cp-kobo-054-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-054-output.txt"' 'sync' 'exit "$rc"' > qa-clara-054/crosspoint/launch-054.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-054-state.txt" ]; then tail -n 8 "$L/cp-kobo-054-state.txt"; else echo "054 NO LOG"; fi' > qa-clara-054/crosspoint/status-054.sh
+          sh -n qa-clara-054/crosspoint/launch-054.sh
+          sh -n qa-clara-054/crosspoint/status-054.sh
+          printf '%s\n' 'menu_item:main:CrossPoint Home 054:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/launch-054.sh' 'menu_item:main:CrossPoint Home Status 054:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-054.sh' > qa-clara-054/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-054: same text-only home preview as 053, but launch via NickelMenu cmd_spawn:quiet, not cmd_output.' 'No execution popup expected; status inspection stays a separate cmd_output item.' 'Copy the three crosspoint files to Kobo .adds/crosspoint/ and add the two entries to a NEW .adds/nm/ config file.' 'Do not remove any previous run-once markers. Run once only after safe USB eject.' 'This still requests multiple partial E Ink refreshes and does not replace Nickel or handle touch input.' 'After running, photograph visible screen BEFORE touching Nickel again and check logs cp-kobo-054-state.txt, cp-kobo-054-output.txt.' 'If Nickel or KOReader misbehaves, stop tests and reboot by your usual procedure.' > qa-clara-054/README.txt
+          chmod +x qa-clara-054/crosspoint/*
+          cd qa-clara-054 && zip -r ../cp-kobo-054-quiet-home.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-054 quiet home preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-054-quiet-home
+          if-no-files-found: ignore
+          path: cp-kobo-054-quiet-home.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
