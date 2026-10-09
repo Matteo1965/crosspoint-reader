@@ -898,6 +898,28 @@ jobs:
           name: cp-kobo-048-manual-init
           if-no-files-found: ignore
           path: cp-kobo-048-manual-init.zip
+      - name: CP-KOBO-050 compile fail-closed init diagnostic (CI only)
+        run: |
+          mkdir -p qa-clara-050
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_050_failclosed_probe.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-050/init-probe
+          file qa-clara-050/init-probe > qa-clara-050/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-050/init-probe > qa-clara-050/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-050/init-probe > qa-clara-050/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-050/elf-header.txt
+          ! grep -q INTERP qa-clara-050/program-headers.txt
+          printf '%s\n' 'CP-KOBO-050 compile-only proof; NOT APPROVED FOR KOBO INSTALLATION.' 'State machine: PREFLIGHT_FAILED / ATTEMPTED / INIT_FAILED / INIT_RETURNED / UNKNOWN_INTERRUPTED inferred from incomplete log.' 'Marker is fail-closed. DEVICE_VERIFIED requires human Nickel and KOReader checks.' > qa-clara-050/README.txt
+      - name: Upload CP-KOBO-050 compiler evidence (no executable)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-050-failclosed-evidence
+          if-no-files-found: ignore
+          path: |
+            qa-clara-050/file-type.txt
+            qa-clara-050/elf-header.txt
+            qa-clara-050/program-headers.txt
+            qa-clara-050/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
