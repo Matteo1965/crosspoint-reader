@@ -687,7 +687,7 @@ jobs:
           git clone --recursive https://github.com/NiLuJe/FBInk.git qa-clara-033/fbink-source
           git -C qa-clara-033/fbink-source checkout --detach 886f25f13368859ad8a899b88d04c26e19cda32e
           git -C qa-clara-033/fbink-source submodule update --init --recursive
-          make -C qa-clara-033/fbink-source -j2 CROSS_TC=arm-linux-gnueabihf KOBO=1 MINIMAL=1 staticbin
+          make -C qa-clara-033/fbink-source -j2 CROSS_TC=arm-linux-gnueabihf KOBO=1 staticbin
           cp qa-clara-033/fbink-source/Release/static/fbink qa-clara-033/fbink-kobo-armhf
           file qa-clara-033/fbink-kobo-armhf | tee qa-clara-033/file-type.txt
           arm-linux-gnueabihf-readelf -h qa-clara-033/fbink-kobo-armhf > qa-clara-033/elf-header.txt
