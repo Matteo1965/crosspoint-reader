@@ -945,6 +945,31 @@ jobs:
           name: cp-kobo-051-first-init
           if-no-files-found: ignore
           path: cp-kobo-051-first-init.zip
+      - name: CP-KOBO-052 build first visible FBInk display test
+        run: |
+          mkdir -p qa-clara-052/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_052_display_test.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-052/crosspoint/fbink-display-052
+          file qa-clara-052/crosspoint/fbink-display-052 > qa-clara-052/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-052/crosspoint/fbink-display-052 > qa-clara-052/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-052/crosspoint/fbink-display-052 > qa-clara-052/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-052/elf-header.txt
+          ! grep -q INTERP qa-clara-052/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' 'if [ -e "$L/cp-kobo-052.attempted" ]; then echo "052 MAR FUTOTT"; exit 3; fi' 'if [ ! -x "$B/fbink-display-052" ]; then echo "052 binary missing"; exit 4; fi' '"$B/fbink-display-052" --explicit-init-risk-acknowledged > "$L/cp-kobo-052-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-052-output.txt"' 'sync' 'echo "CP-KOBO-052 exit=$rc; check screen/Nickel/KOReader"' 'exit "$rc"' > qa-clara-052/crosspoint/launch-052.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-052-state.txt" ]; then tail -n 8 "$L/cp-kobo-052-state.txt"; else echo "052 NO LOG"; fi' > qa-clara-052/crosspoint/status-052.sh
+          sh -n qa-clara-052/crosspoint/launch-052.sh
+          sh -n qa-clara-052/crosspoint/status-052.sh
+          printf '%s\n' 'menu_item:main:Clara BW Display 052:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/launch-052.sh' 'menu_item:main:Clara BW Display Status 052:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-052.sh' > qa-clara-052/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-052 first actual E Ink drawing. Unlike 051, this WILL alter a small area of the screen and SEND an update.' 'Run only once manually, after safe USB eject. There is a risk that Nickel may hang; normal device reboot may be necessary.' 'The test should print CP-KOBO-052 DISPLAY TEST near the upper left (row 5, col 2); no screen-wide clear or intentional flashing.' 'Do not run CP-KOBO-051 again or remove its attempted marker.' 'Copy the 3 files inside crosspoint into Kobo .adds/crosspoint/ and the NickelMenu entries into a NEW .adds/nm config file.' 'Afterward check Nickel touch/navigation and KOReader. If anything fails, stop and reboot normally.' 'Return cp-kobo-052-state.txt and cp-kobo-052-output.txt plus an observation about visible text.' > qa-clara-052/README.txt
+          chmod +x qa-clara-052/crosspoint/*
+          cd qa-clara-052 && zip -r ../cp-kobo-052-first-display.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-052 first display package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-052-first-display
+          if-no-files-found: ignore
+          path: cp-kobo-052-first-display.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
