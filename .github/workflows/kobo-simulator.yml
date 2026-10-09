@@ -874,6 +874,30 @@ jobs:
             qa-clara-047/elf-header.txt
             qa-clara-047/program-headers.txt
             qa-clara-047/README.txt
+      - name: CP-KOBO-048 build manual one-attempt init package
+        run: |
+          mkdir -p qa-clara-048/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_048_manual_init_probe.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-048/crosspoint/fbink-init-048
+          arm-linux-gnueabihf-readelf -h qa-clara-048/crosspoint/fbink-init-048 > qa-clara-048/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-048/crosspoint/fbink-init-048 > qa-clara-048/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-048/elf-header.txt
+          ! grep -q INTERP qa-clara-048/program-headers.txt
+          cp scripts/kobo_fbink_048_launch.sh qa-clara-048/crosspoint/launch-048.sh
+          cp scripts/kobo_fbink_048_status.sh qa-clara-048/crosspoint/status-048.sh
+          sh -n qa-clara-048/crosspoint/launch-048.sh
+          sh -n qa-clara-048/crosspoint/status-048.sh
+          printf '%s\n' 'menu_item:main:Clara BW FBInk Init 048:cmd_output:9000:/bin/sh /mnt/onboard/.adds/crosspoint/launch-048.sh' 'menu_item:main:Clara BW Init Status 048:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-048.sh' > qa-clara-048/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-048 — EXPERIMENTAL FBInk init only. UNPROVEN ON HARDWARE.' 'CAUTION: FBInk initialization may interfere with Nickel; do NOT install without accepting this risk.' 'Only launch manually after safe USB eject. No boot hooks. No drawing or refresh API requested.' 'Copy the crosspoint/ files into /mnt/onboard/.adds/crosspoint/. Add two NickelMenu lines to a NEW config under .adds/nm/.' 'Run the init entry ONCE only, then verify Nickel navigation and KOReader manually.' 'If screen/navigation becomes unresponsive, stop tests and use normal Kobo reboot/recovery. A timeout cannot reverse kernel state.' 'Upload logs/cp-kobo-048-init.txt, logs/cp-kobo-048-output.txt, logs/cp-kobo-048.attempted.' 'Do not delete marker for retry.' > qa-clara-048/README.txt
+          chmod +x qa-clara-048/crosspoint/*
+          cd qa-clara-048 && zip -r ../cp-kobo-048-manual-init.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-048 manual initialization package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-048-manual-init
+          if-no-files-found: ignore
+          path: cp-kobo-048-manual-init.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
