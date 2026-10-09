@@ -7,7 +7,7 @@ mkdir -p "$OUT" || { echo 'HIBA: log mappa'; exit 2; }
 STATUS="$OUT/cp-kobo-042.status"
 LOG="$OUT/cp-kobo-042-model.txt"
 printf 'RUNNING\n' > "$STATUS" || exit 3
-{
+(
  echo 'CP-KOBO-042 START'
  FILE=/mnt/onboard/.kobo/version
  if [ ! -r "$FILE" ]; then
@@ -15,9 +15,6 @@ printf 'RUNNING\n' > "$STATUS" || exit 3
    exit 4
  fi
  tag=$(cat "$FILE") || exit 5
- case "$tag" in
-   *[!0-9]) ;;
- esac
  # Read only the last three characters; do not log firmware identifiers or serial data.
  code=$(printf '%s' "$tag" | tail -c 3)
  case "$code" in
@@ -32,7 +29,7 @@ printf 'RUNNING\n' > "$STATUS" || exit 3
  echo 'fbink_init=NOT_RUN'
  echo 'framebuffer=NOT_OPENED'
  echo 'CP-KOBO-042 FINISHED'
-} > "$LOG" 2>&1
+) > "$LOG" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ] && grep -qx 'clara_bw_tpv_match=YES' "$LOG" && grep -qx 'CP-KOBO-042 FINISHED' "$LOG"; then
  echo DONE > "$STATUS"
