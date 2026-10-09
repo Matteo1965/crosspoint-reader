@@ -680,6 +680,33 @@ jobs:
           path: |
             qa-clara-032/source-audit.json
             qa-clara-032/README.txt
+      - name: CP-KOBO-033 cross-compile FBInk for Kobo ARMv7 (CI only)
+        run: |
+          sudo apt-get install -y gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
+          mkdir -p qa-clara-033
+          git clone --recursive https://github.com/NiLuJe/FBInk.git qa-clara-033/fbink-source
+          git -C qa-clara-033/fbink-source checkout --detach 886f25f13368859ad8a899b88d04c26e19cda32e
+          git -C qa-clara-033/fbink-source submodule update --init --recursive
+          make -C qa-clara-033/fbink-source -j2 CROSS_TC=arm-linux-gnueabihf KOBO=1 MINIMAL=1 staticbin
+          cp qa-clara-033/fbink-source/Release/static/fbink qa-clara-033/fbink-kobo-armhf
+          file qa-clara-033/fbink-kobo-armhf | tee qa-clara-033/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-033/fbink-kobo-armhf > qa-clara-033/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-033/fbink-kobo-armhf > qa-clara-033/program-headers.txt
+          arm-linux-gnueabihf-readelf -d qa-clara-033/fbink-kobo-armhf > qa-clara-033/dynamic-section.txt || true
+          grep -q 'Machine:.*ARM' qa-clara-033/elf-header.txt
+          printf '%s\n' 'CP-KOBO-033 COMPILATION TEST ONLY. NOT SAFE FOR DEVICE DEPLOYMENT YET.' 'The executable is not run on a Kobo device in this step.' 'staticbin means FBInk static library linkage, NOT necessarily an entirely static ELF.' 'Inspect INTERP and NEEDED results before considering deployment.' > qa-clara-033/README.txt
+      - name: Upload CP-KOBO-033 FBInk ARM compile evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-033-fbink-arm-build-evidence
+          if-no-files-found: ignore
+          path: |
+            qa-clara-033/file-type.txt
+            qa-clara-033/elf-header.txt
+            qa-clara-033/program-headers.txt
+            qa-clara-033/dynamic-section.txt
+            qa-clara-033/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
