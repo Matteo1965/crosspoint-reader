@@ -707,6 +707,40 @@ jobs:
             qa-clara-033/program-headers.txt
             qa-clara-033/dynamic-section.txt
             qa-clara-033/README.txt
+      - name: CP-KOBO-034 attempt fully static FBInk ARM (CI-only)
+        continue-on-error: true
+        run: |
+          mkdir -p qa-clara-034
+          printf '%s\n' 'ATTEMPTED' > qa-clara-034/status.txt
+          test -d qa-clara-033/fbink-source
+          make -C qa-clara-033/fbink-source -j2 CROSS_TC=arm-linux-gnueabihf KOBO=1 LDFLAGS=-static staticbin > qa-clara-034/build.log 2>&1
+          cp qa-clara-033/fbink-source/Release/static/fbink qa-clara-034/fbink-candidate
+          arm-linux-gnueabihf-readelf -l qa-clara-034/fbink-candidate > qa-clara-034/program-headers.txt
+          arm-linux-gnueabihf-readelf -d qa-clara-034/fbink-candidate > qa-clara-034/dynamic-section.txt 2>&1 || true
+          if grep -q INTERP qa-clara-034/program-headers.txt; then
+            echo 'DYNAMIC_BINARY_NOT_APPROVED' > qa-clara-034/status.txt
+          else
+            echo 'STATIC_ELF_PENDING_DEVICE_REVIEW' > qa-clara-034/status.txt
+          fi
+      - name: Capture CP-KOBO-034 build evidence
+        if: always()
+        run: |
+          mkdir -p qa-clara-034
+          test -f qa-clara-034/status.txt || echo 'BLOCKED_BY_EARLIER_STEP' > qa-clara-034/status.txt
+          test -f qa-clara-034/build.log && tail -n 110 qa-clara-034/build.log > qa-clara-034/build-tail.txt || true
+          printf '%s\n' 'CP-KOBO-034: attempted statically linked ARM FBInk binary.' 'CI artifact intentionally contains REPORTS ONLY, not the binary.' 'No NickelMenu installer and no framebuffer-write command are provided.' 'Even a fully static ELF is not evidence of safe hwtcon display refresh.' > qa-clara-034/README.txt
+      - name: Upload CP-KOBO-034 static-link evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-034-fbink-static-link-evidence
+          if-no-files-found: ignore
+          path: |
+            qa-clara-034/status.txt
+            qa-clara-034/build-tail.txt
+            qa-clara-034/program-headers.txt
+            qa-clara-034/dynamic-section.txt
+            qa-clara-034/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
