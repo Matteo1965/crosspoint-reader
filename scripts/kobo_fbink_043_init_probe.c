@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     printf("deviceId=%u\n", (unsigned)state.device_id);
     printf("isMTK=%u\n", (unsigned)state.is_mtk);
     printf("bpp=%u\n", (unsigned)state.bpp);
-    printf("pixel_format=%s\n", state.pixel_format);
+    printf("pixel_format_enum=%u\n", (unsigned)state.pixel_format);
     fbink_close(fd);
     return 0;
 }
