@@ -808,6 +808,28 @@ jobs:
           name: cp-kobo-042-model-readonly
           if-no-files-found: ignore
           path: cp-kobo-042-model-readonly.zip
+      - name: CP-KOBO-043 compile guarded FBInk init probe (CI only)
+        run: |
+          mkdir -p qa-clara-043
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_043_init_probe.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-043/init-probe
+          file qa-clara-043/init-probe > qa-clara-043/file-type.txt
+          arm-linux-gnueabihf-readelf -h qa-clara-043/init-probe > qa-clara-043/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-043/init-probe > qa-clara-043/program-headers.txt
+          ! grep -q INTERP qa-clara-043/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-043/elf-header.txt
+          printf '%s\n' 'CP-KOBO-043: COMPILE ONLY.' 'No binary is included in this artifact; do not deploy or run fbink_init yet.' 'The executable has an explicit acknowledgment switch, but this is not a safety guarantee.' 'Full side-effect audit and Nickel ownership/recovery remain gates before physical initialization.' > qa-clara-043/README.txt
+      - name: Upload CP-KOBO-043 compile evidence (no executable)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-043-fbink-init-probe-evidence
+          if-no-files-found: ignore
+          path: |
+            qa-clara-043/file-type.txt
+            qa-clara-043/elf-header.txt
+            qa-clara-043/program-headers.txt
+            qa-clara-043/README.txt
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
