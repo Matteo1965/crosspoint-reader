@@ -120,7 +120,6 @@ int main(int argc,char **argv){
 
     /* RoundedRaff uses rounded filled selectable rows with a small gap.
        Draw 4 rounded-edge gray bars using three adjacent rectangles each. */
-    const char *labels[]={"Könyvtár","Böngésző","Másolás","Beállítások"};
     FBInkConfig pill={0};
     pill.bg_color=BG_GRAYE;
     pill.no_refresh=true;
