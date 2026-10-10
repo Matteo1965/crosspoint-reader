@@ -134,14 +134,14 @@ int main(int argc,char **argv){
         }
     }
     const struct {short row; short col; const char *label;unsigned char fontmult;} items[]={
-        {3,3,"CROSSPOINT",4},
-        {6,3,"HUNGARIAN EDITION",3},
-        {12,6,"Kobo Clara BW",2},
-        {21,8,"Könyvtár",3},
-        {28,8,"Böngésző",3},
-        {35,8,"Másolás",3},
-        {42,8,"Beállítások",3},
-        {55,3,"RoundedRaff  |  Kobo",2}
+        {2,3,"CROSSPOINT",2},
+        {4,3,"HUNGARIAN EDITION",2},
+        {7,3,"Kobo Clara BW",2},
+        {14,8,"Könyvtár",2},
+        {19,8,"Böngésző",2},
+        {23,8,"Másolás",2},
+        {28,8,"Beállítások",2},
+        {37,3,"RoundedRaff  |  Kobo",2}
     };
     for(size_t i=0;i<sizeof(items)/sizeof(items[0]);++i){
         FBInkConfig draw={0};
