@@ -1019,6 +1019,30 @@ jobs:
           name: cp-kobo-054-quiet-home
           if-no-files-found: ignore
           path: cp-kobo-054-quiet-home.zip
+      - name: CP-KOBO-055 build clean fullscreen CrossPoint preview
+        run: |
+          mkdir -p qa-clara-055/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_055_clean_home.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-055/crosspoint/home-055
+          arm-linux-gnueabihf-readelf -h qa-clara-055/crosspoint/home-055 > qa-clara-055/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-055/crosspoint/home-055 > qa-clara-055/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-055/elf-header.txt
+          ! grep -q INTERP qa-clara-055/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' '[ ! -e "$L/cp-kobo-055.attempted" ] || exit 3' '[ -x "$B/home-055" ] || exit 4' '"$B/home-055" --explicit-init-risk-acknowledged > "$L/cp-kobo-055-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-055-output.txt"' 'sync' 'exit "$rc"' > qa-clara-055/crosspoint/launch-055.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-055-state.txt" ]; then tail -n 9 "$L/cp-kobo-055-state.txt"; else echo "055 NO LOG"; fi' > qa-clara-055/crosspoint/status-055.sh
+          sh -n qa-clara-055/crosspoint/launch-055.sh
+          sh -n qa-clara-055/crosspoint/status-055.sh
+          printf '%s\n' 'menu_item:main:CrossPoint Home 055:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/launch-055.sh' 'menu_item:main:CrossPoint Home Status 055:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-055.sh' > qa-clara-055/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-055: experimental single-pass full-screen white clear and CrossPoint labels.' 'One explicit full-screen E Ink refresh follows buffered drawing. The refresh can visibly flash or alter the whole screen.' 'Nickel and KOReader continue to run; Nickel can repaint the display afterward.' 'Text uses ASCII only; no touch control yet. Do not delete 051-054 attempt markers.' 'Copy crosspoint/* to .adds/crosspoint/ and NickelMenu lines to a new .adds/nm config.' 'Safely eject USB; launch once; photograph screen before another touch.' 'Stop tests and use normal reboot if Nickel or touch misbehaves.' 'Return cp-kobo-055-state.txt and cp-kobo-055-output.txt.' > qa-clara-055/README.txt
+          chmod +x qa-clara-055/crosspoint/*
+          cd qa-clara-055 && zip -r ../cp-kobo-055-clean-home.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-055 clean home preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-055-clean-home
+          if-no-files-found: ignore
+          path: cp-kobo-055-clean-home.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
