@@ -128,70 +128,7 @@ int main(int argc,char **argv){
     if(append_state("FONT_LOADED")!=0)return 49;
     const char *names[]={"Könyvtár","Böngésző","Másolás","Beállítások"};
     for(unsigned i=0;i<4;i++){
-        const unsigned short x=102,y=(unsigned short)(410+i*190),w=868,h=132;
-        /* Discrete strip approximation of 22 px rounded corners;
-         * the middle strip covers the full width. */
-        for(unsigned j=0;j<11;j++){
-            unsigned short inset=(unsigned short)((j<5 ? 5-j : j>5 ? j-5 : 0)*4);
-            unsigned short stripy=(unsigned short)(y+j*12);
-            FBInkRect bar={.left=(unsigned short)(x+inset),
-                           .top=stripy,.width=(unsigned short)(w-2*inset),.height=12};
-            int draw_rc=fbink_fill_rect_gray(FBFD_AUTO,&batch,&bar,false,215);
-            if(draw_rc!=0){(void)append_state("CARD_FAILED");fprintf(stderr,"card=%u strip=%u rc=%d\\n",i,j,draw_rc);return 50;}
-        }
-        FBInkOTConfig t={0};
-        t.size_px=41;
-        t.margins.left=161;
-        t.margins.top=(short)(y+37);
-        t.margins.right=100;
-        t.margins.bottom=0;
-        FBInkConfig ink=batch;
-        ink.is_bgless=true;
-        int rc_text=fbink_print_ot(FBFD_AUTO,names[i],&t,&ink,NULL);
-        if(rc_text<=0){(void)append_state("MENU_TEXT_FAILED");fprintf(stderr,"text=%u rc=%d\\n",i,rc_text);return 51;}
-        printf("menu_row=%u ok\\n",i);
-    }
-    FBInkOTConfig header={0};
-    header.size_px=53;
-    header.margins.left=106;
-    header.margins.top=85;
-    FBInkConfig fg=batch;
-    fg.is_bgless=true;
-    if(fbink_print_ot(FBFD_AUTO,"CROSSPOINT",&header,&fg,NULL)<=0){(void)append_state("HEADER_FAILED");return 52;}
-    header.size_px=29;
-    header.margins.top=160;
-    if(fbink_print_ot(FBFD_AUTO,"HUNGARIAN EDITION",&header,&fg,NULL)<=0){(void)append_state("HEADER_FAILED");return 53;}
-    FBInkOTConfig caption={0};
-    caption.size_px=26;
-    caption.margins.left=110;
-    caption.margins.top=295;
-    if(fbink_print_ot(FBFD_AUTO,"Kobo Clara BW  ·  RoundedRaff",&caption,&fg,NULL)<=0){(void)append_state("CAPTION_FAILED");return 54;}
-    if(append_state("DRAW_RETURNED")!=0)return 55;
-    FBInkConfig refresh={0};
-    if(append_state("REFRESH_ENTER")!=0)return 56;
-    int refresh_rc=fbink_refresh(FBFD_AUTO,0,0,0,0,&refresh);
-    if(refresh_rc!=0){(void)append_state("REFRESH_FAILED");return 57;}
-    if(append_state("REFRESH_RETURNED")!=0)return 58;
-    (void)fbink_free_ot_fonts();
-    /* DEVICE_VERIFIED is intentionally not written: requires human Nickel/KOReader check. */
-    return 0;
-}    /* CP-KOBO-057: FBInk adaptation of RoundedRaff selectable rows.
-     * RoundedRaff original uses GfxRenderer::fillRoundedRect; on Kobo
-     * paint stepped rounded strips via FBInk grayscale primitives.
-     * A bundled DejaVu Sans TTF ensures Hungarian double acute coverage.
-     */
-    if(append_state("DRAW_ENTER")!=0)return 37;
-    FBInkConfig batch={0};
-    batch.no_refresh=true;
-    if(fbink_cls(FBFD_AUTO,&batch,NULL,false)!=0){(void)append_state("CLEAR_FAILED");return 40;}
-    if(append_state("CLEAR_RETURNED")!=0)return 41;
-    const char *font="/mnt/onboard/.adds/crosspoint/font-057.ttf";
-    int font_rc=fbink_add_ot_font(font,FNT_REGULAR);
-    if(font_rc!=0){(void)append_state("FONT_LOAD_FAILED");fprintf(stderr,"font_rc=%d\\n",font_rc);return 48;}
-    if(append_state("FONT_LOADED")!=0)return 49;
-    const char *names[]={"Könyvtár","Böngésző","Másolás","Beállítások"};
-    for(unsigned i=0;i<4;i++){
-        const unsigned short x=102,y=(unsigned short)(410+i*190),w=868,h=132;
+        const unsigned short x=102,y=(unsigned short)(410+i*190),w=868;
         /* Discrete strip approximation of 22 px rounded corners;
          * the middle strip covers the full width. */
         for(unsigned j=0;j<11;j++){
