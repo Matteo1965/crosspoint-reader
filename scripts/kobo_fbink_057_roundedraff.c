@@ -112,58 +112,7 @@ int main(int argc,char **argv){
      * from this standalone Linux/FBInk program; we adapt its rounded row,
      * padding and selection vocabulary, without claiming identical rendering.
      */
-    if(append_state("DRAW_ENTER")!=0)return 37;
-    FBInkConfig clear={0};
-    clear.no_refresh=true;
-    if(fbink_cls(FBFD_AUTO,&clear,NULL,false)!=0){(void)append_state("CLEAR_FAILED");return 40;}
-    if(append_state("CLEAR_RETURNED")!=0)return 41;
-
-    /* RoundedRaff uses rounded filled selectable rows with a small gap.
-       Draw 4 rounded-edge gray bars using three adjacent rectangles each. */
-    FBInkConfig pill={0};
-    pill.bg_color=BG_GRAYE;
-    pill.no_refresh=true;
-    for(unsigned i=0;i<4;i++){
-        unsigned short y=(unsigned short)(440+i*148);
-        const FBInkRect top={.left=96,.top=(unsigned short)(y+8),.width=880,.height=92};
-        const FBInkRect middle={.left=112,.top=y,.width=848,.height=108};
-        if(fbink_cls(FBFD_AUTO,&pill,&top,false)!=0 ||
-           fbink_cls(FBFD_AUTO,&pill,&middle,false)!=0){
-            (void)append_state("ROW_BACKGROUND_FAILED");return 42;
-        }
-    }
-    const struct {short row; short col; const char *label;unsigned char fontmult;} items[]={
-        {2,3,"CROSSPOINT",2},
-        {4,3,"HUNGARIAN EDITION",2},
-        {7,3,"Kobo Clara BW",2},
-        {14,8,"Könyvtár",2},
-        {19,8,"Böngésző",2},
-        {23,8,"Másolás",2},
-        {28,8,"Beállítások",2},
-        {37,3,"RoundedRaff  |  Kobo",2}
-    };
-    for(size_t i=0;i<sizeof(items)/sizeof(items[0]);++i){
-        FBInkConfig draw={0};
-        draw.fontname=UNIFONT;
-        draw.fontmult=items[i].fontmult;
-        draw.row=items[i].row;
-        draw.col=items[i].col;
-        draw.is_flashing=false;
-        draw.no_refresh=true;
-        int result=fbink_print(FBFD_AUTO,items[i].label,&draw);
-        if(result<=0){(void)append_state("DRAW_FAILED");fprintf(stderr,"line=%zu result=%d\\n",i,result);return 43;}
-        printf("rendered=%zu\\n",i);
-    }
-    if(append_state("DRAW_RETURNED")!=0)return 44;
-    FBInkConfig refresh={0};
-    refresh.is_flashing=false;
-    if(append_state("REFRESH_ENTER")!=0)return 45;
-    int refresh_rc=fbink_refresh(FBFD_AUTO,0,0,0,0,&refresh);
-    if(refresh_rc!=0){(void)append_state("REFRESH_FAILED");return 46;}
-    if(append_state("REFRESH_RETURNED")!=0)return 47;
-    /* DEVICE_VERIFIED is intentionally not written: requires human Nickel/KOReader check. */
-    return 0;
-}    /* CP-KOBO-057: FBInk adaptation of RoundedRaff selectable rows.
+    /* CP-KOBO-057: FBInk adaptation of RoundedRaff selectable rows.
      * RoundedRaff original uses GfxRenderer::fillRoundedRect; on Kobo
      * paint stepped rounded strips via FBInk grayscale primitives.
      * A bundled DejaVu Sans TTF ensures Hungarian double acute coverage.
