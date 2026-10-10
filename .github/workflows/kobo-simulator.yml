@@ -1119,6 +1119,24 @@ jobs:
           name: cp-kobo-058-roundedraff-smooth
           if-no-files-found: ignore
           path: cp-kobo-058-roundedraff-smooth.zip
+      - name: CP-KOBO-059 package read-only Nickel ownership probe
+        run: |
+          mkdir -p qa-clara-059/crosspoint
+          cp scripts/kobo_059_nickel_inventory.sh qa-clara-059/crosspoint/inventory-059.sh
+          sh -n qa-clara-059/crosspoint/inventory-059.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-059-inventory.txt" ]; then echo "CP-KOBO-059: INVENTORY READY"; else echo "CP-KOBO-059: NOT RUN"; fi' > qa-clara-059/crosspoint/status-059.sh
+          sh -n qa-clara-059/crosspoint/status-059.sh
+          printf '%s\n' 'menu_item:main:CrossPoint Nickel Inventory 059:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/inventory-059.sh' 'menu_item:main:CrossPoint Nickel Status 059:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-059.sh' > qa-clara-059/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-059: READ-ONLY process and display ownership diagnostic.' 'This test does NOT suspend or signal Nickel, modify the framebuffer, capture touch, or start CrossPoint UI.' 'Copy inventory-059.sh and status-059.sh into .adds/crosspoint/ and put menu lines into a new .adds/nm config.' 'Launch CrossPoint Nickel Inventory 059 ONCE, wait 5 seconds; use the Status entry to confirm.' 'Upload .adds/crosspoint/logs/cp-kobo-059-inventory.txt for analysis.' 'The log includes local process command lines and device handles; review before public sharing.' 'Do not delete earlier .attempted files.' > qa-clara-059/README.txt
+          chmod +x qa-clara-059/crosspoint/*.sh
+          cd qa-clara-059 && zip -r ../cp-kobo-059-nickel-inventory.zip crosspoint nickelmenu-entry.txt README.txt
+      - name: Upload CP-KOBO-059 Nickel inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-059-nickel-inventory
+          if-no-files-found: ignore
+          path: cp-kobo-059-nickel-inventory.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
