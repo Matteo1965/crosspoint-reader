@@ -1093,6 +1093,32 @@ jobs:
           name: cp-kobo-057-roundedraff-ui
           if-no-files-found: ignore
           path: cp-kobo-057-roundedraff-ui.zip
+      - name: CP-KOBO-058 build smooth RoundedRaff preview
+        run: |
+          mkdir -p qa-clara-058/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          test -s /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf qa-clara-058/crosspoint/font-058.ttf
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_058_roundedraff_smooth.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-058/crosspoint/home-058
+          arm-linux-gnueabihf-readelf -h qa-clara-058/crosspoint/home-058 > qa-clara-058/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-058/crosspoint/home-058 > qa-clara-058/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-058/elf-header.txt
+          ! grep -q INTERP qa-clara-058/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' '[ ! -e "$L/cp-kobo-058.attempted" ] || exit 3' '[ -x "$B/home-058" ] || exit 4' '[ -s "$B/font-058.ttf" ] || exit 5' '"$B/home-058" --explicit-init-risk-acknowledged > "$L/cp-kobo-058-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-058-output.txt"' 'sync' 'exit "$rc"' > qa-clara-058/crosspoint/launch-058.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-058-state.txt" ]; then tail -n 12 "$L/cp-kobo-058-state.txt"; else echo "058 NO LOG"; fi' > qa-clara-058/crosspoint/status-058.sh
+          sh -n qa-clara-058/crosspoint/launch-058.sh
+          sh -n qa-clara-058/crosspoint/status-058.sh
+          printf '%s\n' 'menu_item:main:CrossPoint RoundedRaff 058:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/launch-058.sh' 'menu_item:main:CrossPoint RoundedRaff Status 058:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-058.sh' > qa-clara-058/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-058 Kobo RoundedRaff visual test.' 'Smooth round raster edges, DejaVu Sans accents and FOUR Hungarian menu items.' 'Controlled FULL SCREEN FLASH refresh: expect visible black/white flashing. The display may be occupied during update.' 'Standalone static FBInk image only; Nickel and KOReader not modified, but should be checked after test.' 'Copy FOUR crosspoint files into .adds/crosspoint/. Add new .adds/nm menu entries. Only launch once.' 'Photograph screen and provide cp-kobo-058-state.txt and cp-kobo-058-output.txt.' 'Keep all previous .attempted markers. Stop testing if unexpected behavior.' > qa-clara-058/README.txt
+          chmod +x qa-clara-058/crosspoint/home-058 qa-clara-058/crosspoint/launch-058.sh qa-clara-058/crosspoint/status-058.sh
+          cd qa-clara-058 && zip -r ../cp-kobo-058-roundedraff-smooth.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-058 smooth RoundedRaff preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-058-roundedraff-smooth
+          if-no-files-found: ignore
+          path: cp-kobo-058-roundedraff-smooth.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
