@@ -1043,6 +1043,30 @@ jobs:
           name: cp-kobo-055-clean-home
           if-no-files-found: ignore
           path: cp-kobo-055-clean-home.zip
+      - name: CP-KOBO-056 build RoundedRaff-inspired Hungarian Unicode screen
+        run: |
+          mkdir -p qa-clara-056/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_056_roundedraff_preview.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-056/crosspoint/home-056
+          arm-linux-gnueabihf-readelf -h qa-clara-056/crosspoint/home-056 > qa-clara-056/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-056/crosspoint/home-056 > qa-clara-056/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-056/elf-header.txt
+          ! grep -q INTERP qa-clara-056/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' '[ ! -e "$L/cp-kobo-056.attempted" ] || exit 3' '[ -x "$B/home-056" ] || exit 4' '"$B/home-056" --explicit-init-risk-acknowledged > "$L/cp-kobo-056-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-056-output.txt"' 'sync' 'exit "$rc"' > qa-clara-056/crosspoint/launch-056.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-056-state.txt" ]; then tail -n 9 "$L/cp-kobo-056-state.txt"; else echo "056 NO LOG"; fi' > qa-clara-056/crosspoint/status-056.sh
+          sh -n qa-clara-056/crosspoint/launch-056.sh
+          sh -n qa-clara-056/crosspoint/status-056.sh
+          printf '%s\n' 'menu_item:main:CrossPoint RoundedRaff 056:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/launch-056.sh' 'menu_item:main:CrossPoint RoundedRaff Status 056:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-056.sh' > qa-clara-056/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-056 — RoundedRaff-inspired Kobo UI preview, NOT yet the X4 renderer itself.' 'The default source UI theme was set to ROUNDEDRAFF on feature/kobo-v224 only.' 'This preview draws rounded light-gray menu cards via FBInk and uses built-in Unifont for Hungarian accents.' 'Menu labels: Könyvtár, Böngésző, Másolás, Beállítások.' 'One fullscreen refresh; may visibly flash; Nickel remains running in background.' 'Copy three files under crosspoint to .adds/crosspoint; add NickelMenu entries in a NEW .adds/nm file.' 'Run once after USB safe eject. Photograph screen and submit cp-kobo-056-state.txt and cp-kobo-056-output.txt.' 'If touch, Nickel or KOReader misbehaves, stop and follow normal device reboot.' > qa-clara-056/README.txt
+          chmod +x qa-clara-056/crosspoint/*
+          cd qa-clara-056 && zip -r ../cp-kobo-056-roundedraff-preview.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-056 RoundedRaff preview
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-056-roundedraff-preview
+          if-no-files-found: ignore
+          path: cp-kobo-056-roundedraff-preview.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
