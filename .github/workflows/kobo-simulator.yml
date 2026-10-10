@@ -1067,6 +1067,32 @@ jobs:
           name: cp-kobo-056-roundedraff-preview
           if-no-files-found: ignore
           path: cp-kobo-056-roundedraff-preview.zip
+      - name: CP-KOBO-057 build rounded cards and Hungarian TTF
+        run: |
+          mkdir -p qa-clara-057/crosspoint
+          test -f qa-clara-033/fbink-source/Release/libfbink.a
+          test -s /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf qa-clara-057/crosspoint/font-057.ttf
+          arm-linux-gnueabihf-gcc -std=gnu11 -Os -Wall -Wextra -Werror -static -Iqa-clara-033/fbink-source scripts/kobo_fbink_057_roundedraff.c -Lqa-clara-033/fbink-source/Release -l:libfbink.a -lm -o qa-clara-057/crosspoint/home-057
+          arm-linux-gnueabihf-readelf -h qa-clara-057/crosspoint/home-057 > qa-clara-057/elf-header.txt
+          arm-linux-gnueabihf-readelf -l qa-clara-057/crosspoint/home-057 > qa-clara-057/program-headers.txt
+          grep -q 'Machine:.*ARM' qa-clara-057/elf-header.txt
+          ! grep -q INTERP qa-clara-057/program-headers.txt
+          printf '%s\n' '#!/bin/sh' 'set -u' 'B=/mnt/onboard/.adds/crosspoint' 'L="$B/logs"' 'mkdir -p "$L" || exit 2' '[ ! -e "$L/cp-kobo-057.attempted" ] || exit 3' '[ -x "$B/home-057" ] || exit 4' '[ -s "$B/font-057.ttf" ] || exit 5' '"$B/home-057" --explicit-init-risk-acknowledged > "$L/cp-kobo-057-output.txt" 2>&1' 'rc=$?' 'printf "exit_code=%s\\n" "$rc" >> "$L/cp-kobo-057-output.txt"' 'sync' 'exit "$rc"' > qa-clara-057/crosspoint/launch-057.sh
+          printf '%s\n' '#!/bin/sh' 'L=/mnt/onboard/.adds/crosspoint/logs' 'if [ -r "$L/cp-kobo-057-state.txt" ]; then tail -n 12 "$L/cp-kobo-057-state.txt"; else echo "057 NO LOG"; fi' > qa-clara-057/crosspoint/status-057.sh
+          sh -n qa-clara-057/crosspoint/launch-057.sh
+          sh -n qa-clara-057/crosspoint/status-057.sh
+          printf '%s\n' 'menu_item:main:CrossPoint RoundedRaff 057:cmd_spawn:quiet:/bin/sh /mnt/onboard/.adds/crosspoint/launch-057.sh' 'menu_item:main:CrossPoint RoundedRaff Status 057:cmd_output:1000:/bin/sh /mnt/onboard/.adds/crosspoint/status-057.sh' > qa-clara-057/nickelmenu-entry.txt
+          printf '%s\n' 'CP-KOBO-057: Kobo RoundedRaff-style rounded grayscale pill cards and OpenType Hungarian type.' 'This is a standalone FBInk port of selected RoundedRaff visual rules, not the X4 GfxRenderer port.' 'Includes DejaVuSans.ttf (font-057.ttf), redistributed under its font license.' 'Copy all FOUR crosspoint files to .adds/crosspoint/. Add NickelMenu lines in new .adds/nm config.' 'One manual run only, photograph immediately; retain previous attempt markers.' 'Observe that Nickel and KOReader continue to work; upload cp-kobo-057-state.txt and cp-kobo-057-output.txt.' > qa-clara-057/README.txt
+          chmod +x qa-clara-057/crosspoint/home-057 qa-clara-057/crosspoint/launch-057.sh qa-clara-057/crosspoint/status-057.sh
+          cd qa-clara-057 && zip -r ../cp-kobo-057-roundedraff-ui.zip crosspoint nickelmenu-entry.txt README.txt elf-header.txt program-headers.txt
+      - name: Upload CP-KOBO-057 RoundedRaff screen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cp-kobo-057-roundedraff-ui
+          if-no-files-found: ignore
+          path: cp-kobo-057-roundedraff-ui.zip
       - name: Upload diagnostic build files
         if: always()
         uses: actions/upload-artifact@v4
