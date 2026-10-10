@@ -306,7 +306,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme and independent home-screen layout. Existing installs keep the
   // original home layout unless explicitly changed.
-  uint8_t uiTheme = LYRA;
+  uint8_t uiTheme = ROUNDEDRAFF;
   uint8_t homeLayout = HOME_ORIGINAL;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
