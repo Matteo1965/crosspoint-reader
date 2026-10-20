@@ -30,6 +30,14 @@ jobs:
         run: |
           set -euo pipefail
           pio run -e picco | tee pio.log
+      - name: Build and run Hungarian hyphenation unit tests
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test --target HyphenationEvaluationTest
+          ctest --test-dir build/test -R 'HungarianHyphenation' --output-on-failure
       - name: Firmware footprint
         if: success()
         run: |
