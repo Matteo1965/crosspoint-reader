@@ -21,13 +21,13 @@ if not TARGET.exists():
         print("HU-PICCO: retrieving pinned Hungarian Hypher trie...")
         with urlopen(URL, timeout=60) as response:
             data = response.read()
-        actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+        actual = hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
         if actual != BLOB_SHA:
             raise RuntimeError(f"Hungarian trie checksum mismatch: {actual}")
         BINARY.write_bytes(data)
     else:
         data = BINARY.read_bytes()
-        actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\\0" + data).hexdigest()
+        actual = hashlib.sha1(b"blob " + str(len(data)).encode() + bytes([0]) + data).hexdigest()
         if actual != BLOB_SHA:
             raise RuntimeError(f"Cached Hungarian trie checksum mismatch: {actual}")
     subprocess.run([
