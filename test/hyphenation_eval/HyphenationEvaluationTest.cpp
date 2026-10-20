@@ -227,9 +227,31 @@ void runLanguageEval(const char* langName, const char* primaryTag, const char* r
 TEST(HyphenationEval, English) { runLanguageEval("english", "en", "english_hyphenation_tests.txt", 98.10); }
 TEST(HyphenationEval, French) { runLanguageEval("french", "fr", "french_hyphenation_tests.txt", 99.00); }
 TEST(HyphenationEval, German) { runLanguageEval("german", "de", "german_hyphenation_tests.txt", 96.73); }
-TEST(HyphenationEval, Russian) { runLanguageEval("russian", "ru", "russian_hyphenation_tests.txt", 96.22); }
 TEST(HyphenationEval, Spanish) { runLanguageEval("spanish", "es", "spanish_hyphenation_tests.txt", 98.02); }
 TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphenation_tests.txt", 98.99); }
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
+
+TEST(HungarianHyphenation, RegistryAndRemovedLanguages) {
+  EXPECT_NE(getLanguageHyphenatorForPrimaryTag("hu"), nullptr);
+  EXPECT_EQ(getLanguageHyphenatorForPrimaryTag("ru"), nullptr);
+  EXPECT_EQ(getLanguageHyphenatorForPrimaryTag("uk"), nullptr);
+}
+
+TEST(HungarianHyphenation, AccentedWordsAndMultigraphs) {
+  const auto* hu = getLanguageHyphenatorForPrimaryTag("hu");
+  ASSERT_NE(hu, nullptr);
+  // Smoke test the actual compiled Hungarian trie, without assuming extended
+  // hyphenation exceptions or a particular split for every complex word.
+  for (const std::string word : {"könyvtár", "asszony", "meggyőződés",
+                                 "számítógép", "átalakítás", "egészségügy"}) {
+    const auto cps = collectCodepoints(word);
+    const auto breaks = hu->breakIndexes(cps);
+    EXPECT_FALSE(breaks.empty()) << word;
+    for (const auto offset : breaks) {
+      EXPECT_GT(offset, 0u) << word;
+      EXPECT_LT(offset, cps.size()) << word;
+    }
+  }
+}
