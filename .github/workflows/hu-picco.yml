@@ -47,10 +47,17 @@ jobs:
         run: |
           grep -E 'RAM:|Flash:' pio.log >> "$GITHUB_STEP_SUMMARY" || true
           stat -c 'Firmware size: %s bytes' .pio/build/picco/firmware.bin >> "$GITHUB_STEP_SUMMARY"
+      - name: Number Picco firmware
+        if: success()
+        id: artifact_name
+        shell: bash
+        run: |
+          # Workflow run 13 is HU-PICCO-005. Every subsequent run increments by one.
+          printf 'name=HU-PICCO-%03d\n' "$(( GITHUB_RUN_NUMBER - 8 ))" >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: hu-picco-005-build-${{ github.run_number }}-unverified
+          name: ${{ steps.artifact_name.outputs.name }}
           path: .pio/build/picco/firmware.bin
           if-no-files-found: error
