@@ -51,6 +51,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v6
         with:
-          name: hu-picco-002-unverified
+          name: hu-picco-005-build-${{ github.run_number }}-unverified
           path: .pio/build/picco/firmware.bin
           if-no-files-found: error
