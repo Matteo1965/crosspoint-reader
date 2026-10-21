@@ -14,6 +14,7 @@ struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;
   bool extraParagraphSpacing = false;
+  bool opticalMargin = false;
   uint8_t paragraphIndentSpaces = 2;
   int8_t characterSpacing = 0;
   uint8_t wordSpacingPercent = 100;
@@ -37,6 +38,7 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(static_cast<uint32_t>(spec.fontId));
   mix(static_cast<uint32_t>(spec.lineCompression * 1000.0f));
   mix(spec.extraParagraphSpacing);
+  mix(spec.opticalMargin);
   mix(static_cast<uint8_t>(spec.characterSpacing));
   mix(spec.wordSpacingPercent);
   mix(spec.paragraphAlignment);
