@@ -26,7 +26,8 @@ constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_L
 
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
-    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN};
+    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN,
+    StrId::STR_HYPHENATION};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
                                         StrId::STR_TEXT_AA};
 
@@ -120,7 +121,9 @@ void TextSettingsActivity::rebuildRowItems() {
         item.label = sizes_[i].name.c_str();
         break;
       case Tab::Layout:
-        item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        item.label = (i == static_cast<int>(LayoutRow::OpticalMargin))
+                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Optical margin")
+                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
         item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
@@ -235,6 +238,8 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     if (tab_ == Tab::Style) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
+    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
+      GUI.setCheckboxRow(rowItems_[i], SETTINGS.opticalMargin != 0);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
     }
@@ -380,6 +385,11 @@ void TextSettingsActivity::applySize(int listIndex) {
 
 void TextSettingsActivity::confirmLayoutRow(int row) {
   switch (static_cast<LayoutRow>(row)) {
+    case LayoutRow::OpticalMargin:
+      SETTINGS.opticalMargin = SETTINGS.opticalMargin ? 0 : 1;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
     case LayoutRow::ParaSpacing:
       SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
       SETTINGS.saveToFile();
@@ -452,6 +462,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
 
 std::string TextSettingsActivity::layoutValueText(int row) const {
   switch (static_cast<LayoutRow>(row)) {
+    case LayoutRow::OpticalMargin:
+      return SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::LineSpacing: {
       const uint8_t v = SETTINGS.lineSpacing;
       return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
