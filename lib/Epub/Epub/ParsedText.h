@@ -91,6 +91,7 @@ class ParsedText {
   uint8_t paragraphIndentSpaces;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  static bool opticalMarginEnabled_;
   bool isNaturalAlign;
   bool hasRtlWord;
   bool droppedWords = false;
@@ -137,6 +138,7 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
+  static void setOpticalMarginEnabled(bool enabled) { opticalMarginEnabled_ = enabled; }
   explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2)
       : blockStyle(blockStyle),
