@@ -12,6 +12,7 @@
 
 #include "Epub/css/CssParser.h"
 #include "Page.h"
+#include "ParsedText.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
