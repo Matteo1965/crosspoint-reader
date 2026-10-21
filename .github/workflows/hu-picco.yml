@@ -1,5 +1,9 @@
 name: HU Picco firmware
 
+concurrency:
+  group: hu-picco-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches:
