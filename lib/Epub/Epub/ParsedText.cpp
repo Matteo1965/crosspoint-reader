@@ -25,6 +25,9 @@ bool ParsedText::opticalMarginEnabled_ = false;
 
 namespace {
 
+// Used by the CPHUN-224 optical margin helper defined below.
+uint32_t lastCodepoint(std::string_view word);
+
 bool isHangingPunctuation(const uint32_t cp) {
   // CPHUN approved optical-margin set: hyphen, period, comma, colon, semicolon.
   // U+2011 participates only when Short Hyphen is enabled.
