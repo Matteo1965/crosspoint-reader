@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -239,19 +240,29 @@ TEST(HungarianHyphenation, RegistryAndRemovedLanguages) {
   EXPECT_EQ(getLanguageHyphenatorForPrimaryTag("uk"), nullptr);
 }
 
-TEST(HungarianHyphenation, AccentedWordsAndMultigraphs) {
-  const auto* hu = getLanguageHyphenatorForPrimaryTag("hu");
-  ASSERT_NE(hu, nullptr);
-  // Smoke test the actual compiled Hungarian trie, without assuming extended
-  // hyphenation exceptions or a particular split for every complex word.
-  for (const std::string word : {"könyvtár", "asszony", "meggyőződés",
-                                 "számítógép", "átalakítás", "egészségügy"}) {
-    const auto cps = collectCodepoints(word);
-    const auto breaks = hu->breakIndexes(cps);
-    EXPECT_FALSE(breaks.empty()) << word;
-    for (const auto offset : breaks) {
-      EXPECT_GT(offset, 0u) << word;
-      EXPECT_LT(offset, cps.size()) << word;
+TEST(HungarianHyphenation, ExtendedReplacementRules) {
+  Hyphenator::setPreferredLanguage("hu-HU");
+  struct Case {
+    const char* word;
+    const char* prefix;
+    Hyphenator::Replacement replacement;
+  };
+  const Case cases[] = {
+      {"asszony", "as", Hyphenator::Replacement::AppendZ},
+      {"meggyes", "meg", Hyphenator::Replacement::AppendY},
+      {"mennyi", "men", Hyphenator::Replacement::AppendY},
+      {"hattyú", "hat", Hyphenator::Replacement::AppendY},
+      {"meccsen", "mec", Hyphenator::Replacement::AppendS},
+  };
+  for (const auto& tc : cases) {
+    const auto breaks = Hyphenator::breakOffsets(tc.word, false);
+    bool found = false;
+    for (const auto& br : breaks) {
+      if (br.byteOffset == std::string(tc.prefix).size() && br.replacement == tc.replacement) {
+        found = true;
+      }
     }
+    EXPECT_TRUE(found) << tc.word;
   }
+  Hyphenator::setPreferredLanguage("en");
 }
