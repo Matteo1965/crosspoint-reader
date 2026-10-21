@@ -15,12 +15,70 @@
 #include <vector>
 
 #include "TokenBoundary.h"
+#include "OpticalLineCorrection.h"
 #include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
+bool ParsedText::opticalMarginEnabled_ = false;
 
 namespace {
+
+bool isHangingPunctuation(const uint32_t cp) {
+  // CPHUN approved optical-margin set: hyphen, period, comma, colon, semicolon.
+  // U+2011 participates only when Short Hyphen is enabled.
+  return cp == '-' || cp == '.' || cp == ',' || cp == ':' || cp == ';' ||
+         false;
+}
+
+struct HangingAdvanceCacheEntry {
+  int fontId = -1;
+  uint8_t style = 0;
+  uint32_t codepoint = 0;
+  uint16_t advance = 0;
+};
+
+int cachedHangingPunctuationAdvance(const GfxRenderer& renderer, const int fontId, const EpdFontFamily::Style style,
+                                    const uint32_t codepoint, const char* glyphText) {
+  static std::array<HangingAdvanceCacheEntry, 16> cache{};
+  static uint8_t nextSlot = 0;
+  const uint8_t styleKey = static_cast<uint8_t>(style);
+  for (const auto& entry : cache) {
+    if (entry.fontId == fontId && entry.style == styleKey && entry.codepoint == codepoint) return entry.advance;
+  }
+  const uint16_t advance = static_cast<uint16_t>(std::max(0, renderer.getTextAdvanceX(fontId, glyphText, style)));
+  cache[nextSlot] = {fontId, styleKey, codepoint, advance};
+  nextSlot = static_cast<uint8_t>((nextSlot + 1) % cache.size());
+  return advance;
+}
+
+int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                                const EpdFontFamily::Style style, const uint8_t pixelLimit) {
+  if (pixelLimit == 0 || word.empty()) return 0;
+  const uint32_t punctuation = lastCodepoint(word);
+  if (!isHangingPunctuation(punctuation)) return 0;
+  size_t lastStart = word.size() - 1;
+  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
+  // Use the hyphen's effective contribution inside this exact word rather than
+  // its standalone advance. Pair kerning (e.g. g- versus r-) can otherwise make
+  // two justified, hyphenated lines end at visibly different x positions.
+  const std::string prefixWithoutPunctuation = word.substr(0, lastStart);
+  const int fullWordAdvance = std::max(0, renderer.getTextAdvanceX(fontId, word.c_str(), style));
+  const int prefixAdvance = prefixWithoutPunctuation.empty()
+                                ? 0
+                                : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
+  int punctuationAdvance = std::max(0, fullWordAdvance - prefixAdvance);
+  // For the synthetic short hyphen, hang by the glyph's standalone advance.
+  // The final word width already includes pair kerning; subtracting the standalone
+  // U+2011 advance therefore leaves the kerning-adjusted hyphen origin on the
+  // logical right margin, so every rendered short hyphen starts at the same X.
+
+  // Optikai margó is a simple OFF/ON control. ON allows 100% of the
+  // punctuation contribution to hang, capped by screenMargin - 1.
+  return std::min<int>(pixelLimit, punctuationAdvance);
+}
+
+
 
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
@@ -1660,7 +1718,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   // For justified text, compute per-gap extra to distribute remaining space evenly.
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
-  const int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+  const int hangingAllowance =
+      (opticalMarginEnabled_ && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+       !blockStyle.isRtl && !lineWords.empty())
+          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(),
+                                         255)
+          : 0;
+  const int spareSpace = effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset -
+                         lineWordWidthSum - totalNaturalGaps;
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                ? computeJustifyExtra(spareSpace, actualGapCount)
                                : 0;
