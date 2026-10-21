@@ -10,11 +10,11 @@ class Hyphenator {
  public:
   enum class Replacement : uint8_t { None = 0, AppendY, AppendZ, AppendS, AppendZS };
   struct BreakInfo {
-    Replacement replacement = Replacement::None;
     size_t byteOffset;            // Byte position inside the UTF-8 word where a break may occur.
     bool requiresInsertedHyphen;  // true = a visible '-' must be rendered at the break (pattern/fallback breaks).
                                   // false = break occurs at an existing visible separator boundary
                                   //         (explicit '-' or eligible apostrophe contraction boundary).
+    Replacement replacement = Replacement::None;
   };
 
   // Returns byte offsets where the word may be hyphenated.
