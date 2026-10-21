@@ -11,6 +11,7 @@
 #include "LanguageRegistry.h"
 
 const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
+bool Hyphenator::preferredLanguageIsHungarian_ = false;
 
 namespace {
 
@@ -155,11 +156,105 @@ void appendApostropheContractionBreaks(const std::vector<CodepointInfo>& cps,
   }
 }
 
+bool isHungarianVowel(const uint32_t cp) {
+  switch (cp) {
+    case 'a':
+    case 'A':
+    case 0x00E1:
+    case 0x00C1:
+    case 'e':
+    case 'E':
+    case 0x00E9:
+    case 0x00C9:
+    case 'i':
+    case 'I':
+    case 0x00ED:
+    case 0x00CD:
+    case 'o':
+    case 'O':
+    case 0x00F3:
+    case 0x00D3:
+    case 0x00F6:
+    case 0x00D6:
+    case 0x0151:
+    case 0x0150:
+    case 'u':
+    case 'U':
+    case 0x00FA:
+    case 0x00DA:
+    case 0x00FC:
+    case 0x00DC:
+    case 0x0171:
+    case 0x0170:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool hasHungarianVowel(const std::vector<CodepointInfo>& cps, const size_t begin, const size_t end) {
+  for (size_t i = begin; i < end; ++i) {
+    if (isHungarianVowel(cps[i].value)) return true;
+  }
+  return false;
+}
+
+uint32_t asciiLower(const uint32_t cp) {
+  return (cp >= 'A' && cp <= 'Z') ? cp + ('a' - 'A') : cp;
+}
+
+// Extended Hungarian replacement hyphenation may add a special break only
+// when the compact doubled multi-letter consonant is directly surrounded by
+// Hungarian vowels. This keeps real cases such as asszony -> asz-szony while
+// rejecting compound-boundary false positives such as rosszfiúi -> rosz-szfiúi.
+void appendHungarianExtendedBreaks(const std::vector<CodepointInfo>& cps,
+                                   std::vector<Hyphenator::BreakInfo>& outBreaks) {
+  struct Rule {
+    const char* compact;
+    size_t length;
+    Hyphenator::Replacement replacement;
+  };
+  static constexpr Rule rules[] = {
+      {"ccs", 3, Hyphenator::Replacement::AppendS},   {"ggy", 3, Hyphenator::Replacement::AppendY},
+      {"lly", 3, Hyphenator::Replacement::AppendY},   {"nny", 3, Hyphenator::Replacement::AppendY},
+      {"ssz", 3, Hyphenator::Replacement::AppendZ},   {"tty", 3, Hyphenator::Replacement::AppendY},
+      {"zzs", 3, Hyphenator::Replacement::AppendS},   {"ddz", 3, Hyphenator::Replacement::AppendZ},
+      {"ddzs", 4, Hyphenator::Replacement::AppendZS},
+  };
+
+  for (size_t i = 0; i < cps.size(); ++i) {
+    for (const auto& rule : rules) {
+      if (i + rule.length > cps.size()) continue;
+      bool matches = true;
+      for (size_t j = 0; j < rule.length; ++j) {
+        if (asciiLower(cps[i + j].value) != static_cast<uint32_t>(rule.compact[j])) {
+          matches = false;
+          break;
+        }
+      }
+      if (!matches) continue;
+
+      // The doubled consonant must be directly between vowels. This excludes
+      // rosszfiúi (ssz followed by f) and gally (lly at the end), while allowing
+      // asszony, asszonnyal, hosszú, mennyi, meccsen and gallyak.
+      if (i == 0 || i + rule.length >= cps.size()) continue;
+      if (!isHungarianVowel(cps[i - 1].value) || !isHungarianVowel(cps[i + rule.length].value)) continue;
+
+      const size_t split = i + 1;
+      if (split == 0 || split >= cps.size()) continue;
+      // Secondary readability guard: both rendered word parts must contain a vowel.
+      if (!hasHungarianVowel(cps, 0, split) || !hasHungarianVowel(cps, split, cps.size())) continue;
+      outBreaks.push_back({byteOffsetForIndex(cps, split), true, rule.replacement});
+    }
+  }
+}
+
 void sortAndDedupeBreakInfos(std::vector<Hyphenator::BreakInfo>& infos) {
   std::sort(infos.begin(), infos.end(), [](const Hyphenator::BreakInfo& a, const Hyphenator::BreakInfo& b) {
     if (a.byteOffset != b.byteOffset) {
       return a.byteOffset < b.byteOffset;
     }
+    if (a.replacement != b.replacement) return a.replacement > b.replacement;
     return a.requiresInsertedHyphen < b.requiresInsertedHyphen;
   });
 
@@ -181,6 +276,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
+  const bool useHungarianExtended = preferredLanguageIsHungarian_;
 
   // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;
@@ -216,6 +312,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     if (hasApostropheLikeSeparator) {
       appendApostropheContractionBreaks(cps, explicitBreakInfos);
     }
+    if (useHungarianExtended) appendHungarianExtendedBreaks(cps, explicitBreakInfos);
     // Merge all break points into ascending byte-offset order.
     sortAndDedupeBreakInfos(explicitBreakInfos);
     return explicitBreakInfos;
@@ -231,6 +328,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
       appendSegmentPatternBreaks(cps, *hyphenator, includeFallback, segmentedBreaks);
     }
     appendApostropheContractionBreaks(cps, segmentedBreaks);
+    if (useHungarianExtended) appendHungarianExtendedBreaks(cps, segmentedBreaks);
     sortAndDedupeBreakInfos(segmentedBreaks);
     return segmentedBreaks;
   }
@@ -250,12 +348,10 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     }
   }
 
-  if (indexes.empty()) {
-    return {};
-  }
-
   std::vector<Hyphenator::BreakInfo> breaks;
-  breaks.reserve(indexes.size());
+  if (useHungarianExtended) appendHungarianExtendedBreaks(cps, breaks);
+  if (indexes.empty() && breaks.empty()) return {};
+  breaks.reserve(breaks.size() + indexes.size());
   for (const size_t idx : indexes) {
     // CJK characters can break without inserting a visible hyphen.
     // Check the codepoint at the break position: if it's a CJK character,
@@ -269,7 +365,12 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     breaks.push_back({byteOffsetForIndex(cps, idx), needsHyphen});
   }
 
+  sortAndDedupeBreakInfos(breaks);
   return breaks;
 }
 
-void Hyphenator::setPreferredLanguage(const std::string& lang) { cachedHyphenator_ = hyphenatorForLanguage(lang); }
+void Hyphenator::setPreferredLanguage(const std::string& lang) {
+  cachedHyphenator_ = hyphenatorForLanguage(lang);
+  preferredLanguageIsHungarian_ = cachedHyphenator_ != nullptr &&
+                                  cachedHyphenator_ == getLanguageHyphenatorForPrimaryTag("hu");
+}
