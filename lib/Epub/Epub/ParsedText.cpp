@@ -1438,6 +1438,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   size_t chosenOffset = 0;
   int chosenWidth = -1;
   bool chosenNeedsHyphen = true;
+  Hyphenator::Replacement chosenReplacement = Hyphenator::Replacement::None;
 
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
@@ -1447,7 +1448,16 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureFocusWordWidth(renderer, wordFontId(wordIndex, fontId), word.substr(0, offset),
+    std::string candidatePrefix = word.substr(0, offset);
+    const bool upper = offset > 0 && word[offset - 1] >= 'A' && word[offset - 1] <= 'Z';
+    switch (info.replacement) {
+      case Hyphenator::Replacement::AppendY: candidatePrefix.push_back(upper ? 'Y' : 'y'); break;
+      case Hyphenator::Replacement::AppendZ: candidatePrefix.push_back(upper ? 'Z' : 'z'); break;
+      case Hyphenator::Replacement::AppendS: candidatePrefix.push_back(upper ? 'S' : 's'); break;
+      case Hyphenator::Replacement::AppendZS: candidatePrefix += upper ? "ZS" : "zs"; break;
+      default: break;
+    }
+    const int prefixWidth = measureFocusWordWidth(renderer, wordFontId(wordIndex, fontId), candidatePrefix,
                                                   style, focusBoundaryBefore(focusBoundary, offset),
                                                   blockStyle.characterSpacing, wordSpacingPercent, needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
@@ -1457,6 +1467,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     chosenWidth = prefixWidth;
     chosenOffset = offset;
     chosenNeedsHyphen = needsHyphen;
+    chosenReplacement = info.replacement;
   }
 
   if (chosenWidth < 0) {
@@ -1482,11 +1493,22 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // MAX_WORD_SIZE (200) bytes; anything larger skips the split rather than
   // overflow (the word then breaks whole, as when no breakpoint fits).
   char prefixBuf[208];
-  if (chosenOffset + 1 > sizeof(prefixBuf)) {
+  if (chosenOffset + 3 > sizeof(prefixBuf)) {
     return false;
   }
   memcpy(prefixBuf, word.data(), chosenOffset);
   size_t prefixLen = chosenOffset;
+  const bool upperReplacement = chosenOffset > 0 && word[chosenOffset - 1] >= 'A' && word[chosenOffset - 1] <= 'Z';
+  switch (chosenReplacement) {
+    case Hyphenator::Replacement::AppendY: prefixBuf[prefixLen++] = upperReplacement ? 'Y' : 'y'; break;
+    case Hyphenator::Replacement::AppendZ: prefixBuf[prefixLen++] = upperReplacement ? 'Z' : 'z'; break;
+    case Hyphenator::Replacement::AppendS: prefixBuf[prefixLen++] = upperReplacement ? 'S' : 's'; break;
+    case Hyphenator::Replacement::AppendZS:
+      prefixBuf[prefixLen++] = upperReplacement ? 'Z' : 'z';
+      prefixBuf[prefixLen++] = upperReplacement ? 'S' : 's';
+      break;
+    default: break;
+  }
   if (chosenNeedsHyphen) {
     prefixBuf[prefixLen++] = '-';
   }
