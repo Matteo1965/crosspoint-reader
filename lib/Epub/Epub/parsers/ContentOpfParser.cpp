@@ -221,6 +221,20 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
+  if (self->state == IN_METADATA) {
+    ParserState metadataState = IN_METADATA;
+    if (xmlLocalNameEquals(name, "description")) metadataState = IN_BOOK_DESCRIPTION;
+    else if (xmlLocalNameEquals(name, "publisher")) metadataState = IN_BOOK_PUBLISHER;
+    else if (xmlLocalNameEquals(name, "date")) metadataState = IN_BOOK_DATE;
+    else if (xmlLocalNameEquals(name, "subject")) metadataState = IN_BOOK_SUBJECT;
+    if (metadataState != IN_METADATA) {
+      self->state = metadataState;
+      self->metadataSpacePending = false;
+      if (metadataState == IN_BOOK_SUBJECT) self->metaText.clear();
+      return;
+    }
+  }
+
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "identifier")) {
     self->state = IN_BOOK_IDENTIFIER;
     self->identifierText.clear();
@@ -488,6 +502,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
+  if (self->state == IN_BOOK_DESCRIPTION) { appendMetadataText(self->description, s, len, self->metadataSpacePending); return; }
+  if (self->state == IN_BOOK_PUBLISHER) { appendMetadataText(self->publisher, s, len, self->metadataSpacePending); return; }
+  if (self->state == IN_BOOK_DATE) { appendMetadataText(self->date, s, len, self->metadataSpacePending); return; }
+  if (self->state == IN_BOOK_SUBJECT) { appendMetadataText(self->metaText, s, len, self->metadataSpacePending); return; }
+
   if (self->state == IN_BOOK_IDENTIFIER) {
     appendMetadataText(self->identifierText, s, len, self->metadataSpacePending);
     return;
@@ -540,7 +559,15 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
     return;
   }
 
+  if (self->state == IN_BOOK_DESCRIPTION && xmlLocalNameEquals(name, "description")) { self->state = IN_METADATA; return; }
+  if (self->state == IN_BOOK_PUBLISHER && xmlLocalNameEquals(name, "publisher")) { self->state = IN_METADATA; return; }
+  if (self->state == IN_BOOK_DATE && xmlLocalNameEquals(name, "date")) { self->state = IN_METADATA; return; }
+  if (self->state == IN_BOOK_SUBJECT && xmlLocalNameEquals(name, "subject")) {
+    if (!self->metaText.empty() && self->subjects.size() < 24) self->subjects.push_back(self->metaText);
+    self->metaText.clear(); self->state = IN_METADATA; return;
+  }
   if (self->state == IN_BOOK_IDENTIFIER && xmlLocalNameEquals(name, "identifier")) {
+    if (self->identifier.empty()) self->identifier = self->identifierText;
     const std::string scheme = lowerAscii(self->identifierScheme);
     if (self->isbn.empty() &&
         (scheme.find("isbn") != std::string::npos || hasMetadataPrefix(self->identifierText, "isbn"))) {
