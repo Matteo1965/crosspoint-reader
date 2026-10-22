@@ -931,54 +931,54 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const fui::Rect keysRect{kbRect.x, static_cast<int16_t>(kbRect.y + (kbRect.height - keysHeight) / 2), kbRect.width,
                            static_cast<int16_t>(keysHeight)};
 
+  // Word-wrap small keyboard instructions to the bezel-safe content width.
+  // CPHUN labels are longer than English and must never bleed past the margins.
   const int tipsLh = renderer.getLineHeight(SMALL_FONT_ID);
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
-  auto drawTip = [&](const char* tip, int y) { renderer.drawCenteredText(SMALL_FONT_ID, y, tip, true); };
-
-  // Reserve the Clear Text row even when the entry is empty.
-  const int tipCount = cursorMode ? 1 : urlPanel ? 3 : symbols ? 2 : 3 + (inputType == InputType::Url ? 1 : 0);
-  const int tipsHeight = (tipCount + 1) * tipsLh;
-  // Reserve cursor instructions even for an empty field; passwords need a second row.
-  const int tipsTop = underlineBottom + (cursorMode ? (isPassword ? 2 : 1) * tipsLh : 0);
-
-  if (kbRect.y - tipsTop >= tipsHeight) {
-    int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
-    drawTip(tr(STR_KB_TIPS), y);
-    y += tipsLh;
-    if (!cursorMode) {
-      drawTip(tr(STR_KB_HINT_EDIT_ENTRY), y);
-      y += tipsLh;
+  std::vector<std::string> tipTexts;
+  tipTexts.push_back(tr(STR_KB_TIPS));
+  if (!cursorMode) tipTexts.push_back(tr(STR_KB_HINT_EDIT_ENTRY));
+  if (cursorMode) tipTexts.push_back(tr(STR_KB_HINT_RETURN_KEYBOARD));
+  else if (urlPanel) {
+    tipTexts.push_back(tr(STR_KB_HINT_EXIT_URL_MODE));
+    if (!text.empty()) tipTexts.push_back(tr(STR_KB_HINT_CLEAR_TEXT));
+  } else if (symbols) {
+    if (!text.empty()) tipTexts.push_back(tr(STR_KB_HINT_CLEAR_TEXT));
+  } else {
+    tipTexts.push_back(inputType == InputType::Url ? tr(STR_KB_HINT_SECONDARY_CHAR)
+                       : shifted ? tr(STR_KB_HINT_LOWER_SECONDARY) : tr(STR_KB_HINT_UPPER_SECONDARY));
+    if (inputType == InputType::Url) tipTexts.push_back(tr(STR_KB_HINT_URL_SNIPPETS));
+    if (!text.empty()) tipTexts.push_back(tr(STR_KB_HINT_CLEAR_TEXT));
+  }
+  const int tipWidth = std::max(1, content.width - 2 * metrics.horizontalSpacing);
+  std::vector<std::string> tipLines;
+  for (const auto& tip : tipTexts) {
+    std::string line;
+    size_t pos = 0;
+    while (pos < tip.size()) {
+      while (pos < tip.size() && tip[pos] == ' ') ++pos;
+      if (pos >= tip.size()) break;
+      size_t end = tip.find(' ', pos);
+      if (end == std::string::npos) end = tip.size();
+      const std::string word = tip.substr(pos, end - pos);
+      const std::string combined = line.empty() ? word : line + " " + word;
+      if (!line.empty() && renderer.getTextWidth(SMALL_FONT_ID, combined.c_str()) > tipWidth) {
+        tipLines.push_back(line);
+        line = word;
+      } else line = combined;
+      pos = end;
     }
-    if (cursorMode) {
-      drawTip(tr(STR_KB_HINT_RETURN_KEYBOARD), y);
-    } else if (urlPanel) {
-      drawTip(tr(STR_KB_HINT_EXIT_URL_MODE), y);
+    if (!line.empty()) tipLines.push_back(line);
+  }
+  const int tipsTop = underlineBottom + (cursorMode ? (isPassword ? 2 : 1) * tipsLh : 0);
+  const int tipsHeight = static_cast<int>(tipLines.size()) * tipsLh;
+  if (tipsHeight > 0 && kbRect.y - tipsTop >= tipsHeight) {
+    int y = tipsTop + (kbRect.y - tipsTop - tipsHeight) / 2;
+    for (const auto& line : tipLines) {
+      const int width = renderer.getTextWidth(SMALL_FONT_ID, line.c_str());
+      const int x = content.x + (content.width - width) / 2;
+      renderer.drawText(SMALL_FONT_ID, x, y, line.c_str(), true);
       y += tipsLh;
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
-      }
-    } else if (symbols) {
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
-      }
-    } else {
-      const char* altCharTip;
-      if (inputType == InputType::Url) {
-        altCharTip = tr(STR_KB_HINT_SECONDARY_CHAR);
-      } else if (shifted) {
-        altCharTip = tr(STR_KB_HINT_LOWER_SECONDARY);
-      } else {
-        altCharTip = tr(STR_KB_HINT_UPPER_SECONDARY);
-      }
-      drawTip(altCharTip, y);
-      y += tipsLh;
-      if (inputType == InputType::Url) {
-        drawTip(tr(STR_KB_HINT_URL_SNIPPETS), y);
-        y += tipsLh;
-      }
-      if (!text.empty()) {
-        drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
-      }
     }
   }
 
