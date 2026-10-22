@@ -320,7 +320,9 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
     case keyboard_layouts::hu_keyboard::FORWARD_DELETE_KEY:
       delPressCount = 0;
       hintVisible = false;
-      return deleteForwardUtf8();
+      if (cursorPos >= text.length()) return false;
+      text.erase(cursorPos, utf8Next(text, cursorPos) - cursorPos);
+      return true;
     case fui::QWERTY_KEY_BACKSPACE:
       if (longPress) {
         text.clear();
