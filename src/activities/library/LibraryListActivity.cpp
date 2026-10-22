@@ -17,6 +17,8 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include <Epub.h>
+#include "activities/reader/BookInfoActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
@@ -221,6 +223,27 @@ void LibraryListActivity::openBookByPath(const std::string& path) {
   onSelectBook(path);
 }
 
+void LibraryListActivity::openBookInfo(const std::string& path, const bool metadata) {
+  app.clearTapFlash();
+  index.close();
+  auto epub = std::make_shared<Epub>(path, "/.crosspoint");
+  bool loaded = epub->load(false, true);
+  if (!loaded) loaded = epub->load(true, true);
+  if (!loaded) {
+    LOG_ERR("LIB", "cannot load EPUB for book info: %s", path.c_str());
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    requestUpdate();
+    return;
+  }
+  startActivityForResult(
+      std::make_unique<BookInfoActivity>(renderer, mappedInput, epub,
+          metadata ? BookInfoActivity::Page::Metadata : BookInfoActivity::Page::Description),
+      [this](const ActivityResult&) {
+        if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+        requestUpdate();
+      });
+}
+
 void LibraryListActivity::activateIndex(const int index) {
   if (groupsCollapsed) {
     expandGroup(index);
@@ -273,34 +296,29 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     }
   }
 
-  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  const char* STORE_OPTIONS[] = {"Fülszöveg", "Metaadatok", tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  const char* INDEX_OPTIONS[] = {"Fülszöveg", "Metaadatok", tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
   app.clearTapFlash();
-  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS,
+                   isStoreRow ? 6 : 5, 0,
                    [this, path, title, isStoreRow](const int choice) {
                      swallowHeldReleases();
                      switch (choice) {
-                       case 0:
-                         openBookByPath(path);
-                         break;
-                       case 1:
-                         if (isStoreRow) {
-                           promptRemoveRecentBook(path, title);
-                         } else {
-                           promptDeleteBookByPath(path, title);
-                         }
-                         break;
-                       case 2:
-                         if (isStoreRow)
-                           promptDeleteBookByPath(path, title);
-                         else
-                           promptRebuildIndex();
-                         break;
+                       case 0: openBookInfo(path, false); break;
+                       case 1: openBookInfo(path, true); break;
+                       case 2: openBookByPath(path); break;
                        case 3:
+                         if (isStoreRow) promptRemoveRecentBook(path, title);
+                         else promptDeleteBookByPath(path, title);
+                         break;
+                       case 4:
+                         if (isStoreRow) promptDeleteBookByPath(path, title);
+                         else promptRebuildIndex();
+                         break;
+                       case 5:
                          if (isStoreRow) promptRebuildIndex();
                          break;
-                       default:
-                         break;
+                       default: break;
                      }
                    });
   requestUpdate();
