@@ -108,6 +108,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // display-index mapping and is skipped by the generic persistence loop.
   doc["longPressMenuFunction"] = longPressMenuFunction;
   doc["shortPwrBtn"] = shortPwrBtn;
+  doc["extraParagraphSpacingPercent"] = extraParagraphSpacingPercent;
+  doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -197,6 +199,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     pluginsEnabled = PluginLocations::anyPluginInstalledOnDisk() ? 1 : 0;
     needsResave = true;
   }
+
+  extraParagraphSpacingPercent = doc["extraParagraphSpacingPercent"] | static_cast<uint8_t>(100);
+  if (extraParagraphSpacingPercent > 100 || extraParagraphSpacingPercent % 25 != 0)
+    extraParagraphSpacingPercent = 100;
+  fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | static_cast<uint8_t>(0)) ? 1 : 0;
 
   const auto indentSpaces = doc["paragraphIndentSpaces"];
   const bool hasSavedWidth = indentSpaces.is<int>();
@@ -328,7 +335,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.lineCompression = getReaderLineCompression();
   spec.characterSpacing = getCharacterSpacing();
   spec.wordSpacingPercent = wordSpacing;
-  spec.extraParagraphSpacing = extraParagraphSpacing != 0;
+  spec.extraParagraphSpacing = extraParagraphSpacing ? extraParagraphSpacingPercent : 255;
   spec.opticalMargin = opticalMargin != 0;
   spec.paragraphIndentSpaces = paragraphIndentSpaces;
   spec.paragraphAlignment = paragraphAlignment;
