@@ -2419,11 +2419,21 @@ void EpubReaderActivity::renderStatusBar() const {
 namespace {
 constexpr StrId kTextRowNames[] = {StrId::STR_FONT, StrId::STR_FONT_SIZE, StrId::STR_LINE_SPACING,
                                    StrId::STR_PARA_ALIGNMENT, StrId::STR_FOCUS_READING};
-constexpr StrId kSpacingIds[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
+constexpr uint8_t kSpacingValues[] = {0, 1, 4, 2, 5, 3};
+std::vector<std::string> toolbarSpacingLabels() {
+  return {I18N.get(StrId::STR_TIGHT), I18N.get(StrId::STR_NORMAL),
+          std::string(I18N.get(StrId::STR_NORMAL)) + "+", I18N.get(StrId::STR_WIDE),
+          std::string(I18N.get(StrId::STR_WIDE)) + "+", I18N.get(StrId::STR_EXTRA_WIDE)};
+}
+int toolbarSpacingIndex(uint8_t stored) {
+  for (size_t i = 0; i < std::size(kSpacingValues); ++i)
+    if (kSpacingValues[i] == stored) return static_cast<int>(i);
+  return 1;
+}
 constexpr StrId kAlignIds[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                StrId::STR_BOOK_S_STYLE};
 constexpr int kTextRowCount = static_cast<int>(std::size(kTextRowNames));
-static_assert(std::size(kSpacingIds) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing labels");
+static_assert(std::size(kSpacingValues) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing levels");
 static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment labels");
 }  // namespace
 
@@ -2455,7 +2465,7 @@ std::string EpubReaderActivity::textRowValue(int row) const {
     case 1:
       return std::to_string(SETTINGS.fontPointSize) + " pt";
     case 2:
-      return I18N.get(kSpacingIds[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
+      return toolbarSpacingLabels()[toolbarSpacingIndex(SETTINGS.lineSpacing)];
     case 3:
       return I18N.get(kAlignIds[SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT]);
     default:
@@ -2495,9 +2505,10 @@ void EpubReaderActivity::showTextRowPopup(const int row) {
       break;
     }
     case 2:
-      overlayPopup.show(StrId::STR_LINE_SPACING, kSpacingIds, static_cast<int>(std::size(kSpacingIds)),
-                        SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT, [this](int idx) {
-                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
+      overlayPopup.show(StrId::STR_LINE_SPACING, toolbarSpacingLabels(), toolbarSpacingIndex(SETTINGS.lineSpacing),
+                        [this](int idx) {
+                          if (idx < 0 || idx >= static_cast<int>(std::size(kSpacingValues))) return;
+                          SETTINGS.lineSpacing = kSpacingValues[idx];
                           applyTextSettingLive();
                         });
       break;
