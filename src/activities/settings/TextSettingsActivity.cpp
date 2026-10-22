@@ -246,8 +246,6 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.opticalMargin != 0);
-    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
-      GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
     }
   }
 
@@ -273,7 +271,7 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+      return tr(STR_SELECT);
     case Tab::Style:
       return tr(STR_TOGGLE);
     default:
@@ -396,11 +394,20 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       SETTINGS.saveToFile();
       requestUpdate();
       break;
-    case LayoutRow::ParaSpacing:
-      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
-      SETTINGS.saveToFile();
+    case LayoutRow::ParaSpacing: {
+      const std::vector<std::string> options = {tr(STR_STATE_OFF), "0%", "25%", "50%", "75%", "100%"};
+      const int selected = !SETTINGS.extraParagraphSpacing
+                               ? 0
+                               : std::clamp<int>(SETTINGS.extraParagraphSpacingPercent / 25 + 1, 1, 5);
+      optionPopup_.show(StrId::STR_EXTRA_SPACING, options, selected, [](int idx) {
+        if (idx < 0 || idx > 5) return;
+        SETTINGS.extraParagraphSpacing = idx != 0;
+        SETTINGS.extraParagraphSpacingPercent = idx <= 1 ? 0 : static_cast<uint8_t>((idx - 1) * 25);
+        SETTINGS.saveToFile();
+      });
       requestUpdate();
       break;
+    }
     case LayoutRow::ParaIndentation: {
       std::vector<std::string> options;
       options.reserve(6);
@@ -481,6 +488,9 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       const auto options = lineSpacingLabels();
       return options[nearestChoice(SETTINGS.lineSpacing, LINE_SPACING_VALUES, std::size(LINE_SPACING_VALUES))];
     }
+    case LayoutRow::ParaSpacing:
+      return !SETTINGS.extraParagraphSpacing ? tr(STR_STATE_OFF)
+                                            : std::to_string(SETTINGS.extraParagraphSpacingPercent) + "%";
     case LayoutRow::ParaIndentation: {
       const int spaces = std::clamp<int>(SETTINGS.paragraphIndentSpaces, 0, 5);
       return spaces == 0 ? tr(STR_STATE_OFF) : std::to_string(spaces);
