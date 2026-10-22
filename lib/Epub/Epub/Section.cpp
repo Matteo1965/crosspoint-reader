@@ -73,7 +73,7 @@ namespace {
 // Earlier GIF/table development builds also used versions 60 through 62.
 // v63: Rebuild for corrected paragraph boundaries and supported static GIF images.
 // v64: Explicit font inheritance preserves parent emphasis and changes text layout.
-constexpr uint8_t SECTION_FILE_VERSION = 65;
+constexpr uint8_t SECTION_FILE_VERSION = 66;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -194,7 +194,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     int fileFontId;
     uint16_t fileViewportWidth, fileViewportHeight;
     float fileLineCompression;
-    bool fileExtraParagraphSpacing;
+    uint8_t fileExtraParagraphSpacing;
     bool fileOpticalMargin;
     uint8_t fileParagraphIndentSpaces;
     uint8_t fileParagraphAlignment;
