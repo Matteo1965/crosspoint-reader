@@ -20,7 +20,6 @@ class BookInfoActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool appliesNightMode() const override { return true; }
 
  private:
   struct Line {
