@@ -139,6 +139,7 @@ class ParsedText {
 
  public:
   static void setOpticalMarginEnabled(bool enabled) { opticalMarginEnabled_ = enabled; }
+  static bool isOpticalMarginEnabled() { return opticalMarginEnabled_; }
   explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2)
       : blockStyle(blockStyle),
