@@ -269,6 +269,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  // CPHUN paragraph gap: 0/25/50/75/100, enabled separately so 0% differs from Off.
+  uint8_t extraParagraphSpacingPercent = 100;
+  uint8_t fixedDialogueSpacing = 0;
   uint8_t opticalMargin = 0;  // CPHUN-224 optical margin; enables short hyphen too.
   uint8_t paragraphIndentSpaces = 2;
   static constexpr uint8_t WORD_SPACING_MIN = 50;
