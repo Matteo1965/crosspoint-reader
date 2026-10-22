@@ -950,7 +950,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     if (inputType == InputType::Url) tipTexts.push_back(tr(STR_KB_HINT_URL_SNIPPETS));
     if (!text.empty()) tipTexts.push_back(tr(STR_KB_HINT_CLEAR_TEXT));
   }
-  const int tipWidth = std::max(1, content.width - 2 * metrics.horizontalSpacing);
+  const int tipWidth = std::max(1, content.width - 2 * metrics.verticalSpacing);
   std::vector<std::string> tipLines;
   for (const auto& tip : tipTexts) {
     std::string line;
