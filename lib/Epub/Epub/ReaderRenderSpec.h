@@ -13,7 +13,7 @@
 struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;
-  bool extraParagraphSpacing = false;
+  uint8_t extraParagraphSpacing = 255;
   bool opticalMargin = false;
   uint8_t paragraphIndentSpaces = 2;
   int8_t characterSpacing = 0;
