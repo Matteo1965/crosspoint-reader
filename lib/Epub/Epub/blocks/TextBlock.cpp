@@ -8,6 +8,9 @@
 #include <Serialization.h>
 
 #include <cstring>
+#include <algorithm>
+
+#include "../ParsedText.h"
 
 #include "../../../../src/fontIds.h"
 
@@ -289,7 +292,63 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
 
     const int drawX = wordX;
 
-    if (boundary > 0) {
+    bool renderedShortHyphen = false;
+    // Apply only to automatically inserted line-end hyphens. Keep their
+    // original layout advance for now to avoid altering line breaks.
+    if (ParsedText::isOpticalMarginEnabled() &&
+        (static_cast<uint8_t>(currentStyle) & DISCRETIONARY_HYPHEN_FLAG) != 0 &&
+        boundary == 0 && wordTextLen(i) > 1 && word[wordTextLen(i) - 1] == '-') {
+      const auto fontIt = renderer.getFontMap().find(wordFont);
+      if (fontIt != renderer.getFontMap().end()) {
+        const auto style = static_cast<EpdFontFamily::Style>(
+            static_cast<uint8_t>(currentStyle) & ~DISCRETIONARY_HYPHEN_FLAG);
+        const auto& font = fontIt->second;
+        const EpdGlyph* original = font.getGlyph(0x002D, style);
+        const EpdGlyph* selected = font.getGlyph(0x2011, style);
+        uint32_t cp = 0x2011;
+        const char* utf8 = "\\xE2\\x80\\x91";
+        if (!selected) {
+          selected = font.getGlyph(0x2010, style);
+          cp = 0x2010;
+          utf8 = "\\xE2\\x80\\x90";
+        }
+        if (!selected) {
+          selected = original;
+          cp = 0x002D;
+          utf8 = "-";
+        }
+        if (selected) {
+          const size_t prefixLen = wordTextLen(i) - 1;
+          std::string prefix(word, prefixLen);
+          std::string displayWord(prefix);
+          displayWord += utf8;
+          // A genuinely narrow U+2011 retains its original glyph bitmap.
+          // Otherwise trim the rightmost part of the final glyph only.
+          const bool naturallyShort = cp == 0x2011 && original &&
+                                      selected->width * 4 <= original->width * 3;
+          const int target = std::max(1, (static_cast<int>(selected->width) * 72 + 50) / 100);
+          const int difference = static_cast<int>(selected->width) - target;
+          if (!naturallyShort && difference >= 2) {
+            const int prefixAdvance = renderer.getTextAdvanceX(wordFont, prefix.c_str(), style, tracking);
+            const int glyphLeft = drawX + prefixAdvance + selected->left;
+            const auto oldClip = renderer.getClipRect();
+            const int newRight = std::min(oldClip[0] + oldClip[2], glyphLeft + target);
+            if (newRight > oldClip[0]) {
+              renderer.setClipRect(oldClip[0], oldClip[1], newRight - oldClip[0], oldClip[3]);
+              renderer.drawText(wordFont, drawX, wordY, displayWord.c_str(), true, style, baseDir, tracking);
+              renderer.setClipRect(oldClip[0], oldClip[1], oldClip[2], oldClip[3]);
+              renderedShortHyphen = true;
+            }
+          }
+          if (!renderedShortHyphen) {
+            renderer.drawText(wordFont, drawX, wordY, displayWord.c_str(), true, style, baseDir, tracking);
+            renderedShortHyphen = true;
+          }
+        }
+      }
+    }
+
+    if (!renderedShortHyphen && boundary > 0) {
       // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
       // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
       // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
@@ -306,7 +365,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
       renderer.drawText(wordFont, drawX, wordY, boldBuf, true, boldStyle, baseDir, tracking);
       const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(wordFont, suffixX, wordY, word + boldLen, true, currentStyle, baseDir, tracking);
-    } else {
+    } else if (!renderedShortHyphen) {
       renderer.drawText(wordFont, drawX, wordY, word, true, currentStyle, baseDir, tracking);
     }
 
