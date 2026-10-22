@@ -343,7 +343,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 
 float CrossPointSettings::getReaderLineCompression() const {
   // Preserve the existing Picco scale while inserting the two CPHUN steps.
-  if (sdFontFamilyName[0] != '\\0') {
+  if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
       case TIGHT: return 0.95f;
       case NORMAL: return 1.0f;
