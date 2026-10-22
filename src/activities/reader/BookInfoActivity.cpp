@@ -328,7 +328,6 @@ BookInfoActivity::BookInfoActivity(GfxRenderer& renderer, MappedInputManager& ma
 
 void BookInfoActivity::onEnter() {
   Activity::onEnter();
-  renderer.setMissingGlyphFallbackFont(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID : NOTOSANS_14_FONT_ID);
   if (epub_) epub_->readBookInfo(info_);
   buildText();
   wrapText();
@@ -336,7 +335,6 @@ void BookInfoActivity::onEnter() {
 }
 
 void BookInfoActivity::onExit() {
-  renderer.clearMissingGlyphFallbackFont();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
 }
@@ -570,7 +568,7 @@ void BookInfoActivity::wrapText() {
     const uint32_t tokenLen = i - tokenStart;
     const std::string token(text + tokenStart, tokenLen);
     const auto breakInfos = page_ == Page::Description
-                                ? Hyphenator::breakOffsetsForLanguageExtended(token, false, "hu")
+                                ? Hyphenator::breakOffsets(token, false)
                                 : std::vector<Hyphenator::BreakInfo>{};
 
     uint32_t consumed = 0;
