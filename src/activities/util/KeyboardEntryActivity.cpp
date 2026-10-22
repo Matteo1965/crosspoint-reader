@@ -1019,6 +1019,24 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       mappedInput.hasTouch() ? renderer.getScreenHeight() : renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, bottomEdge - keysRect.bottom()));
   fui::keyboard(frame, keysRect, props);
+  if (layoutId == keyboard_layouts::HUNGARIAN_ID && inputType != InputType::Url) {
+    // CPHUN forward-delete: mirror the backspace outline. The top-right key
+    // is a blank Normal key so FreeInkUI does not paint its backspace icon.
+    // Draw only the pictogram; FreeInkUI still owns the key's hit target.
+    const int rowCount = std::max<int>(1, layout.rowCount);
+    const int gap = props.gap;
+    const int keyHeight = (keysRect.height - (rowCount - 1) * gap) / rowCount;
+    const int keyWidth = (keysRect.width - 10 * gap) / 11;
+    const int cx = keysRect.x + keysRect.width - keyWidth / 2;
+    const int cy = keysRect.y + keyHeight / 2;
+    renderer.drawLine(cx - 12, cy - 8, cx + 1, cy - 8, 2, true);
+    renderer.drawLine(cx - 12, cy + 8, cx + 1, cy + 8, 2, true);
+    renderer.drawLine(cx - 12, cy - 8, cx - 12, cy + 8, 2, true);
+    renderer.drawLine(cx + 1, cy - 8, cx + 10, cy, 2, true);
+    renderer.drawLine(cx + 10, cy, cx + 1, cy + 8, 2, true);
+    renderer.drawLine(cx - 6, cy - 4, cx + 2, cy + 4, 2, true);
+    renderer.drawLine(cx - 6, cy + 4, cx + 2, cy - 4, 2, true);
+  }
   interactions.publish();
   interactionsReady = true;
 
