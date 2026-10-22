@@ -23,7 +23,7 @@ inline const fui::KeyboardKey NUM_ROW[] = {
     HUK("0", "0", '0'), HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'),
     HUK("4", "4", '4'), HUK("5", "5", '5'), HUK("6", "6", '6'), HUK("7", "7", '7'),
     HUK("8", "8", '8'), HUK("9", "9", '9'),
-    HUKS(nullptr, fui::KeyKind::Delete, FORWARD_DELETE_KEY, 2)};
+    HUKS(nullptr, fui::KeyKind::Normal, FORWARD_DELETE_KEY, 2)};
 
 inline const fui::KeyboardKey ROW1[] = {
     HUK("q", "q", 'q'), HUK("w", "w", 'w'), HUK("e", "e", 'e'), HUK("r", "r", 'r'),
