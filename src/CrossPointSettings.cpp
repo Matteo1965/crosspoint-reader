@@ -342,35 +342,26 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card and vector fonts get a wider scale than the built-ins: their
-  // faces carry their own (often generous) natural line height, so the old
-  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
-  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
-  // per page — each step reads as a clearly different density.
-  if (sdFontFamilyName[0] != '\0') {
+  // Preserve the existing Picco scale while inserting the two CPHUN steps.
+  if (sdFontFamilyName[0] != '\\0') {
     switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.3f;
-      case EXTRA_WIDE:
-        return 1.6f;
+      case TIGHT: return 0.95f;
+      case NORMAL: return 1.0f;
+      case NORMAL_PLUS: return 1.15f;
+      case WIDE: return 1.3f;
+      case WIDE_PLUS: return 1.45f;
+      case EXTRA_WIDE: return 1.6f;
+      default: return 1.0f;
     }
   }
-
   switch (lineSpacing) {
-    case TIGHT:
-      return 0.90f;
-    case NORMAL:
-    default:
-      return 0.95f;
-    case WIDE:
-      return 1.0f;
-    case EXTRA_WIDE:
-      return 1.05f;
+    case TIGHT: return 0.90f;
+    case NORMAL: return 0.95f;
+    case NORMAL_PLUS: return 0.975f;
+    case WIDE: return 1.0f;
+    case WIDE_PLUS: return 1.025f;
+    case EXTRA_WIDE: return 1.05f;
+    default: return 0.95f;
   }
 }
 
