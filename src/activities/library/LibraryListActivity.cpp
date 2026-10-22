@@ -296,8 +296,10 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
     }
   }
 
-  const char* STORE_OPTIONS[] = {"Fülszöveg", "Metaadatok", tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
-  const char* INDEX_OPTIONS[] = {"Fülszöveg", "Metaadatok", tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  const char* STORE_OPTIONS[] = {I18N.getLanguage() == Language::HU ? "Fülszöveg" : "Description",
+                                 I18N.getLanguage() == Language::HU ? "Metaadatok" : "Metadata", tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  const char* INDEX_OPTIONS[] = {I18N.getLanguage() == Language::HU ? "Fülszöveg" : "Description",
+                                 I18N.getLanguage() == Language::HU ? "Metaadatok" : "Metadata", tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
   app.clearTapFlash();
   optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS,
                    isStoreRow ? 6 : 5, 0,
