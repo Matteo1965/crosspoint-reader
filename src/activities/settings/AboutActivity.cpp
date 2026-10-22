@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalTiltSensor.h>
@@ -35,6 +36,12 @@ enum MenuItem {
 const char* const menuNames[AboutActivity::ITEM_COUNT] = {
     "Device", "Firmware",          "Chip",        "Flash", "Display Controller", "Resolution", "Touch", "Frontlight",
     "RTC",    "Tilt Sensor (IMU)", "MAC Address",
+};
+
+// Hungarian Edition: localize the diagnostic labels without changing hardware identifiers.
+const char* const huMenuNames[AboutActivity::ITEM_COUNT] = {
+    "Készülék", "Firmware", "Processzor", "Flash", "Kijelzővezérlő", "Felbontás", "Érintés", "Elülső világítás",
+    "Valós idejű óra", "Dőlésérzékelő (IMU)", "MAC-cím",
 };
 
 // Chip part numbers, not user prose — deliberately untranslated.
@@ -82,12 +89,12 @@ const char* touchControllerName(const BoardConfig::TouchController c) {
 AboutActivity::AboutActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("About", renderer, mappedInput) {}
 
-const char* AboutActivity::headerTitle() const { return "About"; }
+const char* AboutActivity::headerTitle() const { return I18N.getLanguage() == Language::HU ? "Névjegy" : "About"; }
 
 void AboutActivity::onEnter() {
   UiListActivity::onEnter();
   for (int i = 0; i < ITEM_COUNT; i++) {
-    rowItems_[i].label = menuNames[i];
+    rowItems_[i].label = I18N.getLanguage() == Language::HU ? huMenuNames[i] : menuNames[i];
     rowItems_[i].actionValue = static_cast<int16_t>(i);
   }
 
@@ -107,10 +114,11 @@ void AboutActivity::onEnter() {
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;
   const char* touch = touchControllerName(BoardConfig::ACTIVE.touch.controller);
-  rowValues_[ITEM_TOUCH] = touch ? touch : "No";
-  rowValues_[ITEM_FRONTLIGHT] = Frontlight.present() ? "Yes" : "No";
-  rowValues_[ITEM_RTC] = halClock.isAvailable() ? "Yes" : "No";
-  rowValues_[ITEM_IMU] = halTiltSensor.isAvailable() ? "Yes" : "No";
+  const bool hu = I18N.getLanguage() == Language::HU;
+  rowValues_[ITEM_TOUCH] = touch ? touch : (hu ? "Nincs" : "No");
+  rowValues_[ITEM_FRONTLIGHT] = Frontlight.present() ? (hu ? "Igen" : "Yes") : (hu ? "Nem" : "No");
+  rowValues_[ITEM_RTC] = halClock.isAvailable() ? (hu ? "Igen" : "Yes") : (hu ? "Nem" : "No");
+  rowValues_[ITEM_IMU] = halTiltSensor.isAvailable() ? (hu ? "Igen" : "Yes") : (hu ? "Nem" : "No");
   uint8_t mac[6] = {0};
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
