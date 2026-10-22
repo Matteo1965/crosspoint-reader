@@ -945,7 +945,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     return;
   }
   // Stamped here rather than at construction: the parser replaces blockStyle as CSS resolves.
-  blockStyle.characterSpacing = characterSpacing;
+  const int cphunCorrectionLevel = characterSpacing & 3;
+  const bool cphunOptimization = (characterSpacing & 4) != 0;
+  blockStyle.characterSpacing = 0;
   this->wordSpacingPercent = wordSpacingPercent;
 
   // Per-paragraph RTL auto-detection: only when CSS/HTML didn't explicitly set direction.
@@ -2056,10 +2058,41 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     sourceRanges.push_back({start, end});
   }
 
+  // Adaptive spacing uses the existing signed per-line tracking field.
+  BlockStyle correctedLineStyle = blockStyle;
+  const int threshold = cphunCorrectionLevel == 1 ? 550 : cphunCorrectionLevel == 2 ? 460 :
+                        cphunCorrectionLevel == 3 ? 280 : 0;
+  if (threshold && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+      !blockStyle.isRtl && !hasRtlWord && !willReorder && lineWordCount > 1 &&
+      actualGapCount == lineWordCount - 1 && !lineHasFocusSplit &&
+      lineXPos.size() == lineWordCount && totalNaturalGaps > 0 && spareSpace > 1 &&
+      std::all_of(lineRubyTexts.begin(), lineRubyTexts.end(),
+                  [](const std::string& ruby) { return ruby.empty(); }) &&
+      (totalNaturalGaps + spareSpace) * 100 > totalNaturalGaps * threshold) {
+    std::vector<int> extra(lineWordCount, 0);
+    int total = 0;
+    for (size_t i = 0; i < lineWordCount; ++i) {
+      const int original = renderer.getTextAdvanceX(fontId, lineWords[i].c_str(), lineWordStyles[i], 0);
+      const int tracked = renderer.getTextAdvanceX(fontId, lineWords[i].c_str(), lineWordStyles[i], 1);
+      extra[i] = std::max(0, tracked - original);
+      total += extra[i];
+    }
+    const int budget = cphunOptimization ? spareSpace - 1 : spareSpace / 2;
+    if (total > 0 && total <= budget) {
+      int prefix = 0;
+      for (size_t i = 1; i < lineWordCount; ++i) {
+        prefix += extra[i - 1];
+        const int redistributed = total * static_cast<int>(i) / static_cast<int>(lineWordCount - 1);
+        lineXPos[i] = static_cast<int16_t>(lineXPos[i] + prefix - redistributed);
+      }
+      correctedLineStyle.characterSpacing = 1;
+    }
+  }
+
   if (!lineHasFocusSplit) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                              std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
+                                              std::vector<uint16_t>{}, correctedLineStyle, std::move(lineRubyTexts),
                                               std::move(lineLinks), sourceRanges, paragraphStartWord);
     if (!block || !block->valid() || !attachWordFonts(*block)) {
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
@@ -2091,7 +2124,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   auto block =
-      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
+      makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, correctedLineStyle,
                                    std::move(lineRubyTexts), std::move(lineLinks), sourceRanges, paragraphStartWord);
   if (!block || !block->valid() || !attachWordFonts(*block)) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");

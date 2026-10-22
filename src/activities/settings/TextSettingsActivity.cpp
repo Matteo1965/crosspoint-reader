@@ -25,7 +25,7 @@ namespace {
 constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
 
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
-    StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
+    StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
     StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN,
     StrId::STR_HYPHENATION};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
@@ -129,7 +129,11 @@ void TextSettingsActivity::rebuildRowItems() {
       case Tab::Layout:
         item.label = (i == static_cast<int>(LayoutRow::OpticalMargin))
                          ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Optical margin")
-                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+                         : i == static_cast<int>(LayoutRow::LetterSpacingOptimization)
+                               ? (I18N.getLanguage() == Language::HU ? "Betűköz optimalizálás" : "Letter spacing optimization")
+                               : i == static_cast<int>(LayoutRow::CharacterSpacing)
+                               ? (I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction")
+                               : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
         item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
@@ -244,6 +248,8 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     if (tab_ == Tab::Style) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
+    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::LetterSpacingOptimization)) {
+      GUI.setCheckboxRow(rowItems_[i], SETTINGS.letterSpacingOptimization != 0);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.opticalMargin != 0);
     }
@@ -453,12 +459,26 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
-    case LayoutRow::CharacterSpacing:
-      optionPopup_.show(StrId::STR_CHARACTER_SPACING, CHARACTER_SPACING_IDS,
-                        static_cast<int>(std::size(CHARACTER_SPACING_IDS)), SETTINGS.characterSpacing, [](int idx) {
-                          SETTINGS.characterSpacing = static_cast<uint8_t>(idx);
-                          SETTINGS.saveToFile();
-                        });
+    case LayoutRow::CharacterSpacing: {
+      const bool hu = I18N.getLanguage() == Language::HU;
+      const std::vector<std::string> choices = {tr(STR_STATE_OFF), hu ? "Gyenge" : "Weak",
+          hu ? "Közepes" : "Medium", hu ? "Erős" : "Strong"};
+      const int selected = SETTINGS.letterSpacingLimitPercent == 550 ? 1 :
+                           SETTINGS.letterSpacingLimitPercent == 460 ? 2 :
+                           SETTINGS.letterSpacingLimitPercent == 280 ? 3 : 0;
+      optionPopup_.show(StrId::STR_CHARACTER_SPACING, choices, selected, [](int idx) {
+        constexpr uint16_t levels[] = {0, 550, 460, 280};
+        if (idx >= 0 && idx < 4) {
+          SETTINGS.letterSpacingLimitPercent = levels[idx];
+          SETTINGS.saveToFile();
+        }
+      });
+      requestUpdate();
+      break;
+    }
+    case LayoutRow::LetterSpacingOptimization:
+      SETTINGS.letterSpacingOptimization = !SETTINGS.letterSpacingOptimization;
+      SETTINGS.saveToFile();
       requestUpdate();
       break;
     case LayoutRow::ScreenMargin: {
@@ -501,11 +521,12 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     }
     case LayoutRow::WordSpacing:
       return std::to_string(SETTINGS.wordSpacing) + "%";
-    case LayoutRow::CharacterSpacing: {
-      const uint8_t v = SETTINGS.characterSpacing;
-      return v < std::size(CHARACTER_SPACING_IDS) ? I18N.get(CHARACTER_SPACING_IDS[v])
-                                                  : I18N.get(StrId::STR_SPACING_ZERO);
-    }
+    case LayoutRow::CharacterSpacing:
+      return SETTINGS.letterSpacingLimitPercent == 550 ? (I18N.getLanguage() == Language::HU ? "Gyenge" : "Weak") :
+             SETTINGS.letterSpacingLimitPercent == 460 ? (I18N.getLanguage() == Language::HU ? "Közepes" : "Medium") :
+             SETTINGS.letterSpacingLimitPercent == 280 ? (I18N.getLanguage() == Language::HU ? "Erős" : "Strong") : tr(STR_STATE_OFF);
+    case LayoutRow::LetterSpacingOptimization:
+      return SETTINGS.letterSpacingOptimization ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
 

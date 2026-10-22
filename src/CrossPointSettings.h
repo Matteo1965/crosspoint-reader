@@ -280,6 +280,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wordSpacing = 100;                              // percent of the font's space advance
   static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;  // stored 0..4 maps to -2..+2 px
   uint8_t characterSpacing = CHARACTER_SPACING_OFFSET;
+  uint16_t letterSpacingLimitPercent = 0;
+  uint8_t letterSpacingOptimization = 0;
   int8_t getCharacterSpacing() const { return static_cast<int8_t>(characterSpacing - CHARACTER_SPACING_OFFSET); }
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour

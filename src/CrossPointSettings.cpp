@@ -109,6 +109,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["longPressMenuFunction"] = longPressMenuFunction;
   doc["shortPwrBtn"] = shortPwrBtn;
   doc["extraParagraphSpacingPercent"] = extraParagraphSpacingPercent;
+  doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
+  doc["letterSpacingOptimization"] = letterSpacingOptimization;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
@@ -200,6 +202,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
+  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | static_cast<uint16_t>(0);
+  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 550 && letterSpacingLimitPercent != 460 && letterSpacingLimitPercent != 280) letterSpacingLimitPercent = 0;
+  letterSpacingOptimization = (doc["letterSpacingOptimization"] | static_cast<uint8_t>(0)) ? 1 : 0;
   extraParagraphSpacingPercent = doc["extraParagraphSpacingPercent"] | static_cast<uint8_t>(100);
   if (extraParagraphSpacingPercent > 100 || extraParagraphSpacingPercent % 25 != 0)
     extraParagraphSpacingPercent = 100;
@@ -333,7 +338,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
-  spec.characterSpacing = getCharacterSpacing();
+  spec.characterSpacing = static_cast<int8_t>((letterSpacingLimitPercent == 550 ? 1 : letterSpacingLimitPercent == 460 ? 2 : letterSpacingLimitPercent == 280 ? 3 : 0) | (letterSpacingOptimization ? 4 : 0));
   spec.wordSpacingPercent = wordSpacing;
   spec.extraParagraphSpacing = extraParagraphSpacing ? extraParagraphSpacingPercent : 255;
   spec.opticalMargin = opticalMargin != 0;
