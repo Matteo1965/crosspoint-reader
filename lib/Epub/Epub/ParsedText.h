@@ -88,6 +88,8 @@ class ParsedText {
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   uint8_t wordSpacingPercent = 100;
+  uint8_t cphunCorrectionLevel = 0;
+  bool cphunOptimization = false;
   uint8_t paragraphIndentSpaces;
   bool hyphenationEnabled;
   bool focusReadingEnabled;

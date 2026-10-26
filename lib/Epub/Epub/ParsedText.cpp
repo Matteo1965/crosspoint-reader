@@ -945,8 +945,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     return;
   }
   // Stamped here rather than at construction: the parser replaces blockStyle as CSS resolves.
-  const int cphunCorrectionLevel = characterSpacing & 3;
-  const bool cphunOptimization = (characterSpacing & 4) != 0;
+  cphunCorrectionLevel = static_cast<uint8_t>(characterSpacing & 3);
+  cphunOptimization = (characterSpacing & 4) != 0;
   blockStyle.characterSpacing = 0;
   this->wordSpacingPercent = wordSpacingPercent;
 
