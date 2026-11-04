@@ -52,8 +52,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Workflow run 13 is HU-PICCO-005. Every subsequent run increments by one.
-          printf 'name=HU-PICCO-%03d\n' "$(( GITHUB_RUN_NUMBER - 8 ))" >> "$GITHUB_OUTPUT"
+          # First CrossPoint 2.0.0-final Hungarian Edition test build.
+          printf 'name=HU-PICCO-020\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
