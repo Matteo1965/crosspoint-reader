@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <BlePageTurner.h>
 #include <Epub/ReaderRenderSpec.h>
+#include <I18n.h>
 #include <PersistableStore.h>
 
 #include <cstdint>
