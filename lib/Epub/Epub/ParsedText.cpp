@@ -20,8 +20,28 @@
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
+bool ParsedText::opticalMarginEnabled_ = false;
 
 namespace {
+
+bool isHangingPunctuation(const uint32_t cp) {
+  return cp == '-' || cp == '.' || cp == ',' || cp == ':' || cp == ';';
+}
+
+int hangingPunctuationAllowance(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                                const EpdFontFamily::Style style, const uint8_t pixelLimit) {
+  if (pixelLimit == 0 || word.empty()) return 0;
+  const uint32_t punctuation = lastCodepoint(word);
+  if (!isHangingPunctuation(punctuation)) return 0;
+  size_t lastStart = word.size() - 1;
+  while (lastStart > 0 && (static_cast<uint8_t>(word[lastStart]) & 0xC0) == 0x80) --lastStart;
+  const std::string prefixWithoutPunctuation = word.substr(0, lastStart);
+  const int fullWordAdvance = std::max(0, renderer.getTextAdvanceX(fontId, word.c_str(), style));
+  const int prefixAdvance = prefixWithoutPunctuation.empty()
+                                ? 0
+                                : std::max(0, renderer.getTextAdvanceX(fontId, prefixWithoutPunctuation.c_str(), style));
+  return std::min<int>(pixelLimit, std::max(0, fullWordAdvance - prefixAdvance));
+}
 
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
@@ -1549,9 +1569,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           ? CssTextAlign::Right
           : blockStyle.alignment;
 
-  // For justified text, compute per-gap extra to distribute remaining space evenly.
+  // For justified text, optionally let selected punctuation hang into the optical margin.
+  const int hangingAllowance =
+      (opticalMarginEnabled_ && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+       !blockStyle.isRtl && !lineWords.empty())
+          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(), 8)
+          : 0;
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
-  const int spareSpace = effectivePageWidth - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+  const int spareSpace =
+      effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
                                ? computeJustifyExtra(spareSpace, actualGapCount)
                                : 0;
