@@ -81,7 +81,7 @@ namespace {
 // v71: Focus split offsets follow the visual run order for RTL words.
 // v72: Make ruby rendering closer to how Chromium renders ruby by default.
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
-constexpr uint8_t SECTION_FILE_VERSION = 73;
+constexpr uint8_t SECTION_FILE_VERSION = 74;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -99,7 +99,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // only fails (noisily, via the block-decode error path) when a page is loaded.
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
+constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(int8_t) +
@@ -147,7 +147,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
     return;
   }
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
-                                   sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphIndentSpaces) +
+                                   sizeof(spec.extraParagraphSpacing) + sizeof(spec.opticalMargin) + sizeof(spec.paragraphIndentSpaces) +
                                    sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) +
                                    sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.hyphenationEnabled) +
                                    sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
@@ -161,6 +161,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.fontId);
   serialization::writePod(file, spec.lineCompression);
   serialization::writePod(file, spec.extraParagraphSpacing);
+  serialization::writePod(file, spec.opticalMargin);
   serialization::writePod(file, spec.paragraphIndentSpaces);
   serialization::writePod(file, spec.paragraphAlignment);
   serialization::writePod(file, spec.viewportWidth);
@@ -202,6 +203,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint16_t fileViewportWidth, fileViewportHeight;
     float fileLineCompression;
     bool fileExtraParagraphSpacing;
+    bool fileOpticalMargin;
     uint8_t fileParagraphIndentSpaces;
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
@@ -213,6 +215,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileFontId);
     serialization::readPod(file, fileLineCompression);
     serialization::readPod(file, fileExtraParagraphSpacing);
+    serialization::readPod(file, fileOpticalMargin);
     serialization::readPod(file, fileParagraphIndentSpaces);
     serialization::readPod(file, fileParagraphAlignment);
     serialization::readPod(file, fileViewportWidth);
@@ -225,7 +228,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileWordSpacingPercent);
 
     if (spec.fontId != fileFontId || spec.lineCompression != fileLineCompression ||
-        spec.extraParagraphSpacing != fileExtraParagraphSpacing ||
+        spec.extraParagraphSpacing != fileExtraParagraphSpacing || spec.opticalMargin != fileOpticalMargin ||
         spec.paragraphIndentSpaces != fileParagraphIndentSpaces || spec.paragraphAlignment != fileParagraphAlignment ||
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
         spec.hyphenationEnabled != fileHyphenationEnabled || spec.embeddedStyle != fileEmbeddedStyle ||
@@ -463,6 +466,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   // captures the BuildContext pointer to append to its in-RAM LUT; build_ owns the
   // context for the parser's whole lifetime.
   BuildContext* ctxPtr = ctx.get();
+  ParsedText::setOpticalMarginEnabled(spec.opticalMargin);
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
