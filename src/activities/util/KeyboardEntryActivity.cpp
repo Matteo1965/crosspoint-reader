@@ -165,12 +165,12 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
-  if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
+  if (symbols) return fui::builtinKeyboardLayoutHuPicco(layoutId, shifted, true);
   if (inputType == InputType::Url) {
     if (urlPanel) return URL_SNIPPET_LAYOUT;
     return shifted ? URL_SHIFT_LAYOUT : URL_LAYOUT;
   }
-  return fui::builtinKeyboardLayout(layoutId, shifted, false, /*numberRow=*/true, showLangKey);
+  return fui::builtinKeyboardLayoutHuPicco(layoutId, shifted, false, /*numberRow=*/true, showLangKey);
 }
 
 const fui::KeyboardKey* KeyboardEntryActivity::selectedKey() const {
@@ -317,6 +317,12 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
     case fui::QWERTY_KEY_ENTER:
       onComplete(text);
       return false;
+    case keyboard_layouts::hu_keyboard::FORWARD_DELETE_KEY:
+      delPressCount = 0;
+      hintVisible = false;
+      if (cursorPos >= text.length()) return false;
+      text.erase(cursorPos, utf8Next(text, cursorPos) - cursorPos);
+      return true;
     case fui::QWERTY_KEY_BACKSPACE:
       if (longPress) {
         text.clear();
@@ -335,7 +341,7 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
       hintVisible = false;
       const fui::KeyboardLayout& layer = currentLayout();
       // keyboardAltOutputFor covers explicit alts and the letter case-flip.
-      const char* out = longPress ? fui::keyboardAltOutputFor(layer, value) : nullptr;
+      const char* out = longPress ? fui::keyboardAltOutputHuPicco(layer, value) : nullptr;
       if (!out) out = fui::keyboardOutputFor(layer, value);
       if (!out) return false;
       insertUtf8(out);
@@ -357,7 +363,7 @@ bool KeyboardEntryActivity::clearAllOrAltOnSelected() {
     return true;
   }
   // Explicit alts and the letter case-flip, same as touch long-press.
-  const char* alt = fui::keyboardAltOutputFor(currentLayout(), key->value);
+  const char* alt = fui::keyboardAltOutputHuPicco(currentLayout(), key->value);
   if (alt) {
     insertUtf8(alt);
     return true;
