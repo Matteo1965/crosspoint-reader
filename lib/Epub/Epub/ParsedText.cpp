@@ -24,6 +24,8 @@ bool ParsedText::opticalMarginEnabled_ = false;
 
 namespace {
 
+uint32_t lastCodepoint(std::string_view word);
+
 bool isHangingPunctuation(const uint32_t cp) {
   return cp == '-' || cp == '.' || cp == ',' || cp == ':' || cp == ';';
 }
