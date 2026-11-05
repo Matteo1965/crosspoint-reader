@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Picco CoverGrid/Lyra UI14 interface test build.
-          printf 'name=HU-PICCO-102\n' >> "$GITHUB_OUTPUT"
+          # Selectable Small/Normal Picco UI typography across all themes.
+          printf 'name=HU-PICCO-103\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
