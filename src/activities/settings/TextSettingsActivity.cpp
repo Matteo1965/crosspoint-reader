@@ -277,7 +277,12 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
   // maxLines=2 also marks the style explicitly set (see SettingsActivity).
+#if FREEINK_DEVICE_PICCO
+  props.labelText = SETTINGS.uiSize == CrossPointSettings::UI_SIZE_NORMAL ? screen.theme().bodyText
+                                                                          : screen.theme().smallText;
+#else
   props.labelText = screen.theme().smallText;
+#endif
   props.labelText.maxLines = 2;
   syncTabListViewport(screen, props);
   screen.list(props);
