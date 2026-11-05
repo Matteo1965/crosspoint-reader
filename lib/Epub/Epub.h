@@ -16,6 +16,13 @@ class ZipFile;
 
 class Epub {
  public:
+  struct BookInfo {
+    std::string title, author, language, description, publisher, date, identifier, series, seriesIndex;
+    int calibrePageCount = 0;
+    std::vector<std::string> subjects;
+    std::string filename;
+    size_t fileSize = 0;
+  };
   struct SyncMetadata {
     std::string isbn;
     std::string asin;
@@ -62,6 +69,7 @@ class Epub {
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool loadMetadata(std::string& title, std::string& author);
+  bool readBookInfo(BookInfo& info) const;
   bool loadSyncMetadata(SyncMetadata& metadata);
   bool clearCache() const;
   void setupCacheDir() const;
