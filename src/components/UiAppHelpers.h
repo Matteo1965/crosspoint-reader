@@ -67,7 +67,16 @@ inline freeink::ui::GfxRendererTarget makeUiTarget(const GfxRenderer& renderer) 
   freeink::ui::GfxRendererTarget target(renderer, BoardConfig::hasTouch());
   const auto spec = uiScaleSpec();
   target.setFont(freeink::ui::GfxRendererTarget::FONT_SMALL, spec.smallFontId);
-  target.setFont(freeink::ui::GfxRendererTarget::FONT_BODY, spec.bodyFontId);
+  int bodyFontId = spec.bodyFontId;
+#if defined(FREEINK_DEVICE_PICCO)
+  // Picco has the same 800x480 pixel grid as the larger X4-family panels but a
+  // physically smaller display, so Lyra/Cover Grid body text needs a larger
+  // built-in UI face for comparable physical readability.
+  if (SETTINGS.uiTheme == CrossPointSettings::LYRA || SETTINGS.uiTheme == CrossPointSettings::COVER_GRID) {
+    bodyFontId = UI_14_FONT_ID;
+  }
+#endif
+  target.setFont(freeink::ui::GfxRendererTarget::FONT_BODY, bodyFontId);
   target.setFont(freeink::ui::GfxRendererTarget::FONT_TITLE, spec.titleFontId);
   // Status chrome (header battery percent, clock) stays at the fixed small
   // font; the uiScale FONT_SMALL is for list subtitles.
