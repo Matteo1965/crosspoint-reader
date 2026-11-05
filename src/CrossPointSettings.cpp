@@ -111,6 +111,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["shortPwrBtn"] = shortPwrBtn;
   doc["extraParagraphSpacingPercent"] = extraParagraphSpacingPercent;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
+  doc["hungarianHyphenationExtended"] = hungarianHyphenationExtended;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -205,6 +206,8 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (extraParagraphSpacingPercent > 100 || extraParagraphSpacingPercent % 25 != 0)
     extraParagraphSpacingPercent = 100;
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | static_cast<uint8_t>(0)) ? 1 : 0;
+  hungarianHyphenationExtended =
+      (doc["hungarianHyphenationExtended"] | static_cast<uint8_t>(0)) ? 1 : 0;
 
   const auto indentSpaces = doc["paragraphIndentSpaces"];
   const bool hasSavedWidth = indentSpaces.is<int>();
@@ -350,6 +353,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
+  spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
   spec.embeddedStyle = embeddedStyle != 0;
   // Same layout as Display, so switching between them keeps the section cache.
   spec.imageRendering = imageRendering == IMAGES_DISPLAY_BW ? static_cast<uint8_t>(IMAGES_DISPLAY) : imageRendering;
