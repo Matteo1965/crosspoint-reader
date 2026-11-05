@@ -3276,9 +3276,11 @@ void ChapterHtmlSlimParser::makePages(const bool includeLastLine, const bool par
       currentPageNextY += blockStyle.paddingBottom;
     }
 
-    // Extra paragraph spacing if enabled (default behavior)
-    if (extraParagraphSpacing) {
-      currentPageNextY += lineHeight / 2;
+    // Extra paragraph spacing: 100% equals the legacy lineHeight/2 behavior.
+    // 255 is the Hungarian Edition Off sentinel.
+    if (extraParagraphSpacing > 0 && extraParagraphSpacing <= 100) {
+      const int extraBase = lineHeight / 2;
+      currentPageNextY += (extraBase * extraParagraphSpacing + 50) / 100;
     }
   }
 }
