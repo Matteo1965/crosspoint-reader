@@ -288,6 +288,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  // Hungarian Edition paragraph gap: Off or 0/25/50/75/100%.
+  uint8_t extraParagraphSpacingPercent = 100;
+  uint8_t fixedDialogueSpacing = 0;
   uint8_t opticalMargin = 0;  // Hungarian Edition: optical punctuation + short discretionary hyphen.
   uint8_t paragraphIndentSpaces = 2;
   static constexpr uint8_t WORD_SPACING_MIN = 50;
