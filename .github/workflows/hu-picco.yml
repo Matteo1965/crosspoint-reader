@@ -30,26 +30,19 @@ jobs:
             "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
             "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
-      - name: Generate Ubuntu 14 UI fonts
+      - name: Refresh built-in font IDs
         run: |
           set -euo pipefail
-          python -m pip install -U freetype-py fonttools
           cd lib/EpdFont/scripts
-          bash convert-builtin-fonts.sh
           bash build-font-ids.sh > ../../../src/fontIds.h
-
-      - name: Commit generated Ubuntu 14 UI fonts
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add lib/EpdFont/builtinFonts/ubuntu_14_regular.h \
-                  lib/EpdFont/builtinFonts/ubuntu_14_bold.h \
-                  src/fontIds.h
-          if git diff --cached --quiet; then
-            echo "Generated UI14 fonts already committed."
+          cd ../../..
+          if git diff --quiet -- src/fontIds.h; then
+            echo "Built-in font IDs already match the committed font headers."
           else
-            git commit -m "HU-PICCO-101: add generated Ubuntu 14 UI fonts"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/fontIds.h
+            git commit -m "HU-PICCO-102: refresh built-in font IDs"
             git push origin HEAD:picco-hungarian-edition-2.0.0
           fi
 
@@ -84,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Hungarian hyphenation selector + replacement rendering test build.
-          printf 'name=HU-PICCO-101\n' >> "$GITHUB_OUTPUT"
+          # Picco CoverGrid/Lyra UI14 interface test build.
+          printf 'name=HU-PICCO-102\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
