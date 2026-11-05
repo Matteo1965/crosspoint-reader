@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Hungarian UI polish, denser reader/text/about lists, About diagnostics.
-          printf 'name=HU-PICCO-104\n' >> "$GITHUB_OUTPUT"
+          # Fix compact 48px rows and shorten Hungarian side-button labels.
+          printf 'name=HU-PICCO-105\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
