@@ -244,11 +244,22 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       case Tab::Layout:
         rowValues_[i] = layoutValueText(i);
         break;
+      case Tab::Style:
+        if (i == static_cast<int>(StyleRow::Hyphenation)) {
+          if (!SETTINGS.hyphenationEnabled) {
+            rowValues_[i] = tr(STR_STATE_OFF);
+          } else {
+            rowValues_[i] = SETTINGS.hungarianHyphenationExtended
+                                ? (I18N.getLanguage() == Language::HU ? "Kiterjesztett magyar" : "Extended Hungarian")
+                                : (I18N.getLanguage() == Language::HU ? "Alap" : "Basic");
+          }
+        }
+        break;
       default:
         break;
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
-    if (tab_ == Tab::Style) {
+    if (tab_ == Tab::Style && i != static_cast<int>(StyleRow::Hyphenation)) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.fixedDialogueSpacing != 0);
@@ -538,9 +549,22 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::FocusReading:
       SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;
       break;
-    case StyleRow::Hyphenation:
-      SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;
-      break;
+    case StyleRow::Hyphenation: {
+      std::vector<std::string> options;
+      options.reserve(3);
+      options.push_back(tr(STR_STATE_OFF));
+      options.push_back(I18N.getLanguage() == Language::HU ? "Alap" : "Basic");
+      options.push_back(I18N.getLanguage() == Language::HU ? "Kiterjesztett magyar" : "Extended Hungarian");
+      const int selected = !SETTINGS.hyphenationEnabled ? 0 : (SETTINGS.hungarianHyphenationExtended ? 2 : 1);
+      optionPopup_.show(StrId::STR_HYPHENATION, options, selected, [](int idx) {
+        if (idx < 0 || idx > 2) return;
+        SETTINGS.hyphenationEnabled = idx == 0 ? 0 : 1;
+        SETTINGS.hungarianHyphenationExtended = idx == 2 ? 1 : 0;
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      return;
+    }
     case StyleRow::EmbeddedStyle:
       SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
       break;
