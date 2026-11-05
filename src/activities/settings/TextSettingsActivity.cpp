@@ -26,8 +26,9 @@ namespace {
 constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
 
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
-    StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING, StrId::STR_EXTRA_SPACING,
-    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT,    StrId::STR_SCREEN_MARGIN,     StrId::STR_HYPHENATION};
+    StrId::STR_LINE_SPACING,          StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING,
+    StrId::STR_EXTRA_SPACING,         StrId::STR_EXTRA_SPACING, StrId::STR_PARAGRAPH_INDENTATION,
+    StrId::STR_ALIGNMENT,             StrId::STR_SCREEN_MARGIN, StrId::STR_HYPHENATION};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
                                         StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
 
@@ -123,7 +124,10 @@ void TextSettingsActivity::rebuildRowItems() {
       case Tab::Layout:
         item.label = (i == static_cast<int>(LayoutRow::OpticalMargin))
                          ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Optical margin")
-                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+                         : (i == static_cast<int>(LayoutRow::FixedDialogueSpacing))
+                               ? (I18N.getLanguage() == Language::HU ? "Fix párbeszédköz"
+                                                                    : "Fixed dialogue spacing")
+                               : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
         item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
@@ -238,8 +242,8 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     if (tab_ == Tab::Style) {
       GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
-    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::ParaSpacing)) {
-      GUI.setCheckboxRow(rowItems_[i], SETTINGS.extraParagraphSpacing);
+    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
+      GUI.setCheckboxRow(rowItems_[i], SETTINGS.fixedDialogueSpacing != 0);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
       GUI.setCheckboxRow(rowItems_[i], SETTINGS.opticalMargin != 0);
     }
@@ -267,7 +271,7 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
   switch (tab_) {
     case Tab::Layout:
-      return (ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ||
+      return (ringPos() - 1 == static_cast<int>(LayoutRow::FixedDialogueSpacing) ||
               ringPos() - 1 == static_cast<int>(LayoutRow::OpticalMargin))
                  ? tr(STR_TOGGLE)
                  : tr(STR_SELECT);
@@ -396,8 +400,22 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       SETTINGS.saveToFile();
       requestUpdate();
       break;
-    case LayoutRow::ParaSpacing:
-      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
+    case LayoutRow::ParaSpacing: {
+      const std::vector<std::string> options = {tr(STR_STATE_OFF), "0%", "25%", "50%", "75%", "100%"};
+      const int selected = !SETTINGS.extraParagraphSpacing
+                               ? 0
+                               : std::clamp<int>(SETTINGS.extraParagraphSpacingPercent / 25 + 1, 1, 5);
+      optionPopup_.show(StrId::STR_EXTRA_SPACING, options, selected, [](int idx) {
+        if (idx < 0 || idx > 5) return;
+        SETTINGS.extraParagraphSpacing = idx != 0;
+        SETTINGS.extraParagraphSpacingPercent = idx <= 1 ? 0 : static_cast<uint8_t>((idx - 1) * 25);
+        SETTINGS.saveToFile();
+      });
+      requestUpdate();
+      break;
+    }
+    case LayoutRow::FixedDialogueSpacing:
+      SETTINGS.fixedDialogueSpacing = SETTINGS.fixedDialogueSpacing ? 0 : 1;
       SETTINGS.saveToFile();
       requestUpdate();
       break;
@@ -474,6 +492,11 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
       const uint8_t v = SETTINGS.lineSpacing;
       return I18N.get(LINE_SPACING_IDS[v < std::size(LINE_SPACING_IDS) ? v : CrossPointSettings::LINE_SPACING_120]);
     }
+    case LayoutRow::ParaSpacing:
+      return !SETTINGS.extraParagraphSpacing ? tr(STR_STATE_OFF)
+                                            : std::to_string(SETTINGS.extraParagraphSpacingPercent) + "%";
+    case LayoutRow::FixedDialogueSpacing:
+      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::ParaIndentation: {
       const int spaces = std::clamp<int>(SETTINGS.paragraphIndentSpaces, 0, 5);
       return spaces == 0 ? tr(STR_STATE_OFF) : std::to_string(spaces);
