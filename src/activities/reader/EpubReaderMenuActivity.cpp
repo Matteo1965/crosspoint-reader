@@ -5,6 +5,8 @@
 #include <HalFrontlight.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -258,6 +260,10 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.labelText = screen.theme().smallText;
 #endif
   props.labelText.maxLines = 2;
+#if FREEINK_DEVICE_PICCO
+  props.rowHeight = static_cast<int16_t>(std::max<int>(screen.theme().rowHeight - 8,
+                                                      screen.target().lineHeight(props.labelText.font) + 12));
+#endif
   syncListViewport(screen, props);
   screen.list(props);
 }
