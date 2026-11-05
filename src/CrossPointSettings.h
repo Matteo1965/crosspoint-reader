@@ -294,8 +294,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t opticalMargin = 0;  // Hungarian Edition: optical punctuation + short discretionary hyphen.
   uint8_t paragraphIndentSpaces = 2;
   static constexpr uint8_t WORD_SPACING_MIN = 50;
-  static constexpr uint8_t WORD_SPACING_MAX = 200;
-  static constexpr uint8_t WORD_SPACING_STEP = 25;
+  static constexpr uint8_t WORD_SPACING_MAX = 100;
+  static constexpr uint8_t WORD_SPACING_STEP = 10;
   uint8_t wordSpacing = 100;                              // percent of the font's space advance
   static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;  // stored 0..4 maps to -2..+2 px
   uint8_t characterSpacing = CHARACTER_SPACING_OFFSET;
@@ -338,8 +338,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
-  static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 25;
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
