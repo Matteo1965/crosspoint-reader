@@ -53,7 +53,7 @@ jobs:
         shell: bash
         run: |
           # First CrossPoint 2.0.0-final Hungarian Edition test build.
-          printf 'name=HU-PICCO-023\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-024\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
