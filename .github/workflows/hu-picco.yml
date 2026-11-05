@@ -30,6 +30,22 @@ jobs:
             "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
             "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+      - name: Generate Ubuntu 14 UI fonts
+        run: |
+          set -euo pipefail
+          python -m pip install -U freetype-py fonttools
+          cd lib/EpdFont/scripts
+          bash convert-builtin-fonts.sh
+
+      - name: Upload Ubuntu 14 UI fonts
+        uses: actions/upload-artifact@v6
+        with:
+          name: HU-PICCO-UI14-fonts
+          path: |
+            lib/EpdFont/builtinFonts/ubuntu_14_regular.h
+            lib/EpdFont/builtinFonts/ubuntu_14_bold.h
+          if-no-files-found: error
+
       - name: Compile Picco
         run: |
           set -euo pipefail
