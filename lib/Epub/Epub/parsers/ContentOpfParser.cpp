@@ -308,13 +308,19 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
     const std::string lowerName = lowerAscii(metaName);
     if (lowerName == "cover") self->coverItemId = content;
+    if (self->description.empty() &&
+        (lowerName == "description" || lowerName == "calibre:comments" || lowerName == "comments" ||
+         lowerName == "summary")) {
+      self->description = content;
+    }
     if (lowerName == "calibre:series" && self->calibreSeries.empty()) self->calibreSeries = content;
     if (lowerName == "calibre:series_index" && !self->calibreSeriesIndex.has_value()) {
       self->calibreSeriesIndex = parseFiniteFloat(content);
     }
 
     const std::string property = lowerAscii(self->metaProperty);
-    if (property == "belongs-to-collection" || property == "collection-type" || property == "group-position") {
+    if (property == "belongs-to-collection" || property == "collection-type" || property == "group-position" ||
+        property == "description" || property == "dcterms:description" || property == "schema:description") {
       self->state = IN_META_TEXT;
       self->metadataSpacePending = false;
     }
@@ -583,7 +589,10 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_META_TEXT && xmlLocalNameEquals(name, "meta")) {
     const std::string property = lowerAscii(self->metaProperty);
-    if (property == "belongs-to-collection" && !self->metaId.empty()) {
+    if (self->description.empty() &&
+        (property == "description" || property == "dcterms:description" || property == "schema:description")) {
+      self->description = self->metaText;
+    } else if (property == "belongs-to-collection" && !self->metaId.empty()) {
       CollectionMetadata* candidate = nullptr;
       for (auto& collection : self->collectionCandidates) {
         if (collection.id == self->metaId) {
