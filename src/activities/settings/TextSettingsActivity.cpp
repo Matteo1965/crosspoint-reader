@@ -460,8 +460,7 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       options.reserve(std::size(WORD_SPACING_VALUES));
       for (const uint8_t v : WORD_SPACING_VALUES) options.push_back(std::to_string(v) + "%");
       const int selected = nearestChoice(SETTINGS.wordSpacing, WORD_SPACING_VALUES, std::size(WORD_SPACING_VALUES));
-      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Saját Szóköz" : "Custom word spacing",
-                        options, selected, [](int idx) {
+      optionPopup_.show(StrId::STR_WORD_SPACING, options, selected, [](int idx) {
         if (idx >= 0 && idx < static_cast<int>(std::size(WORD_SPACING_VALUES))) {
           SETTINGS.wordSpacing = WORD_SPACING_VALUES[idx];
           SETTINGS.saveToFile();
@@ -483,8 +482,7 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       options.reserve(std::size(MARGIN_VALUES));
       for (const uint8_t v : MARGIN_VALUES) options.push_back(std::to_string(v));
       const int selected = nearestChoice(SETTINGS.screenMargin, MARGIN_VALUES, std::size(MARGIN_VALUES));
-      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Saját Margó" : "Custom margin",
-                        options, selected, [](int idx) {
+      optionPopup_.show(StrId::STR_SCREEN_MARGIN, options, selected, [](int idx) {
         if (idx >= 0 && idx < static_cast<int>(std::size(MARGIN_VALUES))) {
           SETTINGS.screenMargin = MARGIN_VALUES[idx];
           SETTINGS.saveToFile();
