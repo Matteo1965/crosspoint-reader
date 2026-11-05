@@ -261,8 +261,7 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
 #endif
   props.labelText.maxLines = 2;
 #if FREEINK_DEVICE_PICCO
-  props.rowHeight = static_cast<int16_t>(std::max<int>(screen.theme().rowHeight - 8,
-                                                      screen.target().lineHeight(props.labelText.font) + 12));
+  props.rowHeight = 48;
 #endif
   syncListViewport(screen, props);
   screen.list(props);
