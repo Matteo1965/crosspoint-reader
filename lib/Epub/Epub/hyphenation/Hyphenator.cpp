@@ -12,6 +12,7 @@
 
 const LanguageHyphenator* Hyphenator::cachedHyphenator_ = nullptr;
 bool Hyphenator::preferredLanguageIsHungarian_ = false;
+bool Hyphenator::hungarianExtended_ = false;
 
 namespace {
 
@@ -276,7 +277,7 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
-  const bool useHungarianExtended = preferredLanguageIsHungarian_;
+  const bool useHungarianExtended = hungarianExtended_ && preferredLanguageIsHungarian_;
 
   // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;
@@ -374,3 +375,5 @@ void Hyphenator::setPreferredLanguage(const std::string& lang) {
   preferredLanguageIsHungarian_ = cachedHyphenator_ != nullptr &&
                                   cachedHyphenator_ == getLanguageHyphenatorForPrimaryTag("hu");
 }
+
+void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }
