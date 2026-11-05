@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   picco:
@@ -36,6 +36,22 @@ jobs:
           python -m pip install -U freetype-py fonttools
           cd lib/EpdFont/scripts
           bash convert-builtin-fonts.sh
+          bash build-font-ids.sh > ../../../src/fontIds.h
+
+      - name: Commit generated Ubuntu 14 UI fonts
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/EpdFont/builtinFonts/ubuntu_14_regular.h \
+                  lib/EpdFont/builtinFonts/ubuntu_14_bold.h \
+                  src/fontIds.h
+          if git diff --cached --quiet; then
+            echo "Generated UI14 fonts already committed."
+          else
+            git commit -m "HU-PICCO-101: add generated Ubuntu 14 UI fonts"
+            git push origin HEAD:picco-hungarian-edition-2.0.0
+          fi
 
       - name: Upload Ubuntu 14 UI fonts
         uses: actions/upload-artifact@v6
@@ -69,7 +85,7 @@ jobs:
         shell: bash
         run: |
           # Hungarian hyphenation selector + replacement rendering test build.
-          printf 'name=HU-PICCO-100\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-101\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
