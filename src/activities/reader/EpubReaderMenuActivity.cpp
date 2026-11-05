@@ -251,7 +251,12 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.valueInset = 8;               // air between the value and the row edge
   // Label at the value's font size: both sides of the row read as one unit.
   // maxLines=2 also marks the style caller-owned (see textStyleUnset).
+#if FREEINK_DEVICE_PICCO
+  props.labelText = SETTINGS.uiSize == CrossPointSettings::UI_SIZE_NORMAL ? screen.theme().bodyText
+                                                                          : screen.theme().smallText;
+#else
   props.labelText = screen.theme().smallText;
+#endif
   props.labelText.maxLines = 2;
   syncListViewport(screen, props);
   screen.list(props);
