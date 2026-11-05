@@ -205,6 +205,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // UI Theme
   enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, COVER_GRID = 4 };
 
+  // Picco UI typography size. Geometry stays theme-owned for now; a later
+  // pass can derive row/popup spacing from this same setting.
+  enum UI_SIZE { UI_SIZE_SMALL = 0, UI_SIZE_NORMAL = 1, UI_SIZE_COUNT };
+
   // Image rendering in EPUB reader. IMAGES_DISPLAY_BW lays images out like
   // IMAGES_DISPLAY but draws them as a B/W dither, so image pages skip the
   // extra grayscale refresh.
@@ -359,6 +363,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LYRA;
+  // Compact legacy UI vs Picco-optimised larger typography. Older Picco
+  // settings files without this key migrate to Normal in fromJson().
+  uint8_t uiSize = UI_SIZE_SMALL;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
