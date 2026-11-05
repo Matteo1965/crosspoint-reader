@@ -8,7 +8,6 @@
 #include <HalTiltSensor.h>
 #include <esp_mac.h>
 
-#include <algorithm>
 #include <cstdio>
 
 #include "MappedInputManager.h"
@@ -151,8 +150,7 @@ void AboutActivity::buildScreen(UiScreen& screen) {
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 1;
 #if FREEINK_DEVICE_PICCO
-  props.rowHeight = static_cast<int16_t>(std::max<int>(screen.theme().rowHeight - 8,
-                                                      screen.target().lineHeight(props.labelText.font) + 10));
+  props.rowHeight = 48;
 #endif
   syncListViewport(screen, props);
   screen.list(props);
