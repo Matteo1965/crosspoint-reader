@@ -91,6 +91,7 @@ class ParsedText {
   uint8_t paragraphIndentSpaces;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  bool fixedDialogueSpacing;
   static bool opticalMarginEnabled_;
   bool isNaturalAlign;
   bool hasRtlWord;
@@ -136,16 +137,19 @@ class ParsedText {
                    const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                    const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
+  bool isFixedDialogueBoundary(size_t boundary) const;
 
  public:
   static void setOpticalMarginEnabled(bool enabled) { opticalMarginEnabled_ = enabled; }
   static bool isOpticalMarginEnabled() { return opticalMarginEnabled_; }
   explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
-                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2)
+                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2,
+                      const bool fixedDialogueSpacing = false)
       : blockStyle(blockStyle),
         paragraphIndentSpaces(paragraphIndentSpaces),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
+        fixedDialogueSpacing(fixedDialogueSpacing),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;
