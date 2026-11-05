@@ -128,7 +128,12 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabProps.tabInset = fui::Insets{4, 4, 7, 4};
     tabProps.contentInset = fui::Insets{2, 0, 2, 0};
   } else {
+#if FREEINK_DEVICE_PICCO
+    tabProps.text = SETTINGS.uiSize == CrossPointSettings::UI_SIZE_NORMAL ? screen.theme().bodyText
+                                                                          : screen.theme().smallText;
+#else
     tabProps.text = screen.theme().smallText;
+#endif
     tabProps.gap = static_cast<int16_t>(metrics.tabSpacing);
     // Unfocused state: no bottom inset, so the pill (and the 2px selected
     // underline drawn along its bottom edge) reaches the band's 1px divider —
