@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Selectable Small/Normal Picco UI typography across all themes.
-          printf 'name=HU-PICCO-103\n' >> "$GITHUB_OUTPUT"
+          # Hungarian UI polish, denser reader/text/about lists, About diagnostics.
+          printf 'name=HU-PICCO-104\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
