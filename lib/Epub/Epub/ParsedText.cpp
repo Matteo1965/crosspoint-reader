@@ -460,10 +460,24 @@ bool ParsedText::storeWord(const std::string_view text, WordStore::StoredWord& o
   return false;
 }
 
+bool ParsedText::isFixedDialogueBoundary(const size_t boundary) const {
+  if (!fixedDialogueSpacing || boundary != 1 || words.empty()) return false;
+  const std::string_view marker = wordAt(0);
+  if (marker.empty()) return false;
+  const uint32_t cp = firstCodepoint(marker);
+  return cp == lastCodepoint(marker) && (cp == '-' || cp == 0x2013 || cp == 0x2014);
+}
+
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious, const uint32_t visibleTextOffset, const uint8_t linkId,
                          const uint8_t sizeSlot, const bool noSpaceBefore) {
   if (word.empty()) return;
+
+  // Hungarian Edition dialogue normalization: a standalone ASCII '-' at the
+  // beginning of a paragraph is treated as an en dash for fixed dialogue spacing.
+  if (fixedDialogueSpacing && words.empty() && !attachToPrevious && word == "-") {
+    word = "\xE2\x80\x93";
+  }
 
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
   // (a base letter followed by separate combining accents -- common for Vietnamese,
@@ -522,6 +536,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   bool effectiveAttachToPrevious = attachToPrevious;
   bool effectiveNoSpaceBefore = noSpaceBefore;
+  // A paragraph-leading dialogue marker keeps one natural-width gap that is
+  // unbreakable and is excluded from justification stretching.
+  if (fixedDialogueSpacing && !attachToPrevious && isFixedDialogueBoundary(words.size())) {
+    effectiveAttachToPrevious = true;
+    effectiveNoSpaceBefore = false;
+  }
   // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
   // previous one in the source) may be turned into a gap-less break opportunity. When real
   // whitespace separated the two words, that space is content and must be rendered: Korean
@@ -595,6 +615,22 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       hasRtlWord = true;
     }
     return;
+  }
+
+  // Repair a missing source space after a paragraph-leading en/em dash.
+  if (fixedDialogueSpacing && words.empty() && !attachToPrevious &&
+      (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0)) {
+    const auto* begin = reinterpret_cast<const unsigned char*>(word.c_str());
+    const auto* afterDash = begin;
+    const uint32_t first = utf8NextCodepoint(&afterDash);
+    const size_t dashBytes = static_cast<size_t>(afterDash - begin);
+    if ((first == 0x2013 || first == 0x2014) && dashBytes < word.size()) {
+      pushToken(std::string_view(word).substr(0, dashBytes), effectiveAttachToPrevious, effectiveNoSpaceBefore, 0,
+                visibleTextOffset);
+      pushToken(std::string_view(word).substr(dashBytes), true, false, 0, visibleTextOffset + 1);
+      if (wordStartsRtl) hasRtlWord = true;
+      return;
+    }
   }
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
