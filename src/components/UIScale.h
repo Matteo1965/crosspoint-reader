@@ -12,10 +12,18 @@ struct UIScaleSpec {
   int titleFontId;
 };
 
+inline bool uiUsesNormalSize() {
+#if FREEINK_DEVICE_PICCO
+  return SETTINGS.uiSize == CrossPointSettings::UI_SIZE_NORMAL;
+#else
+  return false;
+#endif
+}
+
 inline UIScaleSpec uiScaleSpec() {
   UIScaleSpec spec{};
 #if FREEINK_DEVICE_PICCO
-  if (SETTINGS.uiSize == CrossPointSettings::UI_SIZE_NORMAL) {
+  if (uiUsesNormalSize()) {
     spec.smallFontId = UI_12_FONT_ID;
     spec.bodyFontId = UI_14_FONT_ID;
     spec.titleFontId = UI_14_FONT_ID;
