@@ -46,22 +46,26 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
 }
 
-constexpr StrId WORD_SPACING_IDS[] = {StrId::STR_SPACING_50_PERCENT,  StrId::STR_SPACING_75_PERCENT,
-                                      StrId::STR_SPACING_100_PERCENT, StrId::STR_SPACING_125_PERCENT,
-                                      StrId::STR_SPACING_150_PERCENT, StrId::STR_SPACING_175_PERCENT,
-                                      StrId::STR_SPACING_200_PERCENT};
+constexpr uint8_t WORD_SPACING_VALUES[] = {50, 60, 70, 80, 90, 100};
+constexpr uint8_t MARGIN_VALUES[] = {5, 10, 12, 14, 16, 18, 20, 25};
+
+int nearestChoice(const uint8_t value, const uint8_t* values, const size_t count) {
+  int best = 0;
+  int distance = 256;
+  for (size_t i = 0; i < count; ++i) {
+    const int difference = std::abs(static_cast<int>(value) - static_cast<int>(values[i]));
+    if (difference < distance) {
+      distance = difference;
+      best = static_cast<int>(i);
+    }
+  }
+  return best;
+}
 constexpr StrId CHARACTER_SPACING_IDS[] = {StrId::STR_SPACING_MINUS_2, StrId::STR_SPACING_MINUS_1,
                                            StrId::STR_SPACING_ZERO, StrId::STR_SPACING_PLUS_1,
                                            StrId::STR_SPACING_PLUS_2};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
-constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
-constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
-constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
-constexpr int WORD_SPACING_MIN = CrossPointSettings::WORD_SPACING_MIN;
-constexpr int WORD_SPACING_MAX = CrossPointSettings::WORD_SPACING_MAX;
-constexpr int WORD_SPACING_STEP = CrossPointSettings::WORD_SPACING_STEP;
-static_assert(std::size(WORD_SPACING_IDS) == (WORD_SPACING_MAX - WORD_SPACING_MIN) / WORD_SPACING_STEP + 1);
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -127,6 +131,10 @@ void TextSettingsActivity::rebuildRowItems() {
                          : (i == static_cast<int>(LayoutRow::FixedDialogueSpacing))
                                ? (I18N.getLanguage() == Language::HU ? "Fix párbeszédköz"
                                                                     : "Fixed dialogue spacing")
+                         : (i == static_cast<int>(LayoutRow::WordSpacing))
+                               ? (I18N.getLanguage() == Language::HU ? "Saját Szóköz" : "Custom word spacing")
+                         : (i == static_cast<int>(LayoutRow::ScreenMargin))
+                               ? (I18N.getLanguage() == Language::HU ? "Saját Margó" : "Custom margin")
                                : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
@@ -448,13 +456,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::WordSpacing: {
-      const int cur = (std::clamp<int>(SETTINGS.wordSpacing, WORD_SPACING_MIN, WORD_SPACING_MAX) - WORD_SPACING_MIN) /
-                      WORD_SPACING_STEP;
-      optionPopup_.show(StrId::STR_WORD_SPACING, WORD_SPACING_IDS, static_cast<int>(std::size(WORD_SPACING_IDS)), cur,
-                        [](int idx) {
-                          SETTINGS.wordSpacing = static_cast<uint8_t>(WORD_SPACING_MIN + idx * WORD_SPACING_STEP);
-                          SETTINGS.saveToFile();
-                        });
+      std::vector<std::string> options;
+      options.reserve(std::size(WORD_SPACING_VALUES));
+      for (const uint8_t v : WORD_SPACING_VALUES) options.push_back(std::to_string(v) + "%");
+      const int selected = nearestChoice(SETTINGS.wordSpacing, WORD_SPACING_VALUES, std::size(WORD_SPACING_VALUES));
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Saját Szóköz" : "Custom word spacing",
+                        options, selected, [](int idx) {
+        if (idx >= 0 && idx < static_cast<int>(std::size(WORD_SPACING_VALUES))) {
+          SETTINGS.wordSpacing = WORD_SPACING_VALUES[idx];
+          SETTINGS.saveToFile();
+        }
+      });
       requestUpdate();
       break;
     }
@@ -468,12 +480,15 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       break;
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
-      options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
-      for (int m = MARGIN_MIN; m <= MARGIN_MAX; m += MARGIN_STEP) options.push_back(std::to_string(m));
-      const int cur = (std::clamp<int>(SETTINGS.screenMargin, MARGIN_MIN, MARGIN_MAX) - MARGIN_MIN) / MARGIN_STEP;
-      optionPopup_.show(StrId::STR_SCREEN_MARGIN, options, cur, [](int idx) {
-        SETTINGS.screenMargin = static_cast<uint8_t>(MARGIN_MIN + idx * MARGIN_STEP);
-        SETTINGS.saveToFile();
+      options.reserve(std::size(MARGIN_VALUES));
+      for (const uint8_t v : MARGIN_VALUES) options.push_back(std::to_string(v));
+      const int selected = nearestChoice(SETTINGS.screenMargin, MARGIN_VALUES, std::size(MARGIN_VALUES));
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Saját Margó" : "Custom margin",
+                        options, selected, [](int idx) {
+        if (idx >= 0 && idx < static_cast<int>(std::size(MARGIN_VALUES))) {
+          SETTINGS.screenMargin = MARGIN_VALUES[idx];
+          SETTINGS.saveToFile();
+        }
       });
       requestUpdate();
       break;
