@@ -40,8 +40,10 @@ class Hyphenator {
 
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
+  static void setHungarianExtended(bool enabled);
 
  private:
   static const LanguageHyphenator* cachedHyphenator_;
   static bool preferredLanguageIsHungarian_;
+  static bool hungarianExtended_;
 };
