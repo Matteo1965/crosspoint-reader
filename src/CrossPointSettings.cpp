@@ -194,6 +194,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   };
   forEachBaseSetting(visit);
 
+#if FREEINK_DEVICE_PICCO
+  // The UI-size setting is new in the Picco Hungarian Edition. Existing
+  // settings files should immediately use the physically larger Picco profile,
+  // while users can still switch back to Small from Display settings.
+  if (doc["uiSize"].isNull()) {
+    uiSize = UI_SIZE_NORMAL;
+    needsResave = true;
+  }
+#endif
+
   // Plugin System did not exist in older settings files. Preserve the behavior
   // of users who already have SD plugins installed, while keeping the new
   // default disabled on clean installs.
