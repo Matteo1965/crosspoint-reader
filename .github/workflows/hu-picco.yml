@@ -52,8 +52,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # First CrossPoint 2.0.0-final Hungarian Edition test build.
-          printf 'name=HU-PICCO-027\n' >> "$GITHUB_OUTPUT"
+          # Hungarian hyphenation selector + replacement rendering test build.
+          printf 'name=HU-PICCO-100\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
