@@ -741,13 +741,14 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
     std::string labelStr = buttonLabel(i);
     const char* label = labelStr.c_str();
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
+    const int menuFontId = uiUsesNormalSize() ? UI_14_FONT_ID : UI_10_FONT_ID;
+    const int textWidth = renderer.getTextWidth(menuFontId, label);
     const int textX = rect.x + (rect.width - textWidth) / 2;
-    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const int lineHeight = renderer.getLineHeight(menuFontId);
     const int textY =
         tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
     // Invert text when the tile is selected, to contrast with the filled background
-    renderer.drawText(UI_10_FONT_ID, textX, textY, label, selectedIndex != i);
+    renderer.drawText(menuFontId, textX, textY, label, selectedIndex != i);
   }
 }
 
