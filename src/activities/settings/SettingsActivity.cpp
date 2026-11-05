@@ -196,15 +196,17 @@ void SettingsActivity::activateIndex(const int index) {
 }
 
 void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
-  // Theme changes take effect immediately, on this screen — reload the theme
-  // and re-derive the app's tokens so the very next repaint is in the new look.
-  if (valuePtr != &CrossPointSettings::uiTheme) {
+  // Theme and UI-size changes take effect immediately. A theme change also
+  // replaces the active theme object; a size-only change only needs fresh
+  // font bindings/tokens for the current FreeInkUI host.
+  if (valuePtr == &CrossPointSettings::uiTheme) {
+    UITheme::getInstance().reload();
+    resetUi();
     return;
   }
-  UITheme::getInstance().reload();
-  // Re-derive the shared tokens for the new look; the gate stays closed until
-  // the repaint that rebuilds the interaction table in the new layout.
-  resetUi();
+  if (valuePtr == &CrossPointSettings::uiSize) {
+    resetUi();
+  }
 }
 
 bool SettingsActivity::handleCustomInput() {
