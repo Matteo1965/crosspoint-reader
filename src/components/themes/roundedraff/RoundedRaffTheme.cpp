@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
