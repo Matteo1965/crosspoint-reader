@@ -82,7 +82,8 @@ namespace {
 // v72: Make ruby rendering closer to how Chromium renders ruby by default.
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
 // v78: CPHUN-224 per-line letter-spacing config is persisted in TextBlock/header.
-constexpr uint8_t SECTION_FILE_VERSION = 78;
+// v79: Hungarian hyphenation threshold + embedded soft-hyphen setting in the cache header.
+constexpr uint8_t SECTION_FILE_VERSION = 79;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -105,7 +106,8 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(int8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
-                                 sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t);
+                                 sizeof(uint16_t) + sizeof(uint8_t) + sizeof(uint8_t) +
+                                 sizeof(uint8_t) + sizeof(uint8_t) + sizeof(bool);
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -153,7 +155,9 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
                                    sizeof(spec.opticalMarginPixels) + sizeof(spec.fixedDialogueSpacing) + sizeof(spec.paragraphIndentSpaces) +
                                    sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) +
                                    sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.hyphenationEnabled) +
-                                   sizeof(spec.hungarianHyphenationExtended) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
+                                   sizeof(spec.hungarianHyphenationExtended) + sizeof(spec.hungarianMinPrefix) +
+                                   sizeof(spec.hungarianMinSuffix) + sizeof(spec.softHyphenEnabled) +
+                                   sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
                                    sizeof(spec.focusReadingEnabled) + sizeof(spec.characterSpacing) +
                                    sizeof(spec.wordSpacingPercent) + sizeof(spec.letterSpacingLimitPercent) +
                                    sizeof(spec.letterSpacingOptimization) + sizeof(spec.letterSpacingOptimizationThreshold) +
@@ -175,6 +179,9 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.viewportHeight);
   serialization::writePod(file, spec.hyphenationEnabled);
   serialization::writePod(file, spec.hungarianHyphenationExtended);
+  serialization::writePod(file, spec.hungarianMinPrefix);
+  serialization::writePod(file, spec.hungarianMinSuffix);
+  serialization::writePod(file, spec.softHyphenEnabled);
   serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
@@ -221,6 +228,9 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
     bool fileHungarianHyphenationExtended;
+    uint8_t fileHungarianMinPrefix;
+    uint8_t fileHungarianMinSuffix;
+    bool fileSoftHyphenEnabled;
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
@@ -241,6 +251,9 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileViewportHeight);
     serialization::readPod(file, fileHyphenationEnabled);
     serialization::readPod(file, fileHungarianHyphenationExtended);
+    serialization::readPod(file, fileHungarianMinPrefix);
+    serialization::readPod(file, fileHungarianMinSuffix);
+    serialization::readPod(file, fileSoftHyphenEnabled);
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
@@ -257,6 +270,9 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
         spec.hyphenationEnabled != fileHyphenationEnabled ||
         spec.hungarianHyphenationExtended != fileHungarianHyphenationExtended ||
+        spec.hungarianMinPrefix != fileHungarianMinPrefix ||
+        spec.hungarianMinSuffix != fileHungarianMinSuffix ||
+        spec.softHyphenEnabled != fileSoftHyphenEnabled ||
         spec.embeddedStyle != fileEmbeddedStyle ||
         spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled ||
         spec.characterSpacing != fileCharacterSpacing || spec.wordSpacingPercent != fileWordSpacingPercent ||
@@ -502,7 +518,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
-      spec.focusReadingEnabled, spec.fixedDialogueSpacing,
+      spec.softHyphenEnabled, spec.focusReadingEnabled, spec.fixedDialogueSpacing,
       [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
                      const uint32_t visibleTextOffset) {
         ctxPtr->lut.push_back(
@@ -523,6 +539,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser->setParagraphIndentSpaces(spec.paragraphIndentSpaces);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   Hyphenator::setHungarianExtended(spec.hungarianHyphenationExtended);
+  Hyphenator::setHungarianMinima(spec.hungarianMinPrefix, spec.hungarianMinSuffix);
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {
