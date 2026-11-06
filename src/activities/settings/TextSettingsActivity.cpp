@@ -22,17 +22,15 @@
 namespace fui = freeink::ui;
 
 namespace {
-// Tab labels for Font | Size | Layout | Style.
-constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
+// Four compact tabs: Font | Layout | Text | Style.
+constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_LAYOUT, StrId::STR_TEXT_SETTINGS, StrId::STR_STYLE};
 
 constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
-    StrId::STR_LINE_SPACING, StrId::STR_WORD_SPACING, StrId::STR_CHARACTER_SPACING,
-    StrId::STR_CHARACTER_SPACING,
-    StrId::STR_EXTRA_SPACING, StrId::STR_EXTRA_SPACING, StrId::STR_PARAGRAPH_INDENTATION,
-    StrId::STR_ALIGNMENT, StrId::STR_SCREEN_MARGIN, StrId::STR_HYPHENATION};
+    StrId::STR_LINE_SPACING, StrId::STR_WORD_SPACING, StrId::STR_EXTRA_SPACING,
+    StrId::STR_PARAGRAPH_INDENTATION, StrId::STR_ALIGNMENT, StrId::STR_SCREEN_MARGIN};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
                                         StrId::STR_HYPHENATION_NO_PREVIEW, StrId::STR_HYPHENATION_NO_PREVIEW,
-                                        StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
+                                        StrId::STR_EMBEDDED_STYLE_NO_PREVIEW};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -71,7 +69,12 @@ TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputMan
                                            const SdCardFontRegistry* registry, Tab initialTab)
     : UiTabListActivity("TextSettings", renderer, mappedInput), registry_(registry), tab_(initialTab) {}
 
-const char* TextSettingsActivity::tabLabel(const int index) const { return I18N.get(TAB_NAME_IDS[index]); }
+const char* TextSettingsActivity::tabLabel(const int index) const {
+  if (static_cast<Tab>(index) == Tab::Text) {
+    return I18N.getLanguage() == Language::HU ? "Szöveg" : "Text";
+  }
+  return I18N.get(TAB_NAME_IDS[index]);
+}
 
 void TextSettingsActivity::onEnter() {
   UiTabListActivity::onEnter();
@@ -101,7 +104,6 @@ void TextSettingsActivity::onEnter() {
   // remembered selection (Family/Size open on the current item).
   for (auto& n : tabNavs) n.selected = 1;  // default to the first list row
   tabNavs[static_cast<int>(Tab::Family)].selected = currentFamilyIndex_ + 1;
-  tabNavs[static_cast<int>(Tab::Size)].selected = currentSizeIndex_ + 1;
   tabNavs[static_cast<int>(tab_)].selected = 0;  // screen opens with the tab bar focused, not a list row
 
   rebuildRowItems();
@@ -119,26 +121,28 @@ void TextSettingsActivity::rebuildRowItems() {
     fui::ListItem item;
     switch (tab_) {
       case Tab::Family:
-        item.label = fonts_[i].name.c_str();
-        break;
-      case Tab::Size:
-        item.label = sizes_[i].name.c_str();
+        item.label = i < static_cast<int>(fonts_.size())
+                         ? fonts_[i].name.c_str()
+                         : (I18N.getLanguage() == Language::HU ? "Méret" : "Size");
         break;
       case Tab::Layout:
-        item.label = (i == static_cast<int>(LayoutRow::OpticalMargin))
-                         ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Optical margin")
-                         : (i == static_cast<int>(LayoutRow::FixedDialogueSpacing))
-                               ? (I18N.getLanguage() == Language::HU ? "Fix párbeszédköz"
-                                                                    : "Fixed dialogue spacing")
-                         : (i == static_cast<int>(LayoutRow::WordSpacing))
-                               ? (I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Minimum word spacing")
-                         : (i == static_cast<int>(LayoutRow::LetterSpacingCorrection))
-                               ? (I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction")
-                         : (i == static_cast<int>(LayoutRow::LetterSpacingOptimization))
-                               ? (I18N.getLanguage() == Language::HU ? "Betűköz optimalizálás" : "Letter spacing optimization")
-                         : (i == static_cast<int>(LayoutRow::ScreenMargin))
-                               ? (I18N.getLanguage() == Language::HU ? "Margó" : "Margin")
-                               : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        item.label = (i == static_cast<int>(LayoutRow::WordSpacing))
+                         ? (I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Minimum word spacing")
+                     : (i == static_cast<int>(LayoutRow::ScreenMargin))
+                         ? (I18N.getLanguage() == Language::HU ? "Margó" : "Margin")
+                         : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        break;
+      case Tab::Text:
+        item.label =
+            (i == static_cast<int>(TextRow::LetterSpacingCorrection))
+                ? (I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction")
+            : (i == static_cast<int>(TextRow::LetterSpacingOptimization))
+                ? (I18N.getLanguage() == Language::HU ? "Betűköz optimalizálás" : "Letter spacing optimization")
+            : (i == static_cast<int>(TextRow::OpticalMargin))
+                ? (I18N.getLanguage() == Language::HU ? "Optikai margó" : "Optical margin")
+            : (i == static_cast<int>(TextRow::FixedDialogueSpacing))
+                ? (I18N.getLanguage() == Language::HU ? "Fix párbeszédköz" : "Fixed dialogue spacing")
+                : I18N.get(StrId::STR_TEXT_AA_NO_PREVIEW);
         break;
       case Tab::Style:
         if (i == static_cast<int>(StyleRow::HyphenationThreshold)) {
