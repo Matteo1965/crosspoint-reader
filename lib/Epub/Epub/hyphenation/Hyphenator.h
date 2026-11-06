@@ -37,10 +37,13 @@ class Hyphenator {
   //      pattern breaks were found). Used as a last resort to prevent a single oversized
   //      word from overflowing the page width.
   static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);
+  // Return only explicit soft-hyphen (U+00AD) break opportunities.
+  static std::vector<BreakInfo> softHyphenBreakOffsets(const std::string& word);
 
   // Provide a publication-level language hint (e.g. "en", "en-US", "ru") used to select hyphenation rules.
   static void setPreferredLanguage(const std::string& lang);
   static void setHungarianExtended(bool enabled);
+  static void setHungarianMinima(size_t minPrefix, size_t minSuffix);
 
  private:
   static const LanguageHyphenator* cachedHyphenator_;
