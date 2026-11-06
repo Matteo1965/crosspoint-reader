@@ -358,6 +358,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.extraParagraphSpacing = extraParagraphSpacing ? extraParagraphSpacingPercent : 255;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.opticalMargin = opticalMargin != 0;
+  spec.opticalMarginPixels = opticalMargin ? screenMargin : 0;
   spec.paragraphIndentSpaces = paragraphIndentSpaces;
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
