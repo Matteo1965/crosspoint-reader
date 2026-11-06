@@ -258,13 +258,15 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       default:
         break;
     }
-    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    rowItems_[i].toggle = false;
     if (tab_ == Tab::Style && i != static_cast<int>(StyleRow::Hyphenation)) {
-      GUI.setCheckboxRow(rowItems_[i], styleRowChecked(i));
+      rowValues_[i] = styleRowChecked(i) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
-      GUI.setCheckboxRow(rowItems_[i], SETTINGS.fixedDialogueSpacing != 0);
+      rowValues_[i] = SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
-      GUI.setCheckboxRow(rowItems_[i], SETTINGS.opticalMargin != 0);
+      rowValues_[i] = SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    }
+    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     }
   }
 
