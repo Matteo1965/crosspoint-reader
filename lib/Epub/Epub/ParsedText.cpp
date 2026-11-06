@@ -1411,7 +1411,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // annotation, so the hyphenator sees the whole word and every legal break is reachable.
   // Hangul breaks come first so they win a tie against a hyphenated break at the same width.
   auto breakInfos = hangulLineEndBreaks(word);
-  const auto hyphenBreaks = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  const auto hyphenBreaks = hyphenationEnabled
+                                ? Hyphenator::breakOffsets(word, allowFallbackBreaks)
+                                : (softHyphenEnabled ? Hyphenator::softHyphenBreakOffsets(word)
+                                                    : std::vector<Hyphenator::BreakInfo>{});
   breakInfos.insert(breakInfos.end(), hyphenBreaks.begin(), hyphenBreaks.end());
   if (breakInfos.empty()) {
     return false;
