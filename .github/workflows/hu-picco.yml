@@ -79,7 +79,7 @@ jobs:
         shell: bash
         run: |
           # Scale optical hanging punctuation to the full configured right reader margin.
-          printf 'name=HU-PICCO-112\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-113\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
