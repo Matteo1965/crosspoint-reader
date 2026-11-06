@@ -300,10 +300,19 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t WORD_SPACING_MIN = 50;
   static constexpr uint8_t WORD_SPACING_MAX = 100;
   static constexpr uint8_t WORD_SPACING_STEP = 10;
-  uint8_t wordSpacing = 100;                              // percent of the font's space advance
-  static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;  // stored 0..4 maps to -2..+2 px
+  uint8_t wordSpacing = 100;  // percent of the font's space advance
+  // Legacy CrossPoint Character Spacing is retained only for settings-file compatibility.
+  // HU-PICCO-111 always renders it as neutral 0 px; the UI is replaced by the CPHUN-224 controls.
+  static constexpr uint8_t CHARACTER_SPACING_OFFSET = 2;
   uint8_t characterSpacing = CHARACTER_SPACING_OFFSET;
-  int8_t getCharacterSpacing() const { return static_cast<int8_t>(characterSpacing - CHARACTER_SPACING_OFFSET); }
+  int8_t getCharacterSpacing() const { return 0; }
+  // CPHUN-261007-224 letter-spacing system.
+  // Correction strength: 0=Off, 10=Weak, 40=Medium, 70=Strong.
+  uint16_t letterSpacingLimitPercent = 0;
+  // Pair-score optimization master switch (0=Off, 4=On/fixed production profile).
+  uint8_t letterSpacingOptimization = 0;
+  // Pair score threshold: 0=Off, 50=Weak, 60=Medium, 70=Strong.
+  uint8_t letterSpacingOptimizationThreshold = 60;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
