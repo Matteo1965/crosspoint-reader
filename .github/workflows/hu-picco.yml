@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Keep top reader margin -5px; restore bottom margin to side-margin size.
-          printf 'name=HU-PICCO-109\n' >> "$GITHUB_OUTPUT"
+          # Scale optical hanging punctuation to the full configured right reader margin.
+          printf 'name=HU-PICCO-110\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
