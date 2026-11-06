@@ -527,7 +527,6 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
       rowValues_[i] = settingValueText(setting);
       rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
     }
-    }
   }
 
   fui::ListProps props;
