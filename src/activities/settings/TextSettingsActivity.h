@@ -32,7 +32,9 @@ class TextSettingsActivity final : public UiTabListActivity {
   enum class LayoutRow {
     LineSpacing,
     WordSpacing,
-    CharacterSpacing,
+    LetterSpacingCorrection,
+    LetterSpacingOptimization,
+    LetterSpacingOptimizationThreshold,
     ParaSpacing,
     FixedDialogueSpacing,
     ParaIndentation,
