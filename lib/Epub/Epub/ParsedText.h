@@ -94,6 +94,9 @@ class ParsedText {
   bool fixedDialogueSpacing;
   static bool opticalMarginEnabled_;
   static uint8_t opticalMarginPixelLimit_;
+  static uint16_t letterSpacingLimitPercent_;
+  static uint8_t letterSpacingOptimization_;
+  static uint8_t letterSpacingOptimizationThreshold_;
   bool isNaturalAlign;
   bool hasRtlWord;
   bool droppedWords = false;
@@ -144,6 +147,11 @@ class ParsedText {
   static void setOpticalMarginEnabled(bool enabled) { opticalMarginEnabled_ = enabled; }
   static void setOpticalMarginPixelLimit(uint8_t pixels) { opticalMarginPixelLimit_ = pixels; }
   static bool isOpticalMarginEnabled() { return opticalMarginEnabled_; }
+  static void setLetterSpacingConfig(uint16_t correction, uint8_t optimization, uint8_t threshold) {
+    letterSpacingLimitPercent_ = correction;
+    letterSpacingOptimization_ = optimization;
+    letterSpacingOptimizationThreshold_ = threshold;
+  }
   explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2,
                       const bool fixedDialogueSpacing = false)
