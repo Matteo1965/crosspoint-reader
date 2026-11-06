@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "../ParsedText.h"
+#include "../LetterSpacingOptimization.h"
 #include <string_view>
 
 #include "../../../../src/fontIds.h"
@@ -51,9 +52,11 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSplitX, const BlockStyle& blockStyle,
                      std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans,
-                     const std::vector<SourceRange>& ranges, const uint16_t paragraphStartWord)
+                     const std::vector<SourceRange>& ranges, const uint16_t paragraphStartWord,
+                     const uint8_t letterSpacingConfig)
     : blockStyle(blockStyle),
       paragraphStartWord(paragraphStartWord),
+      letterSpacingConfig(letterSpacingConfig),
       rubyTexts(std::move(rubyTexts)),
       linkSpans(std::move(linkSpans)) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
@@ -192,6 +195,51 @@ int TextBlock::extraAscent(const GfxRenderer& renderer, const int sectionFontId)
          renderer.getFontAscenderSize(renderFontId(renderer, blockFontId(sectionFontId), sectionFontId));
 }
 
+namespace {
+void drawOptimizedWord(const GfxRenderer& renderer, const int fontId, const int x, const int y,
+                       const char* text, const EpdFontFamily::Style style,
+                       const BidiUtils::BidiBaseDir baseDir,
+                       LetterSpacingOptimization::Accumulator& acc) {
+  if (!text || !*text || !LetterSpacingOptimization::beginWord(text, style, acc)) {
+    renderer.drawText(fontId, x, y, text, true, style, baseDir);
+    return;
+  }
+  const auto fontIt = renderer.getFontMap().find(fontId);
+  if (fontIt == renderer.getFontMap().end()) {
+    renderer.drawText(fontId, x, y, text, true, style, baseDir);
+    return;
+  }
+  const EpdFontFamily& font = fontIt->second;
+  const auto* cursor = reinterpret_cast<const uint8_t*>(text);
+  int nativePenX = x;
+  int optimizationOffset = 0;
+  uint32_t previous = 0;
+  uint32_t beforePrevious = 0;
+  while (*cursor) {
+    const auto* glyphStart = cursor;
+    const uint32_t cp = utf8NextCodepoint(&cursor);
+    if (!cp) break;
+    if (previous) {
+      const EpdGlyph* previousGlyph = font.getGlyph(previous, style);
+      const int32_t previousAdvanceFP = previousGlyph ? static_cast<int32_t>(previousGlyph->advanceX) : 0;
+      const int32_t kernFP = static_cast<int32_t>(font.getKerning(previous, cp, style));
+      nativePenX += static_cast<int>((previousAdvanceFP + kernFP + 8) >> 4);
+      const auto* lookahead = cursor;
+      const uint32_t next = *lookahead ? utf8NextCodepoint(&lookahead) : 0;
+      optimizationOffset += LetterSpacingOptimization::consumeGuardedPair(
+          beforePrevious, previous, cp, next, style, acc);
+    }
+    const size_t glyphBytes = static_cast<size_t>(cursor - glyphStart);
+    char glyphText[5];
+    memcpy(glyphText, glyphStart, glyphBytes);
+    glyphText[glyphBytes] = '\0';
+    renderer.drawText(fontId, nativePenX + optimizationOffset, y, glyphText, true, style, baseDir);
+    beforePrevious = previous;
+    previous = cp;
+  }
+}
+}  // namespace
+
 void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, const int x, const int y) const {
   if (!isValid) {
     LOG_ERR("TXB", "Render skipped: invalid block");
@@ -199,7 +247,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
   }
   // A sized variant that can no longer be loaded falls back to the section font.
   const int fontId = renderFontId(renderer, blockFontId(sectionFontId), sectionFontId);
-  const int8_t tracking = blockStyle.characterSpacing;
+  const int8_t tracking = letterSpacingConfig == 1 ? 1 : 0;
+  const bool optimizedSpacing = LetterSpacingOptimization::isPackedConfig(letterSpacingConfig);
+  const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+  const auto fontItForSpacing = renderer.getFontMap().find(fontId);
+  const uint8_t spacingPointSize = fontItForSpacing == renderer.getFontMap().end()
+      ? 16 : LetterSpacingOptimization::pointSizeForFont(fontItForSpacing->second, pairTable);
+  LetterSpacingOptimization::Accumulator optimizationAcc(
+      LetterSpacingOptimization::unpackThresholdCode(letterSpacingConfig),
+      LetterSpacingOptimization::unpackBudget(letterSpacingConfig), pairTable, spacingPointSize);
 
   const bool scanning = renderer.isFontCacheScanning();
   // Words in other sizes share the baseline set by the line's tallest font.
@@ -420,7 +476,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int sectionFontId, con
       renderer.drawText(wordFont, prefixX, wordY, boldBuf, true, boldStyle, baseDir, tracking);
       renderer.drawText(wordFont, suffixX, wordY, word + boldLen, true, currentStyle, baseDir, tracking);
     } else if (!renderedShortHyphen) {
-      renderer.drawText(wordFont, drawX, wordY, word, true, currentStyle, baseDir, tracking);
+      if (optimizedSpacing && wordFont == fontId) {
+        drawOptimizedWord(renderer, wordFont, drawX, wordY, word, currentStyle, baseDir, optimizationAcc);
+      } else {
+        renderer.drawText(wordFont, drawX, wordY, word, true, currentStyle, baseDir, tracking);
+      }
     }
 
     // Horizontal ruby text rendering
@@ -524,6 +584,7 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
   serialization::writePod(file, textBytes);
   serialization::writePod(file, paragraphStartWord);
+  serialization::writePod(file, letterSpacingConfig);
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
     if (file.write(arena.get(), size) != size) {
@@ -574,10 +635,12 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint8_t hasFocus;
   uint16_t textBytes;
   uint16_t paragraphStartWord;
+  uint8_t letterSpacingConfig;
   serialization::readPod(file, wc);
   serialization::readPod(file, hasFocus);
   serialization::readPod(file, textBytes);
   serialization::readPod(file, paragraphStartWord);
+  serialization::readPod(file, letterSpacingConfig);
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -598,6 +661,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   block->numWords = wc;
   block->textBytes = textBytes;
   block->paragraphStartWord = paragraphStartWord;
+  block->letterSpacingConfig = letterSpacingConfig;
   block->focusPresent = hasFocus != 0;
 
   if (wc > 0) {
