@@ -100,7 +100,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(uint8_t) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
+                                 sizeof(uint8_t) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(int8_t) + sizeof(uint8_t) + sizeof(uint8_t);
@@ -148,7 +148,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   }
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
                                    sizeof(spec.extraParagraphSpacing) + sizeof(spec.opticalMargin) +
-                                   sizeof(spec.fixedDialogueSpacing) + sizeof(spec.paragraphIndentSpaces) +
+                                   sizeof(spec.opticalMarginPixels) + sizeof(spec.fixedDialogueSpacing) + sizeof(spec.paragraphIndentSpaces) +
                                    sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) +
                                    sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.hyphenationEnabled) +
                                    sizeof(spec.hungarianHyphenationExtended) + sizeof(spec.embeddedStyle) + sizeof(spec.imageRendering) +
