@@ -118,7 +118,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
-  doc["language"] = (language < getLanguageCount()) ? LANGUAGE_CODES[language] : "EN";
+  doc["language"] = (language < getLanguageCount()) ? LANGUAGE_CODES[language] : "HU";
 
   // A uint16_t mask, so it does not fit the uint8_t generic loop. Omitted while
   // unconfigured, so the default keeps following the UI language.
@@ -329,8 +329,23 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
   // Language -- stored as code string for stability across enum reorders.
+  // HU-PICCO-112 exposes only UI languages backed by an installed hyphenator.
+  // Missing or previously saved unsupported languages migrate to Hungarian.
+  language = static_cast<uint8_t>(Language::HU);
   if (doc["language"].is<const char*>()) {
-    language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
+    const char* code = doc["language"].as<const char*>();
+    const bool supported =
+        strcmp(code, "HU") == 0 || strcmp(code, "EN") == 0 || strcmp(code, "DE") == 0 ||
+        strcmp(code, "FR") == 0 || strcmp(code, "ES") == 0 || strcmp(code, "IT") == 0 ||
+        strcmp(code, "PL") == 0 || strcmp(code, "SV") == 0 || strcmp(code, "FI") == 0 ||
+        strcmp(code, "PT") == 0 || strcmp(code, "P2") == 0;
+    if (supported) {
+      language = static_cast<uint8_t>(I18n::languageFromCode(code));
+    } else {
+      needsResave = true;
+    }
+  } else {
+    needsResave = true;
   }
 
   // Absent means unconfigured, which is the default.
