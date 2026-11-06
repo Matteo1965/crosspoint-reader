@@ -445,11 +445,6 @@ void TextSettingsActivity::applySize(int listIndex) {
 
 void TextSettingsActivity::confirmLayoutRow(int row) {
   switch (static_cast<LayoutRow>(row)) {
-    case LayoutRow::OpticalMargin:
-      SETTINGS.opticalMargin = SETTINGS.opticalMargin ? 0 : 1;
-      SETTINGS.saveToFile();
-      requestUpdate();
-      break;
     case LayoutRow::ParaSpacing: {
       const std::vector<std::string> options = {tr(STR_STATE_OFF), "0%", "25%", "50%", "75%", "100%"};
       const int selected = !SETTINGS.extraParagraphSpacing
@@ -464,11 +459,6 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
-    case LayoutRow::FixedDialogueSpacing:
-      SETTINGS.fixedDialogueSpacing = SETTINGS.fixedDialogueSpacing ? 0 : 1;
-      SETTINGS.saveToFile();
-      requestUpdate();
-      break;
     case LayoutRow::ParaIndentation: {
       std::vector<std::string> options;
       options.reserve(6);
@@ -511,32 +501,6 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     }
-    case LayoutRow::LetterSpacingCorrection: {
-      const bool hu = I18N.getLanguage() == Language::HU;
-      const char* options[] = {hu ? "KI" : "OFF", hu ? "Gyenge" : "Weak",
-                               hu ? "Közepes" : "Medium", hu ? "Erős" : "Strong"};
-      int cur = SETTINGS.letterSpacingLimitPercent == 10 ? 1 :
-                SETTINGS.letterSpacingLimitPercent == 40 ? 2 :
-                SETTINGS.letterSpacingLimitPercent == 70 ? 3 : 0;
-      optionPopup_.show(hu ? "Betűköz korrekció" : "Letter spacing correction",
-                        options, 4, cur, [](int idx) {
-        static constexpr uint16_t values[] = {0, 10, 40, 70};
-        if (idx >= 0 && idx < 4) {
-          SETTINGS.letterSpacingLimitPercent = values[idx];
-          if (idx == 0) SETTINGS.letterSpacingOptimization = 0;
-          SETTINGS.saveToFile();
-        }
-      });
-      requestUpdate();
-      break;
-    }
-    case LayoutRow::LetterSpacingOptimization:
-      if (SETTINGS.letterSpacingLimitPercent != 0) {
-        SETTINGS.letterSpacingOptimization = SETTINGS.letterSpacingOptimization ? 0 : 4;
-        SETTINGS.saveToFile();
-      }
-      requestUpdate();
-      break;
     case LayoutRow::ScreenMargin: {
       std::vector<std::string> options;
       options.reserve(std::size(MARGIN_VALUES));
@@ -559,8 +523,6 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
 
 std::string TextSettingsActivity::layoutValueText(int row) const {
   switch (static_cast<LayoutRow>(row)) {
-    case LayoutRow::OpticalMargin:
-      return SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::LineSpacing: {
       const uint8_t v = SETTINGS.lineSpacing;
       return I18N.get(LINE_SPACING_IDS[v < std::size(LINE_SPACING_IDS) ? v : CrossPointSettings::LINE_SPACING_120]);
@@ -568,8 +530,6 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::ParaSpacing:
       return !SETTINGS.extraParagraphSpacing ? tr(STR_STATE_OFF)
                                             : std::to_string(SETTINGS.extraParagraphSpacingPercent) + "%";
-    case LayoutRow::FixedDialogueSpacing:
-      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::ParaIndentation: {
       const int spaces = std::clamp<int>(SETTINGS.paragraphIndentSpaces, 0, 5);
       return spaces == 0 ? tr(STR_STATE_OFF) : std::to_string(spaces);
@@ -580,16 +540,72 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     }
     case LayoutRow::WordSpacing:
       return std::to_string(SETTINGS.wordSpacing) + "%";
-    case LayoutRow::LetterSpacingCorrection:
+    case LayoutRow::ScreenMargin:
+      return std::to_string(SETTINGS.screenMargin);
+
+    default:
+      return "";
+  }
+}
+
+void TextSettingsActivity::confirmTextRow(int row) {
+  switch (static_cast<TextRow>(row)) {
+    case TextRow::LetterSpacingCorrection: {
+      const bool hu = I18N.getLanguage() == Language::HU;
+      const char* options[] = {hu ? "KI" : "OFF", hu ? "Gyenge" : "Weak",
+                               hu ? "Közepes" : "Medium", hu ? "Erős" : "Strong"};
+      const int cur = SETTINGS.letterSpacingLimitPercent == 10 ? 1 :
+                      SETTINGS.letterSpacingLimitPercent == 40 ? 2 :
+                      SETTINGS.letterSpacingLimitPercent == 70 ? 3 : 0;
+      optionPopup_.show(hu ? "Betűköz korrekció" : "Letter spacing correction",
+                        options, 4, cur, [](int idx) {
+                          static constexpr uint16_t values[] = {0, 10, 40, 70};
+                          if (idx < 0 || idx >= 4) return;
+                          SETTINGS.letterSpacingLimitPercent = values[idx];
+                          if (idx == 0) SETTINGS.letterSpacingOptimization = 0;
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
+    }
+    case TextRow::LetterSpacingOptimization:
+      if (SETTINGS.letterSpacingLimitPercent != 0) {
+        SETTINGS.letterSpacingOptimization = SETTINGS.letterSpacingOptimization ? 0 : 4;
+        SETTINGS.saveToFile();
+      }
+      requestUpdate();
+      return;
+    case TextRow::OpticalMargin:
+      SETTINGS.opticalMargin = SETTINGS.opticalMargin ? 0 : 1;
+      break;
+    case TextRow::FixedDialogueSpacing:
+      SETTINGS.fixedDialogueSpacing = SETTINGS.fixedDialogueSpacing ? 0 : 1;
+      break;
+    case TextRow::AntiAliasing:
+      SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
+      break;
+    default:
+      return;
+  }
+  SETTINGS.saveToFile();
+  requestUpdate();
+}
+
+std::string TextSettingsActivity::textValueText(int row) const {
+  switch (static_cast<TextRow>(row)) {
+    case TextRow::LetterSpacingCorrection:
       return SETTINGS.letterSpacingLimitPercent == 10 ? (I18N.getLanguage() == Language::HU ? "Gyenge" : "Weak") :
              SETTINGS.letterSpacingLimitPercent == 40 ? (I18N.getLanguage() == Language::HU ? "Közepes" : "Medium") :
              SETTINGS.letterSpacingLimitPercent == 70 ? (I18N.getLanguage() == Language::HU ? "Erős" : "Strong") :
                                                         (I18N.getLanguage() == Language::HU ? "KI" : "OFF");
-    case LayoutRow::LetterSpacingOptimization:
+    case TextRow::LetterSpacingOptimization:
       return SETTINGS.letterSpacingOptimization ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    case LayoutRow::ScreenMargin:
-      return std::to_string(SETTINGS.screenMargin);
-
+    case TextRow::OpticalMargin:
+      return SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case TextRow::FixedDialogueSpacing:
+      return SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case TextRow::AntiAliasing:
+      return SETTINGS.textAntiAliasing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     default:
       return "";
   }
@@ -634,9 +650,6 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     case StyleRow::EmbeddedStyle:
       SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
       break;
-    case StyleRow::AntiAliasing:
-      SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
-      break;
 
     default:
       return;
@@ -657,8 +670,6 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
       return SETTINGS.softHyphenEnabled;
     case StyleRow::EmbeddedStyle:
       return SETTINGS.embeddedStyle;
-    case StyleRow::AntiAliasing:
-      return SETTINGS.textAntiAliasing;
 
     default:
       return false;
