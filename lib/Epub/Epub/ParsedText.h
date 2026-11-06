@@ -90,6 +90,7 @@ class ParsedText {
   uint8_t wordSpacingPercent = 100;
   uint8_t paragraphIndentSpaces;
   bool hyphenationEnabled;
+  bool softHyphenEnabled;
   bool focusReadingEnabled;
   bool fixedDialogueSpacing;
   static bool opticalMarginEnabled_;
@@ -152,12 +153,13 @@ class ParsedText {
     letterSpacingOptimization_ = optimization;
     letterSpacingOptimizationThreshold_ = threshold;
   }
-  explicit ParsedText(const bool hyphenationEnabled = false, const bool focusReadingEnabled = false,
-                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t paragraphIndentSpaces = 2,
-                      const bool fixedDialogueSpacing = false)
+  explicit ParsedText(const bool hyphenationEnabled = false, const bool softHyphenEnabled = false,
+                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
+                      const uint8_t paragraphIndentSpaces = 2, const bool fixedDialogueSpacing = false)
       : blockStyle(blockStyle),
         paragraphIndentSpaces(paragraphIndentSpaces),
         hyphenationEnabled(hyphenationEnabled),
+        softHyphenEnabled(softHyphenEnabled),
         focusReadingEnabled(focusReadingEnabled),
         fixedDialogueSpacing(fixedDialogueSpacing),
         isNaturalAlign(false),
