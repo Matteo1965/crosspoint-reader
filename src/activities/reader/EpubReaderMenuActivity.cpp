@@ -57,7 +57,7 @@ void EpubReaderMenuActivity::onExit() {
 void EpubReaderMenuActivity::buildMenuRowItems() {
   for (size_t i = 0; i < menuItems.size() && i < MAX_MENU_ITEMS; i++) {
     fui::ListItem item;
-    item.label = I18N.get(menuItems[i].labelId);
+    item.label = menuItems[i].customLabel ? menuItems[i].customLabel : I18N.get(menuItems[i].labelId);
     item.actionValue = static_cast<int16_t>(i);
     menuRowItems[i] = item;
   }
@@ -78,9 +78,6 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   items.push_back({MenuAction::SAVE_CLIPPING, StrId::STR_SAVE_CLIPPING});
   if (hasClippings) {
     items.push_back({MenuAction::VIEW_CLIPPINGS, StrId::STR_VIEW_CLIPPINGS});
-  }
-  if (!slideSwitchOwns(CrossPointSettings::SLIDE_SWITCH_NIGHT_MODE)) {
-    items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
   }
   if (Frontlight.present() && !slideSwitchOwnsLight()) {
     items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
@@ -103,6 +100,10 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   if (canSync) {
     items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   }
+  items.push_back({MenuAction::BOOK_DESCRIPTION, StrId::STR_TEXT_SETTINGS,
+                   I18N.getLanguage() == Language::HU ? "Fülszöveg" : "Description"});
+  items.push_back({MenuAction::BOOK_METADATA, StrId::STR_TEXT_SETTINGS,
+                   I18N.getLanguage() == Language::HU ? "Metaadatok" : "Metadata"});
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
 }
 
