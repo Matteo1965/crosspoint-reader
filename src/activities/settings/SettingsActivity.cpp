@@ -514,16 +514,19 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   for (size_t i = 0; i < settings.size(); i++) {
     const auto& setting = settings[i];
     const auto labels = setting.enumLabels();
-    const bool checkbox = setting.type == SettingType::TOGGLE ||
-                          (setting.type == SettingType::ENUM && setting.enumStringValues.empty() &&
-                           labels.size() == 2 && labels[0] == StrId::STR_STATE_OFF && labels[1] == StrId::STR_STATE_ON);
-    if (checkbox && (setting.valuePtr || setting.valueGetter)) {
-      const bool checked = setting.valuePtr ? SETTINGS.*(setting.valuePtr) != 0 : setting.valueGetter() != 0;
-      rowValues_[i].clear();
-      GUI.setCheckboxRow(rowItems_[i], checked);
+    const bool booleanSetting = setting.type == SettingType::TOGGLE ||
+                                  (setting.type == SettingType::ENUM && setting.enumStringValues.empty() &&
+                                   labels.size() == 2 && labels[0] == StrId::STR_STATE_OFF &&
+                                   labels[1] == StrId::STR_STATE_ON);
+    rowItems_[i].toggle = false;
+    if (booleanSetting && (setting.valuePtr || setting.valueGetter)) {
+      const bool enabled = setting.valuePtr ? SETTINGS.*(setting.valuePtr) != 0 : setting.valueGetter() != 0;
+      rowValues_[i] = enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      rowItems_[i].value = rowValues_[i].c_str();
     } else {
       rowValues_[i] = settingValueText(setting);
       rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
+    }
     }
   }
 
