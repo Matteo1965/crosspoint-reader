@@ -112,6 +112,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["extraParagraphSpacingPercent"] = extraParagraphSpacingPercent;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
   doc["hungarianHyphenationExtended"] = hungarianHyphenationExtended;
+  doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
+  doc["letterSpacingOptimization"] = letterSpacingOptimization;
+  doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -218,6 +221,23 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | static_cast<uint8_t>(0)) ? 1 : 0;
   hungarianHyphenationExtended =
       (doc["hungarianHyphenationExtended"] | static_cast<uint8_t>(0)) ? 1 : 0;
+
+  // HU-PICCO-111: retire CrossPoint global Character Spacing. Keep the legacy
+  // persisted field readable, but normalize it to 0 px on every load.
+  characterSpacing = CHARACTER_SPACING_OFFSET;
+
+  letterSpacingLimitPercent = doc["letterSpacingLimitPercent"] | static_cast<uint16_t>(0);
+  if (letterSpacingLimitPercent != 0 && letterSpacingLimitPercent != 10 &&
+      letterSpacingLimitPercent != 40 && letterSpacingLimitPercent != 70) {
+    letterSpacingLimitPercent = 0;
+  }
+  letterSpacingOptimization = (doc["letterSpacingOptimization"] | static_cast<uint8_t>(0)) ? 4 : 0;
+  letterSpacingOptimizationThreshold =
+      doc["letterSpacingOptimizationThreshold"] | static_cast<uint8_t>(60);
+  if (letterSpacingOptimizationThreshold != 0 && letterSpacingOptimizationThreshold != 50 &&
+      letterSpacingOptimizationThreshold != 60 && letterSpacingOptimizationThreshold != 70) {
+    letterSpacingOptimizationThreshold = 60;
+  }
 
   const auto indentSpaces = doc["paragraphIndentSpaces"];
   const bool hasSavedWidth = indentSpaces.is<int>();
@@ -353,8 +373,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
-  spec.characterSpacing = getCharacterSpacing();
+  spec.characterSpacing = 0;
   spec.wordSpacingPercent = wordSpacing;
+  spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
+  spec.letterSpacingOptimization = letterSpacingOptimization;
+  spec.letterSpacingOptimizationThreshold = letterSpacingOptimizationThreshold;
   spec.extraParagraphSpacing = extraParagraphSpacing ? extraParagraphSpacingPercent : 255;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.opticalMargin = opticalMargin != 0;
