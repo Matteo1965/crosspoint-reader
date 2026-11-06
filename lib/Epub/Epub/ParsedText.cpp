@@ -25,7 +25,7 @@ bool ParsedText::opticalMarginEnabled_ = false;
 uint8_t ParsedText::opticalMarginPixelLimit_ = 0;
 uint16_t ParsedText::letterSpacingLimitPercent_ = 0;
 uint8_t ParsedText::letterSpacingOptimization_ = 0;
-uint8_t ParsedText::letterSpacingOptimizationThreshold_ = 60;
+uint8_t ParsedText::letterSpacingOptimizationThreshold_ = 0;
 
 namespace {
 
