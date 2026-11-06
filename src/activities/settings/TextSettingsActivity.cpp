@@ -130,13 +130,13 @@ void TextSettingsActivity::rebuildRowItems() {
                                ? (I18N.getLanguage() == Language::HU ? "Fix párbeszédköz"
                                                                     : "Fixed dialogue spacing")
                          : (i == static_cast<int>(LayoutRow::WordSpacing))
-                               ? (I18N.getLanguage() == Language::HU ? "Saját Szóköz" : "Custom word spacing")
+                               ? (I18N.getLanguage() == Language::HU ? "Min. szóköz" : "Minimum word spacing")
                          : (i == static_cast<int>(LayoutRow::LetterSpacingCorrection))
                                ? (I18N.getLanguage() == Language::HU ? "Betűköz korrekció" : "Letter spacing correction")
                          : (i == static_cast<int>(LayoutRow::LetterSpacingOptimization))
                                ? (I18N.getLanguage() == Language::HU ? "Betűköz optimalizálás" : "Letter spacing optimization")
                          : (i == static_cast<int>(LayoutRow::ScreenMargin))
-                               ? (I18N.getLanguage() == Language::HU ? "Saját Margó" : "Custom margin")
+                               ? (I18N.getLanguage() == Language::HU ? "Margó" : "Margin")
                                : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
