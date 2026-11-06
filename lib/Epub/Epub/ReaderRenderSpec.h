@@ -28,6 +28,9 @@ struct ReaderRenderSpec {
   uint16_t viewportHeight = 0;
   bool hyphenationEnabled = false;
   bool hungarianHyphenationExtended = false;
+  uint8_t hungarianMinPrefix = 2;
+  uint8_t hungarianMinSuffix = 2;
+  bool softHyphenEnabled = false;
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
@@ -60,6 +63,9 @@ inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
   mix(spec.viewportHeight);
   mix(spec.hyphenationEnabled);
   mix(spec.hungarianHyphenationExtended);
+  mix(spec.hungarianMinPrefix);
+  mix(spec.hungarianMinSuffix);
+  mix(spec.softHyphenEnabled);
   mix(spec.embeddedStyle);
   mix(spec.imageRendering);
   mix(spec.focusReadingEnabled);
