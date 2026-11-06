@@ -22,7 +22,7 @@ struct ReaderRenderSpec {
   uint8_t wordSpacingPercent = 100;
   uint16_t letterSpacingLimitPercent = 0;
   uint8_t letterSpacingOptimization = 0;
-  uint8_t letterSpacingOptimizationThreshold = 60;
+  uint8_t letterSpacingOptimizationThreshold = 0;
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
