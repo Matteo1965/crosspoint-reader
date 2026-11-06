@@ -15,6 +15,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     SELECT_CHAPTER,
     FOOTNOTES,
     TEXT_SETTINGS,
+    BOOK_DESCRIPTION,
+    BOOK_METADATA,
     NIGHT_MODE,
     FRONTLIGHT,
     BLUETOOTH,
@@ -36,6 +38,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
+    const char* customLabel = nullptr;
   };
 
   static void toggleBluetooth();
@@ -57,7 +60,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
   // only refreshes rows whose values reflect live state.
-  static constexpr size_t MAX_MENU_ITEMS = 19;
+  static constexpr size_t MAX_MENU_ITEMS = 20;
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 
