@@ -267,7 +267,6 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       rowValues_[i] = SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
-    }
   }
 
   fui::ListProps props;
