@@ -370,6 +370,17 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
+std::vector<Hyphenator::BreakInfo> Hyphenator::softHyphenBreakOffsets(const std::string& word) {
+  auto cps = collectCodepoints(word);
+  std::vector<BreakInfo> out;
+  for (size_t i = 1; i + 1 < cps.size(); ++i) {
+    if (isSoftHyphen(cps[i].value) && isAlphabetic(cps[i - 1].value) && isAlphabetic(cps[i + 1].value)) {
+      out.push_back({cps[i + 1].byteOffset, true});
+    }
+  }
+  return out;
+}
+
 void Hyphenator::setPreferredLanguage(const std::string& lang) {
   cachedHyphenator_ = hyphenatorForLanguage(lang);
   preferredLanguageIsHungarian_ = cachedHyphenator_ != nullptr &&
@@ -377,3 +388,7 @@ void Hyphenator::setPreferredLanguage(const std::string& lang) {
 }
 
 void Hyphenator::setHungarianExtended(const bool enabled) { hungarianExtended_ = enabled; }
+
+void Hyphenator::setHungarianMinima(const size_t minPrefix, const size_t minSuffix) {
+  setHungarianHyphenationMinima(minPrefix, minSuffix);
+}
