@@ -58,6 +58,7 @@ class ChapterHtmlSlimParser {
   uint16_t viewportWidth;
   uint16_t viewportHeight;
   bool hyphenationEnabled;
+  bool softHyphenEnabled;
   bool focusReadingEnabled;
   bool fixedDialogueSpacing;
   const CssParser* cssParser;
@@ -294,7 +295,7 @@ class ChapterHtmlSlimParser {
       std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer, const int fontId,
       const float lineCompression, const uint8_t extraParagraphSpacing, const uint8_t paragraphAlignment,
       const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
-      const bool focusReadingEnabled, const bool fixedDialogueSpacing,
+      const bool softHyphenEnabled, const bool focusReadingEnabled, const bool fixedDialogueSpacing,
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
       const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
       const uint8_t imageRendering = 0, std::vector<std::string> tocAnchors = {},
@@ -310,6 +311,7 @@ class ChapterHtmlSlimParser {
         viewportWidth(viewportWidth),
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
+        softHyphenEnabled(softHyphenEnabled),
         focusReadingEnabled(focusReadingEnabled),
         fixedDialogueSpacing(fixedDialogueSpacing),
         completePageFn(completePageFn),
