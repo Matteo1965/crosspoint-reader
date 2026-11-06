@@ -21,6 +21,7 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 bool ParsedText::opticalMarginEnabled_ = false;
+uint8_t ParsedText::opticalMarginPixelLimit_ = 0;
 
 namespace {
 
@@ -1674,7 +1675,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int hangingAllowance =
       (opticalMarginEnabled_ && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
        !blockStyle.isRtl && !lineWords.empty())
-          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(), 8)
+          ? hangingPunctuationAllowance(renderer, fontId, lineWords.back(), lineWordStyles.back(), opticalMarginPixelLimit_)
           : 0;
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
   const int spareSpace =
