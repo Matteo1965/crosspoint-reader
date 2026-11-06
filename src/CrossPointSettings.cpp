@@ -112,6 +112,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["extraParagraphSpacingPercent"] = extraParagraphSpacingPercent;
   doc["fixedDialogueSpacing"] = fixedDialogueSpacing;
   doc["hungarianHyphenationExtended"] = hungarianHyphenationExtended;
+  doc["hyphenationThreshold"] = hyphenationThreshold;
+  doc["softHyphenEnabled"] = softHyphenEnabled;
   doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
   doc["letterSpacingOptimization"] = letterSpacingOptimization;
   doc["letterSpacingOptimizationThreshold"] = 0;
@@ -221,6 +223,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   fixedDialogueSpacing = (doc["fixedDialogueSpacing"] | static_cast<uint8_t>(0)) ? 1 : 0;
   hungarianHyphenationExtended =
       (doc["hungarianHyphenationExtended"] | static_cast<uint8_t>(0)) ? 1 : 0;
+  hyphenationThreshold = doc["hyphenationThreshold"] | static_cast<uint8_t>(2);
+  if (hyphenationThreshold > 4) hyphenationThreshold = 2;
+  softHyphenEnabled = (doc["softHyphenEnabled"] | static_cast<uint8_t>(0)) ? 1 : 0;
 
   // HU-PICCO-111: retire CrossPoint global Character Spacing. Keep the legacy
   // persisted field readable, but normalize it to 0 px on every load.
@@ -400,6 +405,12 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.hungarianHyphenationExtended = hungarianHyphenationExtended != 0;
+  static constexpr uint8_t kHyphenMinPrefix[] = {1, 1, 2, 2, 3};
+  static constexpr uint8_t kHyphenMinSuffix[] = {1, 2, 2, 3, 3};
+  const uint8_t threshold = hyphenationThreshold <= 4 ? hyphenationThreshold : 2;
+  spec.hungarianMinPrefix = kHyphenMinPrefix[threshold];
+  spec.hungarianMinSuffix = kHyphenMinSuffix[threshold];
+  spec.softHyphenEnabled = softHyphenEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
   // Same layout as Display, so switching between them keeps the section cache.
   spec.imageRendering = imageRendering == IMAGES_DISPLAY_BW ? static_cast<uint8_t>(IMAGES_DISPLAY) : imageRendering;
