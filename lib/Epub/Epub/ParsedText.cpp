@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "CjkBreaks.h"
+#include "LetterSpacingOptimization.h"
 #include "TokenBoundary.h"
 #include "hyphenation/HyphenationCommon.h"
 #include "hyphenation/Hyphenator.h"
@@ -22,6 +23,9 @@
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 bool ParsedText::opticalMarginEnabled_ = false;
 uint8_t ParsedText::opticalMarginPixelLimit_ = 0;
+uint16_t ParsedText::letterSpacingLimitPercent_ = 0;
+uint8_t ParsedText::letterSpacingOptimization_ = 0;
+uint8_t ParsedText::letterSpacingOptimizationThreshold_ = 60;
 
 namespace {
 
@@ -1680,8 +1684,81 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // extraEndOffset reserves space for any ruby group at the right edge of the line.
   const int spareSpace =
       effectivePageWidth + hangingAllowance - extraStartOffset - extraEndOffset - lineWordWidthSum - totalNaturalGaps;
+
+  // CPHUN-261007-224: replace global Character Spacing with a per-line correction.
+  // Correction activates only on ordinary justified LTR lines; optimization then
+  // distributes the available pixels only over measured safe letter pairs.
+  uint8_t letterSpacingConfig = 0;
+  int trackingExtraTotal = 0;
+  std::vector<uint8_t> lineLetterExtra(lineWordCount, 0);
+  const bool lineHasRubyAnnotation =
+      std::any_of(lineRubyTexts.begin(), lineRubyTexts.end(), [](const std::string& ruby) { return !ruby.empty(); });
+  if (letterSpacingLimitPercent_ > 0 && effectiveAlignment == CssTextAlign::Justify && !isLastLine &&
+      !blockStyle.isRtl && !hasRtlWord && !focusReadingEnabled && !lineHasRubyAnnotation &&
+      actualGapCount > 0 && spareSpace > 1) {
+    int natural100Gaps = 0;
+    size_t normalGapCount = 0;
+    for (size_t wordIdx = 1; wordIdx < lineWordCount; ++wordIdx) {
+      const size_t boundaryIdx = lastBreakAt + wordIdx;
+      if (!continuesVec[boundaryIdx] && !noSpaceBeforeVec[boundaryIdx]) {
+        natural100Gaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+        ++normalGapCount;
+      }
+    }
+    if (normalGapCount > 0 && natural100Gaps > 0) {
+      const int finalAverageGap = (totalNaturalGaps + std::max(0, spareSpace)) / static_cast<int>(actualGapCount);
+      const int naturalAverageGap = natural100Gaps / static_cast<int>(normalGapCount);
+      if (finalAverageGap * 100 > naturalAverageGap * letterSpacingLimitPercent_) {
+        const bool optimize = letterSpacingOptimization_ != 0 &&
+                              (letterSpacingOptimizationThreshold_ == 50 ||
+                               letterSpacingOptimizationThreshold_ == 60 ||
+                               letterSpacingOptimizationThreshold_ == 70);
+        if (optimize) {
+          const uint8_t thresholdCode =
+              static_cast<uint8_t>((letterSpacingOptimizationThreshold_ - 45u) / 5u);
+          const auto pairTable = LetterSpacingOptimization::tableForFontId(fontId);
+          const auto fontIt = renderer.getFontMap().find(fontId);
+          const uint8_t pointSize = fontIt == renderer.getFontMap().end()
+              ? 16 : LetterSpacingOptimization::pointSizeForFont(fontIt->second, pairTable);
+          const auto& profile = LetterSpacingOptimization::profile(LetterSpacingOptimization::FIXED_PROFILE_LEVEL);
+          const uint8_t budget = static_cast<uint8_t>(std::min<int>(profile.maxPxPerLine, spareSpace - 1));
+          LetterSpacingOptimization::Accumulator acc(thresholdCode, budget, pairTable, pointSize);
+          for (size_t i = 0; i < lineWordCount; ++i) {
+            // The current Picco short-hyphen renderer owns discretionary hyphens;
+            // leave that one word native so measurement and rasterization stay identical.
+            const bool discretionary =
+                (wordStyles[lastBreakAt + i] & TextBlock::DISCRETIONARY_HYPHEN_FLAG) != 0;
+            if (!discretionary) {
+              lineLetterExtra[i] = LetterSpacingOptimization::consumeWord(
+                  lineWords[i].c_str(), lineWordStyles[i], acc);
+              trackingExtraTotal += lineLetterExtra[i];
+            }
+          }
+          if (trackingExtraTotal > 0) {
+            letterSpacingConfig = LetterSpacingOptimization::packConfig(
+                thresholdCode, static_cast<uint8_t>(trackingExtraTotal));
+          }
+        } else {
+          for (size_t i = 0; i < lineWordCount; ++i) {
+            const uint32_t cps = countCodepoints(lineWords[i]);
+            lineLetterExtra[i] = cps > 1 ? static_cast<uint8_t>(std::min<uint32_t>(cps - 1, 255)) : 0;
+            trackingExtraTotal += lineLetterExtra[i];
+          }
+          if (trackingExtraTotal > 0 && trackingExtraTotal < spareSpace) {
+            letterSpacingConfig = 1;
+          } else {
+            trackingExtraTotal = 0;
+            std::fill(lineLetterExtra.begin(), lineLetterExtra.end(), 0);
+          }
+        }
+      }
+    }
+  }
+
+  const int adjustedSpareSpace = spareSpace - trackingExtraTotal;
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                               ? computeJustifyExtra(spareSpace, actualGapCount)
+                               ? computeJustifyExtra(adjustedSpareSpace, actualGapCount)
                                : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
@@ -1900,7 +1977,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
         const bool nextIsContinuation = wordIdx + 1 < lineWordCount && continuesVec[lastBreakAt + wordIdx + 1];
         if (nextIsContinuation) {
-          int advance = wordWidths[lastBreakAt + wordIdx];
+          int advance = wordWidths[lastBreakAt + wordIdx] + lineLetterExtra[wordIdx];
           if (fixedDialogueSpacing && lastBreakAt == 0 && wordIdx == 0 &&
               isStandaloneDialogueDash(lineWords[0])) {
             advance += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[0]), firstCodepoint(lineWords[1]),
@@ -1932,7 +2009,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra;
           }
-          xpos += wordWidths[lastBreakAt + wordIdx] + gap;
+          xpos += wordWidths[lastBreakAt + wordIdx] + lineLetterExtra[wordIdx] + gap;
         }
       }
     }
@@ -1950,7 +2027,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     size_t spanIndex = 0;
     while (spanIndex < lineLinkIdsSeen.size() && lineLinkIdsSeen[spanIndex] != linkId) spanIndex++;
-    int width = willReorder ? reorderedWidthsScratch[i] : wordWidths[lastBreakAt + i];
+    int width = willReorder ? reorderedWidthsScratch[i] : wordWidths[lastBreakAt + i] + lineLetterExtra[i];
     const int right = lineXPos[i] + width;
     const int topLift =
         (lineWordStyles[i] & EpdFontFamily::SUP) != 0 ? renderer.getFontAscenderSize(fontId) * 2 / 5 : 0;
@@ -2031,7 +2108,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
                                               std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
-                                              std::move(lineLinks), sourceRanges, paragraphStartWord);
+                                              std::move(lineLinks), sourceRanges, paragraphStartWord,
+                                              letterSpacingConfig);
     if (!block || !block->valid() || !attachWordFonts(*block)) {
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
       // Latch through the same flag as addWord() OOM: the caller releases the
@@ -2065,7 +2143,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   auto block =
       makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSplitX, blockStyle,
-                                   std::move(lineRubyTexts), std::move(lineLinks), sourceRanges, paragraphStartWord);
+                                   std::move(lineRubyTexts), std::move(lineLinks), sourceRanges, paragraphStartWord,
+                                   letterSpacingConfig);
   if (!block || !block->valid() || !attachWordFonts(*block)) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     droppedWords = true;  // see the non-focus branch above
