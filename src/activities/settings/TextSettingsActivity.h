@@ -12,13 +12,11 @@
 #include "components/themes/BaseTheme.h"
 
 // Reader text settings with a shared live preview pane: tab bar
-// (Font | Size | Layout | Style) is position 0 of the Up/Down nav ring, same
-// idiom as SettingsActivity. Family/Size rows apply on Confirm; Layout/Style
-// rows toggle or open an OptionPopup picker. (Tab::Family/Style are the enum
-// names for the Font/Style tabs.)
+// (Font | Layout | Text | Style) is position 0 of the Up/Down nav ring.
+// The Font tab combines font-family selection with a Size picker row.
 class TextSettingsActivity final : public UiTabListActivity {
  public:
-  enum class Tab : uint8_t { Family, Size, Layout, Style, Count };
+  enum class Tab : uint8_t { Family, Layout, Text, Style, Count };
 
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
                        Tab initialTab = Tab::Family);
@@ -32,17 +30,21 @@ class TextSettingsActivity final : public UiTabListActivity {
   enum class LayoutRow {
     LineSpacing,
     WordSpacing,
-    LetterSpacingCorrection,
-    LetterSpacingOptimization,
     ParaSpacing,
-    FixedDialogueSpacing,
     ParaIndentation,
     Alignment,
     ScreenMargin,
-    OpticalMargin,
     Count
   };
-  enum class StyleRow { FocusReading, Hyphenation, HyphenationThreshold, SoftHyphen, EmbeddedStyle, AntiAliasing, Count };
+  enum class TextRow {
+    LetterSpacingCorrection,
+    LetterSpacingOptimization,
+    OpticalMargin,
+    FixedDialogueSpacing,
+    AntiAliasing,
+    Count
+  };
+  enum class StyleRow { FocusReading, Hyphenation, HyphenationThreshold, SoftHyphen, EmbeddedStyle, Count };
 
   // --- UiTabListActivity contract ---
   int listCount() const override;
@@ -64,11 +66,13 @@ class TextSettingsActivity final : public UiTabListActivity {
   // installed point sizes. Call after any family change.
   void rebuildSizeList();
   void confirmLayoutRow(int row);
+  void confirmTextRow(int row);
   void confirmStyleRow(int row);
   // Applies the row at the given list index for the active tab (Confirm and tap share this).
   void activateRow(int row);
 
   std::string layoutValueText(int row) const;
+  std::string textValueText(int row) const;
   bool styleRowChecked(int row) const;
   // Button-hint label for Confirm at the current ring position.
   const char* confirmLabelText() const;
