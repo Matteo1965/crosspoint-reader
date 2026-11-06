@@ -235,7 +235,8 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
     } else if (action == MenuAction::NIGHT_MODE) {
-      GUI.setCheckboxRow(menuRowItems[i], SETTINGS.screenInverted);
+      menuRowItems[i].toggle = false;
+      menuRowItems[i].value = SETTINGS.screenInverted ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     } else if (action == MenuAction::BLUETOOTH) {
       GUI.setCheckboxRow(menuRowItems[i], SETTINGS.ble.enabled);
     } else if (action == MenuAction::FRONTLIGHT) {
