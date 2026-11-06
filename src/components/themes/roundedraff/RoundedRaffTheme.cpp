@@ -165,17 +165,17 @@ void RoundedRaffTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int butt
     constexpr int kRowPaddingX = 40;  // 20px L/R
     const int maxLabelWidth = std::max(0, menuMaxWidth - kRowPaddingX);
     const std::string truncatedLabel =
-        renderer.truncatedText(menuFontId, label.c_str(), maxLabelWidth, EpdFontFamily::BOLD);
+        renderer.truncatedText(menuFontId, label.c_str(), maxLabelWidth, EpdFontFamily::REGULAR);
     const int rowWidth = std::min(
-        menuMaxWidth, renderer.getTextWidth(menuFontId, truncatedLabel.c_str(), EpdFontFamily::BOLD) + kRowPaddingX);
+        menuMaxWidth, renderer.getTextWidth(menuFontId, truncatedLabel.c_str(), EpdFontFamily::REGULAR) + kRowPaddingX);
     const bool isSelected = selectedIndex == i;
     renderer.fillRoundedRect(rowX, rowY, rowWidth, rowHeight, kMenuRadius, isSelected ? Color::Black : Color::White);
     const int textY = rowY + (rowHeight - textLineHeight) / 2;
     const int textX = rowX + kInteractiveInsetX;
     if (selectedIndex == i) {
-      renderer.drawText(menuFontId, textX, textY, truncatedLabel.c_str(), false, EpdFontFamily::BOLD);
+      renderer.drawText(menuFontId, textX, textY, truncatedLabel.c_str(), false, EpdFontFamily::REGULAR);
     } else {
-      renderer.drawText(menuFontId, textX, textY, truncatedLabel.c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawText(menuFontId, textX, textY, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
     }
   }
 
