@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Reduce top/bottom reader margins by 5px while preserving side margins.
-          printf 'name=HU-PICCO-107\n' >> "$GITHUB_OUTPUT"
+          # Replace checkbox booleans with KI/BE value text across Picco settings.
+          printf 'name=HU-PICCO-108\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
