@@ -434,7 +434,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SLIDE_SWITCH_TOUCH_CONTROLS = 2,
   };
   uint8_t slideSwitchAction = SLIDE_SWITCH_FRONTLIGHT;
-  // Language setting (Language enum index, default 0 = EN)
+  // Language setting (Language enum index, Hungarian Edition default = HU)
   uint8_t language = static_cast<uint8_t>(Language::HU);
   // Keyboard layouts the user can reach, using keyboard_layouts::ALL table bits.
   // 0 means "not configured", resolved to the UI language's layout plus English.
