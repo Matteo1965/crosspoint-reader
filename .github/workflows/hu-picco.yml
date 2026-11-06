@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Declutter Reader menu, move cache action, and improve EPUB description parsing.
-          printf 'name=HU-PICCO-106\n' >> "$GITHUB_OUTPUT"
+          # Reduce top/bottom reader margins by 5px while preserving side margins.
+          printf 'name=HU-PICCO-107\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
