@@ -114,7 +114,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["hungarianHyphenationExtended"] = hungarianHyphenationExtended;
   doc["letterSpacingLimitPercent"] = letterSpacingLimitPercent;
   doc["letterSpacingOptimization"] = letterSpacingOptimization;
-  doc["letterSpacingOptimizationThreshold"] = letterSpacingOptimizationThreshold;
+  doc["letterSpacingOptimizationThreshold"] = 0;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -232,12 +232,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     letterSpacingLimitPercent = 0;
   }
   letterSpacingOptimization = (doc["letterSpacingOptimization"] | static_cast<uint8_t>(0)) ? 4 : 0;
-  letterSpacingOptimizationThreshold =
-      doc["letterSpacingOptimizationThreshold"] | static_cast<uint8_t>(60);
-  if (letterSpacingOptimizationThreshold != 0 && letterSpacingOptimizationThreshold != 50 &&
-      letterSpacingOptimizationThreshold != 60 && letterSpacingOptimizationThreshold != 70) {
-    letterSpacingOptimizationThreshold = 60;
-  }
+  // Hungarian Edition: optimization threshold is intentionally fixed OFF.
+  // Normalize any previously saved 50/60/70 value to 0.
+  letterSpacingOptimizationThreshold = 0;
 
   const auto indentSpaces = doc["paragraphIndentSpaces"];
   const bool hasSavedWidth = indentSpaces.is<int>();
@@ -392,7 +389,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.wordSpacingPercent = wordSpacing;
   spec.letterSpacingLimitPercent = letterSpacingLimitPercent;
   spec.letterSpacingOptimization = letterSpacingOptimization;
-  spec.letterSpacingOptimizationThreshold = letterSpacingOptimizationThreshold;
+  spec.letterSpacingOptimizationThreshold = 0;
   spec.extraParagraphSpacing = extraParagraphSpacing ? extraParagraphSpacingPercent : 255;
   spec.fixedDialogueSpacing = fixedDialogueSpacing != 0;
   spec.opticalMargin = opticalMargin != 0;
