@@ -312,7 +312,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Pair-score optimization master switch (0=Off, 4=On/fixed production profile).
   uint8_t letterSpacingOptimization = 0;
   // Pair score threshold: 0=Off, 50=Weak, 60=Medium, 70=Strong.
-  uint8_t letterSpacingOptimizationThreshold = 60;
+  uint8_t letterSpacingOptimizationThreshold = 0;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
