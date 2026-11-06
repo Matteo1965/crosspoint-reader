@@ -60,6 +60,7 @@ class TextBlock final : public Block {
   BlockStyle blockStyle;
   uint16_t numWords = 0;
   uint16_t paragraphStartWord = UINT16_MAX;  // Visual index of the paragraph's first logical word.
+  uint8_t letterSpacingConfig = 0;            // 0=none, 1=uniform +1px, >=32=CPHUN packed optimizer
   uint16_t textBytes = 0;                    // total size of the text region, including NULs
   bool focusPresent = false;
   bool isValid = true;
@@ -96,7 +97,8 @@ class TextBlock final : public Block {
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSplitX, const BlockStyle& blockStyle = BlockStyle(),
                      std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {},
-                     const std::vector<SourceRange>& ranges = {}, uint16_t paragraphStartWord = UINT16_MAX);
+                     const std::vector<SourceRange>& ranges = {}, uint16_t paragraphStartWord = UINT16_MAX,
+                     uint8_t letterSpacingConfig = 0);
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;
