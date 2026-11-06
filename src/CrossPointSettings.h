@@ -349,6 +349,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
   uint8_t hungarianHyphenationExtended = 0;
+  // Hungarian Edition: Liang minPrefix/minSuffix preset:
+  // 0=1-1, 1=1-2, 2=2-2, 3=2-3, 4=3-3.
+  uint8_t hyphenationThreshold = 2;
+  // Honor soft-hyphen (U+00AD) break opportunities embedded in EPUB text.
+  uint8_t softHyphenEnabled = 0;
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
