@@ -1612,7 +1612,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
     }
 
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->softHyphenEnabled, self->focusReadingEnabled,
                                                            tableCellBlockStyle, self->paragraphIndentSpaces,
                                                            self->fixedDialogueSpacing);
     if (!self->currentTextBlock) {
@@ -2357,7 +2357,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (!self->currentTextBlock) {
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->softHyphenEnabled, self->focusReadingEnabled,
                                                            flowStyle, self->paragraphIndentSpaces,
                                                            self->fixedDialogueSpacing);
     if (!self->currentTextBlock) {
@@ -2760,7 +2760,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->focusReadingEnabled,
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->hyphenationEnabled, self->softHyphenEnabled, self->focusReadingEnabled,
                                                            flowStyle, self->paragraphIndentSpaces,
                                                            self->fixedDialogueSpacing);
     if (!self->currentTextBlock) {
