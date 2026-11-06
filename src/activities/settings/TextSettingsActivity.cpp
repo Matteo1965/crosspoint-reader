@@ -31,6 +31,7 @@ constexpr StrId LAYOUT_ROW_NAME_IDS[] = {
     StrId::STR_EXTRA_SPACING, StrId::STR_EXTRA_SPACING, StrId::STR_PARAGRAPH_INDENTATION,
     StrId::STR_ALIGNMENT, StrId::STR_SCREEN_MARGIN, StrId::STR_HYPHENATION};
 constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION_NO_PREVIEW,
+                                        StrId::STR_HYPHENATION_NO_PREVIEW, StrId::STR_HYPHENATION_NO_PREVIEW,
                                         StrId::STR_EMBEDDED_STYLE_NO_PREVIEW, StrId::STR_TEXT_AA_NO_PREVIEW};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
@@ -140,7 +141,13 @@ void TextSettingsActivity::rebuildRowItems() {
                                : I18N.get(LAYOUT_ROW_NAME_IDS[i]);
         break;
       case Tab::Style:
-        item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
+        if (i == static_cast<int>(StyleRow::HyphenationThreshold)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Elválasztási küszöb" : "Hyphenation threshold";
+        } else if (i == static_cast<int>(StyleRow::SoftHyphen)) {
+          item.label = I18N.getLanguage() == Language::HU ? "Beágyazott elválasztás" : "Embedded hyphenation";
+        } else {
+          item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
+        }
         break;
       default:
         break;
@@ -261,7 +268,10 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
         break;
     }
     rowItems_[i].toggle = false;
-    if (tab_ == Tab::Style && i != static_cast<int>(StyleRow::Hyphenation)) {
+    if (tab_ == Tab::Style && i == static_cast<int>(StyleRow::HyphenationThreshold)) {
+      static constexpr const char* thresholdLabels[] = {"1-1", "1-2", "2-2", "2-3", "3-3"};
+      rowValues_[i] = thresholdLabels[std::min<uint8_t>(SETTINGS.hyphenationThreshold, 4)];
+    } else if (tab_ == Tab::Style && i != static_cast<int>(StyleRow::Hyphenation)) {
       rowValues_[i] = styleRowChecked(i) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
       rowValues_[i] = SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
@@ -598,6 +608,21 @@ void TextSettingsActivity::confirmStyleRow(int row) {
       requestUpdate();
       return;
     }
+    case StyleRow::HyphenationThreshold: {
+      const char* options[] = {"1-1", "1-2", "2-2", "2-3", "3-3"};
+      const int selected = std::min<int>(SETTINGS.hyphenationThreshold, 4);
+      optionPopup_.show(I18N.getLanguage() == Language::HU ? "Elválasztási küszöb" : "Hyphenation threshold",
+                        options, 5, selected, [](int idx) {
+                          if (idx < 0 || idx > 4) return;
+                          SETTINGS.hyphenationThreshold = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
+    }
+    case StyleRow::SoftHyphen:
+      SETTINGS.softHyphenEnabled = !SETTINGS.softHyphenEnabled;
+      break;
     case StyleRow::EmbeddedStyle:
       SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
       break;
@@ -618,6 +643,10 @@ bool TextSettingsActivity::styleRowChecked(int row) const {
       return SETTINGS.focusReadingEnabled;
     case StyleRow::Hyphenation:
       return SETTINGS.hyphenationEnabled;
+    case StyleRow::HyphenationThreshold:
+      return false;
+    case StyleRow::SoftHyphen:
+      return SETTINGS.softHyphenEnabled;
     case StyleRow::EmbeddedStyle:
       return SETTINGS.embeddedStyle;
     case StyleRow::AntiAliasing:
