@@ -1648,10 +1648,10 @@ void EpubReaderActivity::renderBook() {
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
-        std::max(verticalReaderMargin(),
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+        std::max(SETTINGS.screenMargin,
+                  static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
   } else {
-    orientedMarginBottom += std::max(verticalReaderMargin(), statusBarHeight);
+    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
