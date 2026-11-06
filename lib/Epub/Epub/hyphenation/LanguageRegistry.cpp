@@ -58,3 +58,7 @@ LanguageEntryView getLanguageEntries() {
   const auto& allEntries = entries();
   return LanguageEntryView{allEntries.data(), allEntries.size()};
 }
+
+void setHungarianHyphenationMinima(const size_t minPrefix, const size_t minSuffix) {
+  hungarianHyphenator.setMinima(minPrefix, minSuffix);
+}
