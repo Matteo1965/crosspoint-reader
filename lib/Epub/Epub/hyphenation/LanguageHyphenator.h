@@ -16,6 +16,10 @@ class LanguageHyphenator {
 
   size_t minPrefix() const { return config_.minPrefix; }
   size_t minSuffix() const { return config_.minSuffix; }
+  void setMinima(const size_t minPrefix, const size_t minSuffix) {
+    config_.minPrefix = minPrefix;
+    config_.minSuffix = minSuffix;
+  }
 
  protected:
   const SerializedHyphenationPatterns& patterns_;
