@@ -249,13 +249,17 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   for (int i = 0; i < count; i++) {
     switch (tab_) {
       case Tab::Family:
-        rowValues_[i] = (i == currentFamilyIndex_) ? tr(STR_SELECTED) : "";
-        break;
-      case Tab::Size:
-        rowValues_[i] = (i == currentSizeIndex_) ? tr(STR_SELECTED) : "";
+        rowValues_[i] = i < static_cast<int>(fonts_.size())
+                            ? ((i == currentFamilyIndex_) ? tr(STR_SELECTED) : "")
+                            : ((currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
+                                   ? sizes_[currentSizeIndex_].name
+                                   : "");
         break;
       case Tab::Layout:
         rowValues_[i] = layoutValueText(i);
+        break;
+      case Tab::Text:
+        rowValues_[i] = textValueText(i);
         break;
       case Tab::Style:
         if (i == static_cast<int>(StyleRow::Hyphenation)) {
@@ -277,10 +281,6 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
       rowValues_[i] = thresholdLabels[std::min<uint8_t>(SETTINGS.hyphenationThreshold, 4)];
     } else if (tab_ == Tab::Style && i != static_cast<int>(StyleRow::Hyphenation)) {
       rowValues_[i] = styleRowChecked(i) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::FixedDialogueSpacing)) {
-      rowValues_[i] = SETTINGS.fixedDialogueSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    } else if (tab_ == Tab::Layout && i == static_cast<int>(LayoutRow::OpticalMargin)) {
-      rowValues_[i] = SETTINGS.opticalMargin ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     }
     rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
@@ -302,7 +302,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
 #endif
   props.labelText.maxLines = 2;
 #if FREEINK_DEVICE_PICCO
-  if (tab_ == Tab::Layout || tab_ == Tab::Style) {
+  if (tab_ == Tab::Layout || tab_ == Tab::Text || tab_ == Tab::Style) {
     props.rowHeight = 48;
   }
 #endif
@@ -313,12 +313,15 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
 const char* TextSettingsActivity::confirmLabelText() const {
   if (ringPos() == 0) {
     // Confirm on the tab bar advances to the next tab.
-    return I18N.get(TAB_NAME_IDS[(static_cast<int>(tab_) + 1) % static_cast<int>(Tab::Count)]);
+    const int next = (static_cast<int>(tab_) + 1) % static_cast<int>(Tab::Count);
+    return tabLabel(next);
   }
   switch (tab_) {
-    case Tab::Layout:
-      return (ringPos() - 1 == static_cast<int>(LayoutRow::FixedDialogueSpacing) ||
-              ringPos() - 1 == static_cast<int>(LayoutRow::OpticalMargin))
+    case Tab::Text:
+      return (ringPos() - 1 == static_cast<int>(TextRow::LetterSpacingOptimization) ||
+              ringPos() - 1 == static_cast<int>(TextRow::OpticalMargin) ||
+              ringPos() - 1 == static_cast<int>(TextRow::FixedDialogueSpacing) ||
+              ringPos() - 1 == static_cast<int>(TextRow::AntiAliasing))
                  ? tr(STR_TOGGLE)
                  : tr(STR_SELECT);
     case Tab::Style:
@@ -388,38 +391,39 @@ void TextSettingsActivity::applyFamily(int listIndex) {
 
   if (currentFamilyIndex_ != listIndex) return;  // switch failed — keep the old size list
 
-  // The new family ships its own set of point sizes, and ensureLoaded() may have
-  // snapped the selection into it, so the Size tab's list and its nav position
-  // both have to be rebuilt.
+  // The new family ships its own set of point sizes; keep the combined Font tab's
+  // Size row in sync with the family that actually loaded.
   rebuildSizeList();
-  tabNavs[static_cast<int>(Tab::Size)].selected = currentSizeIndex_ + 1;
 }
 
 void TextSettingsActivity::activateRow(int row) {
   switch (tab_) {
     case Tab::Family:
-      if (row != currentFamilyIndex_) {
-        applyFamily(row);
-        // Persist immediately (like SettingsActivity's per-change saves): the
-        // parent's result callback only runs on a normal finish(), so relying
-        // on it loses the change when this screen is left via the home
-        // gesture/key or a sleep. Saved here, not inside applyFamily, so the
-        // SD write happens outside its RenderLock.
-        if (currentFamilyIndex_ == row) {
+      if (row == static_cast<int>(fonts_.size())) {
+        std::vector<std::string> options;
+        options.reserve(sizes_.size());
+        for (const auto& size : sizes_) options.push_back(size.name);
+        optionPopup_.show(StrId::STR_SIZE, options, currentSizeIndex_, [this](int idx) {
+          if (idx < 0 || idx >= static_cast<int>(sizes_.size())) return;
+          applySize(idx);
           SETTINGS.saveToFile();
-        }
+          rebuildRowItems();
+          requestUpdate();
+        });
         requestUpdate();
-      }
-      break;
-    case Tab::Size:
-      if (row != currentSizeIndex_) {
-        applySize(row);
-        SETTINGS.saveToFile();
+      } else if (row >= 0 && row < static_cast<int>(fonts_.size()) && row != currentFamilyIndex_) {
+        applyFamily(row);
+        // Persist immediately (like SettingsActivity's per-change saves).
+        if (currentFamilyIndex_ == row) SETTINGS.saveToFile();
+        rebuildRowItems();
         requestUpdate();
       }
       break;
     case Tab::Layout:
       confirmLayoutRow(row);
+      break;
+    case Tab::Text:
+      confirmTextRow(row);
       break;
     case Tab::Style:
       confirmStyleRow(row);
@@ -675,11 +679,11 @@ void TextSettingsActivity::switchTab(const int direction) {
 int TextSettingsActivity::listCount() const {
   switch (tab_) {
     case Tab::Family:
-      return static_cast<int>(fonts_.size());
-    case Tab::Size:
-      return static_cast<int>(sizes_.size());
+      return static_cast<int>(fonts_.size()) + 1;  // + Size picker row
     case Tab::Layout:
       return static_cast<int>(LayoutRow::Count);
+    case Tab::Text:
+      return static_cast<int>(TextRow::Count);
     case Tab::Style:
       return static_cast<int>(StyleRow::Count);
 
