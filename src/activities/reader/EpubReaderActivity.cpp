@@ -25,6 +25,7 @@
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
+#include "BookInfoActivity.h"
 #include "ChapterBuildGate.h"
 #include "ClipSelectionActivity.h"
 #include "ClippingStore.h"
@@ -1185,6 +1186,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
       openFootnoteSelect(true);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_DESCRIPTION: {
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Description),
+          [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_METADATA: {
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub, BookInfoActivity::Page::Metadata),
+          [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
