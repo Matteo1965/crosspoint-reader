@@ -24,3 +24,6 @@ const LanguageHyphenator* getLanguageHyphenatorForPrimaryTag(const std::string& 
 
 // Exposes the list of supported languages primarily for tooling/tests.
 LanguageEntryView getLanguageEntries();
+
+// Hungarian Edition: update the active Hungarian Liang minPrefix/minSuffix.
+void setHungarianHyphenationMinima(size_t minPrefix, size_t minSuffix);
