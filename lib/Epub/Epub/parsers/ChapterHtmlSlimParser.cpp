@@ -814,14 +814,14 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle, cons
   dropCap.firstLetterPending = false;
   inlineSize = InlineSizeState{};
   currentTextBlock =
-      makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces,
-                                   fixedDialogueSpacing);
+      makeUniqueNoThrow<ParsedText>(hyphenationEnabled, softHyphenEnabled, focusReadingEnabled, blockStyle,
+                                   paragraphIndentSpaces, fixedDialogueSpacing);
   if (!currentTextBlock) {
     // Evict rebuildable caches and retry once before failing the build.
     freeink::MemoryManager::instance().ensureFree(4 * 1024);
     currentTextBlock =
-        makeUniqueNoThrow<ParsedText>(hyphenationEnabled, focusReadingEnabled, blockStyle, paragraphIndentSpaces,
-                                   fixedDialogueSpacing);
+        makeUniqueNoThrow<ParsedText>(hyphenationEnabled, softHyphenEnabled, focusReadingEnabled, blockStyle,
+                                   paragraphIndentSpaces, fixedDialogueSpacing);
   }
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
