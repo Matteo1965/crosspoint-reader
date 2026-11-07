@@ -1,4 +1,5 @@
 name: HU Picco firmware
+# HU-PICCO-117: remove Night Mode from classic Reader menu and More panel.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -8,7 +9,8 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-      - agent/hu-picco-111-cphun224-letter-spacing
+    paths-ignore:
+      - '.github/workflows/hu-picco.yml'
   workflow_dispatch:
 
 permissions:
@@ -69,8 +71,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Scale optical hanging punctuation to the full configured right reader margin.
-          printf 'name=HU-PICCO-115\n' >> "$GITHUB_OUTPUT"
+          # HU-PICCO-117: Night Mode remains available in Display settings.
+          printf 'name=HU-PICCO-117\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
