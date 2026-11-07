@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-116 bookmark and touch-corner test build.
+# HU-PICCO-117: remove Night Mode from classic Reader menu and More panel.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -71,8 +71,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # HU-PICCO-116: dynamic bookmark labels, denser menu, touch dog-ear.
-          printf 'name=HU-PICCO-116\n' >> "$GITHUB_OUTPUT"
+          # HU-PICCO-117: Night Mode remains available in Display settings.
+          printf 'name=HU-PICCO-117\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
