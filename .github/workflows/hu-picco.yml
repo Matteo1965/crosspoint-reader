@@ -9,6 +9,8 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
+    paths-ignore:
+      - '.github/workflows/hu-picco.yml'
   workflow_dispatch:
 
 permissions:
@@ -46,15 +48,6 @@ jobs:
             git commit -m "HU-PICCO-102: refresh built-in font IDs"
             git push origin HEAD:picco-hungarian-edition-2.0.0
           fi
-
-      - name: Upload Ubuntu 14 UI fonts
-        uses: actions/upload-artifact@v6
-        with:
-          name: HU-PICCO-UI14-fonts
-          path: |
-            lib/EpdFont/builtinFonts/ubuntu_14_regular.h
-            lib/EpdFont/builtinFonts/ubuntu_14_bold.h
-          if-no-files-found: error
 
       - name: Compile Picco
         run: |
