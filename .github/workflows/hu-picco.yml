@@ -1,4 +1,5 @@
 name: HU Picco firmware
+# HU-PICCO-116 bookmark and touch-corner test build.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
