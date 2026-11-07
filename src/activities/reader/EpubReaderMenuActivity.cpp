@@ -21,9 +21,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks,
-                                               const bool hasClippings, MenuAction& selectedAction)
+                                               const bool hasClippings, const bool currentPageBookmarked, MenuAction& selectedAction)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
       selectedAction(selectedAction),
+      currentPageBookmarked(currentPageBookmarked),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -57,7 +58,11 @@ void EpubReaderMenuActivity::onExit() {
 void EpubReaderMenuActivity::buildMenuRowItems() {
   for (size_t i = 0; i < menuItems.size() && i < MAX_MENU_ITEMS; i++) {
     fui::ListItem item;
-    item.label = I18N.get(menuItems[i].labelId);
+    item.label = menuItems[i].action == MenuAction::TOGGLE_BOOKMARK
+                     ? (I18N.getLanguage() == I18N.languageFromCode("hu")
+                            ? (currentPageBookmarked ? "Könyvjelző törlése" : "Könyvjelző hozzáadása")
+                            : (currentPageBookmarked ? "Remove Bookmark" : "Add Bookmark"))
+                     : I18N.get(menuItems[i].labelId);
     item.actionValue = static_cast<int16_t>(i);
     menuRowItems[i] = item;
   }
@@ -259,7 +264,7 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
 #endif
   props.labelText.maxLines = 2;
 #if FREEINK_DEVICE_PICCO
-  props.rowHeight = 48;
+  props.rowHeight = 47;  // HU-PICCO: reclaim 1 px per menu row to keep the last item visible.
 #endif
   syncListViewport(screen, props);
   screen.list(props);
