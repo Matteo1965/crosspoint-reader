@@ -57,6 +57,7 @@
 #include "clippings/ClippingText.h"
 #include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
+#include "components/icons/bookmark.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
@@ -77,6 +78,21 @@ bool xteinkClassPanel() {
 
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr float bookmarkProgressEpsilon = 0.0001f;
+#if FREEINK_DEVICE_PICCO
+constexpr int kDogearSize = 32;
+constexpr int kDogearCornerInset = 2;
+constexpr int kDogearTouchSize = 44;
+void drawPiccoDogear(const GfxRenderer& renderer) {
+  const int left = renderer.getScreenWidth() - kDogearSize - kDogearCornerInset;
+  for (int row = 0; row < kDogearSize; ++row) {
+    for (int col = 0; col < kDogearSize; ++col) {
+      const uint8_t bits = NEW_DOGEAR_32x32[row * (kDogearSize / 8) + col / 8];
+      const uint8_t mask = static_cast<uint8_t>(1U << (7 - (col % 8)));
+      renderer.drawPixel(left + col, kDogearCornerInset + row, (bits & mask) != 0);
+    }
+  }
+}
+#endif
 constexpr int CLIP_SELECTION_PAGE_WINDOW = 3;
 
 // Word i's font: headings and CSS font-size runs can differ from the section font.
@@ -356,7 +372,8 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                              renderer, mappedInput, epub->getTitle(), position.displayPage(), position.totalPages,
                              bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                             !cachedBookmarks.empty(), CLIPPINGS.hasClippings(), selectedMenuAction),
+                             !cachedBookmarks.empty(), CLIPPINGS.hasClippings(), currentPageBookmarked,
+                             selectedMenuAction),
                          [this](const ActivityResult& result) {
                            const auto& menu = std::get<MenuResult>(result.data);
 
@@ -771,6 +788,25 @@ void EpubReaderActivity::loop() {
     requestUpdate();
     return;
   }
+
+#if FREEINK_DEVICE_PICCO
+  // First priority for reader touch: the same 44px corner adds or removes a bookmark.
+  if (!atEndOfBook && section && mappedInput.hasTouch() && SETTINGS.touchReaderControls) {
+    int tapX = 0;
+    int tapY = 0;
+    if (mappedInput.wasScreenTapped(tapX, tapY) &&
+        tapX >= renderer.getScreenWidth() - kDogearTouchSize && tapX < renderer.getScreenWidth() &&
+        tapY >= 0 && tapY < kDogearTouchSize) {
+      automaticPageTurnActive = false;
+      pendingManualTurn = 0;
+      addBookmark();
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+      haptic_feedback::touchAction();
+      return;
+    }
+  }
+#endif
 
   int selectionX = 0;
   int selectionY = 0;
@@ -2485,6 +2521,9 @@ void EpubReaderActivity::renderStatusBar() const {
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
                     section ? section->isBuilding() : false);
+#if FREEINK_DEVICE_PICCO
+  if (currentPageBookmarked) drawPiccoDogear(renderer);
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -3108,7 +3147,14 @@ void EpubReaderActivity::buildMoreActions() {
 }
 
 std::string EpubReaderActivity::moreRowName(int row) const {
-  return row >= 0 && row < static_cast<int>(moreItems.size()) ? I18N.get(moreItems[row].labelId) : "";
+  if (row < 0 || row >= static_cast<int>(moreItems.size())) return "";
+  if (moreItems[row].action == EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK) {
+    return I18N.getLanguage() == Language::HU
+               ? (currentPageBookmarked ? "Könyvjelző törlése" : "Könyvjelző hozzáadása")
+               : (currentPageBookmarked ? "Remove Bookmark" : "Add Bookmark");
+  }
+  const auto& item = moreItems[row];
+  return item.customLabel ? item.customLabel : I18N.get(item.labelId);
 }
 
 std::string EpubReaderActivity::moreRowValue(int row) const {
