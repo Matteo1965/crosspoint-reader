@@ -59,7 +59,7 @@ void EpubReaderMenuActivity::buildMenuRowItems() {
   for (size_t i = 0; i < menuItems.size() && i < MAX_MENU_ITEMS; i++) {
     fui::ListItem item;
     item.label = menuItems[i].action == MenuAction::TOGGLE_BOOKMARK
-                     ? (I18N.getLanguage() == I18N.languageFromCode("hu")
+                     ? (I18N.getLanguage() == I18N.languageFromCode("HU")
                             ? (currentPageBookmarked ? "Könyvjelző törlése" : "Könyvjelző hozzáadása")
                             : (currentPageBookmarked ? "Remove Bookmark" : "Add Bookmark"))
                      : I18N.get(menuItems[i].labelId);
