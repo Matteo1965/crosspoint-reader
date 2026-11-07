@@ -3137,7 +3137,7 @@ void EpubReaderActivity::buildMoreActions() {
 std::string EpubReaderActivity::moreRowName(int row) const {
   if (row < 0 || row >= static_cast<int>(moreItems.size())) return "";
   if (moreItems[row].action == EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK) {
-    return I18N.getLanguage() == I18N.languageFromCode("hu")
+    return I18N.getLanguage() == I18N.languageFromCode("HU")
                ? (currentPageBookmarked ? "Könyvjelző törlése" : "Könyvjelző hozzáadása")
                : (currentPageBookmarked ? "Remove Bookmark" : "Add Bookmark");
   }
