@@ -917,6 +917,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     }
   }
 
+  // The Picco dog-ear is drawn independently at the upper-right screen edge by
+  // EpubReaderActivity, including when the status bar is hidden.
+#if !FREEINK_DEVICE_PICCO
   // Draw Bookmark
   if (showStatusBarTextLane && isPageBookmarked) {
     const int bookmarkGap = leftClusterWidth > 0 ? bookmarkStatusIconGap : 0;
@@ -925,6 +928,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     drawBookmarkStatusIcon(renderer, bookmarkX, bookmarkY);
     leftClusterWidth += bookmarkStatusIconWidth + bookmarkGap;
   }
+#endif
 
   // Draw Title
   if (!title.empty()) {
