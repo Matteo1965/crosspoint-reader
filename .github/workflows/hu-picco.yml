@@ -77,8 +77,8 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # Scale optical hanging punctuation to the full configured right reader margin.
-          printf 'name=HU-PICCO-110\n' >> "$GITHUB_OUTPUT"
+          # HU-PICCO-116: dynamic bookmark labels, denser menu, touch dog-ear.
+          printf 'name=HU-PICCO-116\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
