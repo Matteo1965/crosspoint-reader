@@ -5,10 +5,10 @@
 #include <string>
 #include <vector>
 
-#include "activities/UiListActivity.h"
+#include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
 
-class EpubReaderMenuActivity final : public UiListActivity {
+class EpubReaderMenuActivity final : public UiTabListActivity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
@@ -64,7 +64,15 @@ class EpubReaderMenuActivity final : public UiListActivity {
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 
-  int listCount() const override { return static_cast<int>(menuItems.size()); }
+  enum class Tab : uint8_t { Reading = 0, Book = 1, Count = 2 };
+  int listCount() const override { return static_cast<int>(activeItems().size()); }
+  int tabCount() const override { return static_cast<int>(Tab::Count); }
+  int activeTab() const override { return static_cast<int>(tab_); }
+  const char* tabLabel(int index) const override;
+  void onTabAction(int index) override;
+  void stepTab(int direction) override;
+  const std::vector<MenuItem>& activeItems() const;
+  void splitMenuItems();
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   // Popup input runs before any button or touch handling.
@@ -79,6 +87,9 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   // Fixed menu layout
   std::vector<MenuItem> menuItems;
+  std::vector<MenuItem> readingItems;
+  std::vector<MenuItem> bookItems;
+  Tab tab_ = Tab::Reading;
   MenuAction& selectedAction;
   bool currentPageBookmarked = false;
 
