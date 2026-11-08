@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-119 preview: tab Confirm, moved actions, and Footnotes.
+# HU-PICCO-120 preview: dictionary lookup, manual search, dictionary selection.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-      - agent/hu-picco-119-footnotes-reader-tabs
+      - agent/hu-picco-120-dictionary-menu
   workflow_dispatch:
 
 permissions:
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-119-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-120-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
