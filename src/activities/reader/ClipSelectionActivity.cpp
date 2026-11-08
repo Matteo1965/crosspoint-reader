@@ -942,7 +942,9 @@ void ClipSelectionActivity::render(RenderLock&&) {
   renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
 
   const auto labels = mappedInput.mapLabels(
-      tr(STR_BACK), rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE)), tr(STR_DIR_LEFT),
+      tr(STR_BACK), isDirectDictionaryWord() ? tr(STR_LOOKUP)
+                                         : (rangeStart < 0 ? tr(STR_SELECT) : (isLookup() ? tr(STR_LOOKUP) : tr(STR_DONE))),
+      tr(STR_DIR_LEFT),
       tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
