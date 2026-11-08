@@ -12,6 +12,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "SettingsList.h"
 #include "components/UITheme.h"
 #include "util/PluginEvents.h"
 #include "util/SlideSwitch.h"
@@ -33,6 +34,14 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {
   buildMenuItems(menuItems, hasFootnotes, hasBookmarks, hasClippings);
   splitMenuItems();
+  std::vector<DictionaryEntry> dictionaries;
+  DictionaryRegistry::discover(dictionaries);
+  auto dictionarySetting = buildDictionarySetting(dictionaries);
+  dictionaryOptionLabels = std::move(dictionarySetting.enumStringValues);
+  dictionaryOptionPointers.reserve(dictionaryOptionLabels.size());
+  for (const auto& label : dictionaryOptionLabels) dictionaryOptionPointers.push_back(label.c_str());
+  selectedDictionaryOption = dictionarySetting.valueGetter ? dictionarySetting.valueGetter() : 0;
+  dictionarySetter = std::move(dictionarySetting.valueSetter);
   buildMenuRowItems();
 }
 
@@ -53,7 +62,8 @@ void EpubReaderMenuActivity::splitMenuItems() {
   constexpr MenuAction readingOrder[] = {
       MenuAction::SELECT_CHAPTER, MenuAction::FOOTNOTES, MenuAction::BOOKMARKS,
       MenuAction::TOGGLE_BOOKMARK, MenuAction::SAVE_CLIPPING, MenuAction::VIEW_CLIPPINGS,
-      MenuAction::DICTIONARY, MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
+      MenuAction::DICTIONARY, MenuAction::MANUAL_DICTIONARY_SEARCH,
+      MenuAction::DICTIONARY_SETTINGS, MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
       MenuAction::GO_TO_PERCENT, MenuAction::TEXT_SETTINGS, MenuAction::GO_HOME};
   constexpr MenuAction bookOrder[] = {
       MenuAction::BOOK_DESCRIPTION, MenuAction::BOOK_METADATA, MenuAction::ROTATE_SCREEN,
@@ -147,9 +157,12 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   if (bleturner::status().compiledIn && SETTINGS.ble.peerAddr[0] != '\0') {
     items.push_back({MenuAction::BLUETOOTH, StrId::STR_BT_PAGE_TURNER});
   }
-  if (SETTINGS.dictionaryName[0] != '\0') {
-    items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
-  }
+  items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP,
+                   I18N.getLanguage() == Language::HU ? "Szótári keresés" : "Dictionary Lookup"});
+  items.push_back({MenuAction::MANUAL_DICTIONARY_SEARCH, StrId::STR_LOOKUP,
+                   I18N.getLanguage() == Language::HU ? "Kézi keresés" : "Manual Lookup"});
+  items.push_back({MenuAction::DICTIONARY_SETTINGS, StrId::STR_DICTIONARY,
+                   I18N.getLanguage() == Language::HU ? "Szótár" : "Dictionary"});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -222,6 +235,21 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
                        requestUpdate();
                      });
     requestUpdate();
+    return;
+  }
+
+  if (selectedAction == MenuAction::DICTIONARY_SETTINGS) {
+    if (!dictionaryOptionPointers.empty()) {
+      optionPopup.show(I18N.get(StrId::STR_DICTIONARY), dictionaryOptionPointers.data(),
+                       static_cast<int>(dictionaryOptionPointers.size()), selectedDictionaryOption,
+                       [this](int idx) {
+                         selectedDictionaryOption = static_cast<uint8_t>(idx);
+                         if (dictionarySetter) dictionarySetter(selectedDictionaryOption);
+                         SETTINGS.saveToFile();
+                         requestUpdate();
+                       });
+      requestUpdate();
+    }
     return;
   }
 
@@ -302,6 +330,16 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
       menuRowItems[i].value = I18N.get(orientationLabels[pendingOrientation]);
     } else if (action == MenuAction::AUTO_PAGE_TURN) {
       menuRowItems[i].value = pageTurnLabels[selectedPageTurnOption];
+    } else if (action == MenuAction::DICTIONARY_SETTINGS) {
+      dictionaryRowLabel = I18N.getLanguage() == Language::HU ? "Szótár: " : "Dictionary: ";
+      if (selectedDictionaryOption < dictionaryOptionPointers.size() &&
+          dictionaryOptionPointers[selectedDictionaryOption]) {
+        dictionaryRowLabel += dictionaryOptionPointers[selectedDictionaryOption];
+      } else {
+        dictionaryRowLabel += I18N.get(StrId::STR_NONE_OPT);
+      }
+      menuRowItems[i].label = dictionaryRowLabel.c_str();
+      menuRowItems[i].value = nullptr;
     } else if (action == MenuAction::NIGHT_MODE) {
       menuRowItems[i].toggle = false;
       menuRowItems[i].value = SETTINGS.screenInverted ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
