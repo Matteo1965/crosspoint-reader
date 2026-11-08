@@ -410,6 +410,22 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   return breaks;
 }
 
+std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsetsForLanguageExtended(
+    const std::string& word, const bool includeFallback, const char* language) {
+  // The ordinary EPUB reader uses a global preferred language. Preserve it so
+  // reading a Hungarian description never changes subsequent book layout.
+  const auto* previous = cachedHyphenator_;
+  const bool previousHu = preferredLanguageIsHungarian_;
+  const bool previousExtended = hungarianExtended_;
+  setPreferredLanguage(language ? language : "hu");
+  setHungarianExtended(true);
+  auto result = breakOffsets(word, includeFallback);
+  cachedHyphenator_ = previous;
+  preferredLanguageIsHungarian_ = previousHu;
+  hungarianExtended_ = previousExtended;
+  return result;
+}
+
 std::vector<Hyphenator::BreakInfo> Hyphenator::softHyphenBreakOffsets(const std::string& word) {
   auto cps = collectCodepoints(word);
   std::vector<BreakInfo> out;
