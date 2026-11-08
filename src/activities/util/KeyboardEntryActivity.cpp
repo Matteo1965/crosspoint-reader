@@ -1040,7 +1040,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const int gap = props.gap;
     const int keyHeight = (keysRect.height - (rowCount - 1) * gap) / rowCount;
     const int keyWidth = (keysRect.width - 10 * gap) / 11;
-    const int cx = keysRect.x + keysRect.width - keyWidth / 2;
+    const int cx = keysRect.x + keysRect.width - keyWidth / 2 - 5;  // Picco DEL optical centering
     const int cy = keysRect.y + keyHeight / 2;
     renderer.drawLine(cx - 12, cy - 8, cx + 1, cy - 8, 2, true);
     renderer.drawLine(cx - 12, cy + 8, cx + 1, cy + 8, 2, true);
