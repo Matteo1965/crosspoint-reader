@@ -77,6 +77,9 @@ void ClipSelectionActivity::onEnter() {
       mode == Mode::DefinitionLookup || DictionaryRegistry::resolveBasePath(SETTINGS.dictionaryName, dictionaryPath);
   fontId = SETTINGS.getReaderFontId();
   lineHeight = renderer.getLineHeight(fontId);
+  // Do not pre-highlight a random middle word on touch Picco devices.
+  // Keep the navigation cursor available on button-only readers.
+  dictionaryCursorVisible = !isDirectDictionaryWord() || !mappedInput.hasTouch();
   const bool extracted = extractWords();
   if (!extracted && mode == Mode::DefinitionLookup) {
     static constexpr StrId OPTIONS[] = {StrId::STR_BACK};
@@ -654,11 +657,22 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
+    if (isDirectDictionaryWord() && !dictionaryCursorVisible) {
+      dictionaryCursorVisible = true;
+      requestUpdate();
+      return true;
+    }
     if (isDirectDictionaryWord()) rangeStart = selected;
     confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
     return true;
   }
 
+  if (isDirectDictionaryWord() &&
+      (buttons & (Input::INPUT_LEFT | Input::INPUT_RIGHT | Input::INPUT_UP | Input::INPUT_DOWN)) &&
+      !dictionaryCursorVisible) {
+    dictionaryCursorVisible = true;
+    requestUpdate();
+  }
   const int next =
       selectionGeometry::horizontalIndex(selected, static_cast<int>(wordCount), buttons & Input::INPUT_LEFT,
                                          buttons & Input::INPUT_RIGHT, words[selected].isRtl);
@@ -891,6 +905,7 @@ bool ClipSelectionActivity::renderIncremental() {
 }
 
 void ClipSelectionActivity::drawSelection() const {
+  if (isDirectDictionaryWord() && !dictionaryCursorVisible) return;
   const int offset = textOffset();
   const int offsetX = textXOffset();
   const int first = rangeStart < 0 ? selected : std::min(rangeStart, selected);
