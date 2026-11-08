@@ -328,7 +328,6 @@ BookInfoActivity::BookInfoActivity(GfxRenderer& renderer, MappedInputManager& ma
 
 void BookInfoActivity::onEnter() {
   Activity::onEnter();
-  renderer.setMissingGlyphFallbackFont(page_ == Page::Description ? NOTOSERIF_14_FONT_ID : NOTOSANS_14_FONT_ID);
   if (epub_) epub_->readBookInfo(info_);
   buildText();
   wrapText();
@@ -336,7 +335,6 @@ void BookInfoActivity::onEnter() {
 }
 
 void BookInfoActivity::onExit() {
-  renderer.clearMissingGlyphFallbackFont();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
 }
@@ -405,7 +403,7 @@ int BookInfoActivity::measureSpan(const char* text, size_t len) const {
   len = std::min(len, MAX_LINE_BYTES);
   memcpy(buf, text, len);
   buf[len] = '\0';
-  return renderer.getTextAdvanceX(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID, buf,
+  return renderer.getTextAdvanceX(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID : NOTOSANS_14_FONT_ID, buf,
                                   EpdFontFamily::REGULAR);
 }
 
@@ -422,7 +420,7 @@ void BookInfoActivity::wrapText() {
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
   const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
   const int lineHeight = renderer.getLineHeight(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID
-                                                                    : NOTOSERIF_14_FONT_ID);
+                                                                    : NOTOSANS_14_FONT_ID);
   const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
                       metrics.verticalSpacing;
   const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
@@ -524,8 +522,8 @@ void BookInfoActivity::wrapText() {
   uint32_t lineStart = 0;
   uint32_t lineEnd = 0;
   int lineWidth = 0;
-  const int spaceWidth = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
-  const int hyphenWidth = renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "-", EpdFontFamily::REGULAR);
+  const int spaceWidth = renderer.getSpaceWidth(NOTOSANS_14_FONT_ID, EpdFontFamily::REGULAR);
+  const int hyphenWidth = renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, "-", EpdFontFamily::REGULAR);
 
   const auto flushLine = [&](const uint32_t nextStart, const bool appendHyphen = false, const bool justify = false,
                              const bool metadataFieldEnd = false) {
@@ -713,7 +711,7 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
                            ? pageStarts_[currentPage_ + 1]
                            : static_cast<int>(lines_.size());
   const int lineHeight = renderer.getLineHeight(page_ == Page::Metadata ? NOTOSANS_14_FONT_ID
-                                                                    : NOTOSERIF_14_FONT_ID);
+                                                                    : NOTOSANS_14_FONT_ID);
 
   for (int i = firstLine; i < lastLine; ++i) {
     const Line& line = lines_[i];
@@ -768,13 +766,13 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
           if (wordLen == 0) continue;
           memcpy(wordBuf, buf + wordStart, wordLen);
           wordBuf[wordLen] = '\0';
-          wordsWidth += renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, wordBuf, EpdFontFamily::REGULAR);
+          wordsWidth += renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, wordBuf, EpdFontFamily::REGULAR);
         }
 
         const int gapCount = wordCount - 1;
-        const int naturalSpace = renderer.getSpaceWidth(NOTOSERIF_14_FONT_ID, EpdFontFamily::REGULAR);
+        const int naturalSpace = renderer.getSpaceWidth(NOTOSANS_14_FONT_ID, EpdFontFamily::REGULAR);
         const int hyphenWidth = line.appendHyphen
-                                    ? renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, "-", EpdFontFamily::REGULAR)
+                                    ? renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, "-", EpdFontFamily::REGULAR)
                                     : 0;
         const int extra = std::max(0, maxWidth - wordsWidth - gapCount * naturalSpace - hyphenWidth);
         const int extraPerGap = extra / gapCount;
@@ -790,24 +788,24 @@ void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidt
           if (wordLen == 0) continue;
           memcpy(wordBuf, buf + wordStart, wordLen);
           wordBuf[wordLen] = '\0';
-          renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, wordBuf, true, EpdFontFamily::REGULAR);
-          cursorX += renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, wordBuf, EpdFontFamily::REGULAR);
+          renderer.drawText(NOTOSANS_14_FONT_ID, cursorX, y, wordBuf, true, EpdFontFamily::REGULAR);
+          cursorX += renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, wordBuf, EpdFontFamily::REGULAR);
           if (gapIndex < gapCount) {
             cursorX += naturalSpace + extraPerGap + (gapIndex < remainder ? 1 : 0);
             ++gapIndex;
           }
         }
-        if (line.appendHyphen) renderer.drawText(NOTOSERIF_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
+        if (line.appendHyphen) renderer.drawText(NOTOSANS_14_FONT_ID, cursorX, y, "-", true, EpdFontFamily::REGULAR);
         y += lineHeight;
         if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
         continue;
       }
     }
 
-    renderer.drawText(NOTOSERIF_14_FONT_ID, x, y, buf, true, EpdFontFamily::REGULAR);
+    renderer.drawText(NOTOSANS_14_FONT_ID, x, y, buf, true, EpdFontFamily::REGULAR);
     if (line.appendHyphen) {
-      const int hyphenX = x + renderer.getTextAdvanceX(NOTOSERIF_14_FONT_ID, buf, EpdFontFamily::REGULAR);
-      renderer.drawText(NOTOSERIF_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
+      const int hyphenX = x + renderer.getTextAdvanceX(NOTOSANS_14_FONT_ID, buf, EpdFontFamily::REGULAR);
+      renderer.drawText(NOTOSANS_14_FONT_ID, hyphenX, y, "-", true, EpdFontFamily::REGULAR);
     }
     y += lineHeight;
     if (page_ == Page::Metadata && line.metadataFieldEnd && i + 1 < static_cast<int>(lines_.size())) y += 2;
