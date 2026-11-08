@@ -760,8 +760,8 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
         const size_t begin = k;
         while (k < len && buf[k] != ' ' && buf[k] != '\t') ++k;
         if (k == begin) continue;
-        const std::string word(buf + begin, k - begin);
-        wordsWidth += renderer.getTextAdvanceX(fontId, word.c_str(), family);
+        const std::string renderedWord(buf + begin, k - begin);
+        wordsWidth += renderer.getTextAdvanceX(fontId, renderedWord.c_str(), family);
         ++wordCount;
       }
       if (wordCount > 1) {
@@ -774,9 +774,9 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
           const size_t begin = k;
           while (k < len && buf[k] != ' ' && buf[k] != '\t') ++k;
           if (k == begin) continue;
-          const std::string word(buf + begin, k - begin);
+          const std::string renderedWord(buf + begin, k - begin);
           renderer.drawText(fontId, cursorX, y, word.c_str(), true, family);
-          cursorX += renderer.getTextAdvanceX(fontId, word.c_str(), family);
+          cursorX += renderer.getTextAdvanceX(fontId, renderedWord.c_str(), family);
           if (placedGaps < gaps) {
             cursorX += distributed / gaps + (placedGaps < distributed % gaps ? 1 : 0);
             ++placedGaps;
