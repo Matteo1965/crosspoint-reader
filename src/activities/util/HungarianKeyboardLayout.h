@@ -90,7 +90,8 @@ inline const fui::KeyboardKey SYMBOL_EXTRA_ROW[] = {
     HUK("–", "–", 1410), HUK("+", "+", '+'), HUK("*", "*", '*'), HUK("§", "§", 1413),
     HUK("°", "°", 1414), HUK("«", "«", 1415), HUK("»", "»", 1416)
 };
-// All symbol rows must total 22 units, just like the main keyboard.\ninline const fui::KeyboardKey SYMBOL_ROW3[] = {
+// All symbol rows must total 22 units, just like the main keyboard.
+inline const fui::KeyboardKey SYMBOL_ROW3[] = {
     HUKS(nullptr, fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 3),
     HUK("=", "=", '='), HUK("!", "!", '!'), HUK("'", "'", '\''), HUK("\"", "\"", '"'),
     HUK("#", "#", '#'), HUKW("…", "…", 1404, 2), HUK("<", "<", '<'), HUK(">", ">", '>'),
