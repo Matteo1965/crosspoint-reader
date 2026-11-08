@@ -789,7 +789,14 @@ bool Epub::readBookInfo(BookInfo& info) const {
   size_t opfSize = 0;
   if (!getItemSize(opfPath, &opfSize)) return false;
   ContentOpfParser parser(cachePath, base, opfSize, nullptr, true);
-  if (!parser.setup() || !readItemContentsToStream(opfPath, parser, 1024)) return false;
+  if (!parser.setup()) return false;
+  // ContentOpfParser in metadata-only mode intentionally reports a short
+  // write once </metadata> has been parsed. That is successful completion,
+  // not an invalid EPUB: the title, description and all other metadata have
+  // already been collected. Previously this path returned false before
+  // copying parser.description, producing a false "no description" message.
+  const bool fullyRead = readItemContentsToStream(opfPath, parser, 1024);
+  if (!fullyRead && !parser.isMetadataComplete()) return false;
   if (!parser.title.empty()) info.title = parser.title;
   if (!parser.author.empty()) info.author = parser.author;
   if (!parser.language.empty()) info.language = parser.language;
