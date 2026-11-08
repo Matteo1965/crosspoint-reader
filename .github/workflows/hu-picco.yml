@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-121 preview: restore EPUB description metadata parsing.
+# HU-PICCO-122 preview: move dictionary actions to Book tab.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-      - agent/hu-picco-121-dictionary-typography
+      - agent/hu-picco-122-dictionary-book-tab
   workflow_dispatch:
 
 permissions:
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-121-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-122-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
