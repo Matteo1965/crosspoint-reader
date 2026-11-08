@@ -598,7 +598,12 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
 }
 
 void EpubReaderActivity::openFootnoteSelect(const bool reopenMenuOnCancel) {
-  if (!section || currentPageFootnotes.empty()) return;
+  if (!section || currentPageFootnotes.empty()) {
+    showNoFootnotesMessage = true;
+    noFootnotesMessageTime = millis();
+    requestUpdate();
+    return;
+  }
   if (currentPageFootnotes.size() == 1) {
     navigateToHref(currentPageFootnotes[0].href, true);
     return;
@@ -762,6 +767,11 @@ void EpubReaderActivity::loop() {
 
   if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showDictionaryMessage = false;
+    requestUpdate();
+  }
+  if (showNoFootnotesMessage &&
+      (millis() - noFootnotesMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showNoFootnotesMessage = false;
     requestUpdate();
   }
 
@@ -2006,6 +2016,11 @@ void EpubReaderActivity::renderBook() {
 
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+  }
+  if (showNoFootnotesMessage) {
+    GUI.drawPopup(renderer, I18N.getLanguage() == Language::HU
+                               ? "Nincs lábjegyzet ezen az oldalon."
+                               : "No footnotes on this page.");
   }
 
   // Glyphs of a damaged .cpfont draw as blanks; say why, once per loaded font.
