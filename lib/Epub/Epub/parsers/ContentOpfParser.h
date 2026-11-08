@@ -114,6 +114,10 @@ class ContentOpfParser final : public Print {
 
   bool setup();
 
+  // Metadata-only reads deliberately stop feeding the OPF when </metadata>
+  // is reached; callers may accept that expected short write as success.
+  bool isMetadataComplete() const { return metadataComplete; }
+
   size_t write(uint8_t) override;
   size_t write(const uint8_t* buffer, size_t size) override;
 };
