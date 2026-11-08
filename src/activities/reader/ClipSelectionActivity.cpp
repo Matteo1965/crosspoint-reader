@@ -479,6 +479,39 @@ void ClipSelectionActivity::loop() {
   RenderLock lock;
   if (actionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
+  // Reader-menu dictionary lookup is word based, not a clipping/range
+  // selection: one tap opens the matching entry immediately.
+  if (isDirectDictionaryWord()) {
+    int x = 0;
+    int y = 0;
+    if (mappedInput.wasScreenTapped(x, y)) {
+      const int hit = wordAt(x, y);
+      if (hit >= 0) {
+        selected = hit;
+        currentPageOffset = words[hit].pageOffset;
+        rangeStart = hit;
+        confirmSelection(ClippingResult::Action::Lookup);
+      }
+      return;
+    }
+    const uint8_t buttons = Input::buttonEdges(mappedInput);
+    if (buttons & (Input::INPUT_BACK | Input::INPUT_CONFIRM)) {
+      handleButtons(buttons);
+      return;
+    }
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Up) {
+      moveToPage(static_cast<int>(currentPageOffset) + 1);
+      return;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Right || swipe == MappedInputManager::SwipeDir::Down) {
+      moveToPage(static_cast<int>(currentPageOffset) - 1);
+      return;
+    }
+    handleButtons(buttons);
+    return;
+  }
+
   int touchX = 0;
   int touchY = 0;
   if (ignoreInitialTouch) {
@@ -611,7 +644,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
     return true;
 
   if (buttons & Input::INPUT_BACK) {
-    if (rangeStart >= 0 && mode != Mode::DefinitionLookup) {
+    if (rangeStart >= 0 && mode != Mode::DefinitionLookup && !isDirectDictionaryWord()) {
       rangeStart = -1;
       requestUpdate();
     } else {
@@ -621,6 +654,7 @@ bool ClipSelectionActivity::handleButtons(const uint8_t buttons) {
   }
 
   if (buttons & Input::INPUT_CONFIRM) {
+    if (isDirectDictionaryWord()) rangeStart = selected;
     confirmSelection(isLookup() ? ClippingResult::Action::Lookup : ClippingResult::Action::Clip);
     return true;
   }
@@ -871,7 +905,7 @@ void ClipSelectionActivity::drawSelection() const {
                       BidiUtils::BidiBaseDir::AUTO, word.characterSpacing);
     previous = &word;
   }
-  if (rangeStart >= 0 && mappedInput.hasTouch()) {
+  if (rangeStart >= 0 && mappedInput.hasTouch() && !isDirectDictionaryWord()) {
     if (words[first].pageOffset == currentPageOffset)
       GUI.drawSelectionHandle(renderer, handleRect(first, true), !words[first].isRtl);
     if (words[last].pageOffset == currentPageOffset)
