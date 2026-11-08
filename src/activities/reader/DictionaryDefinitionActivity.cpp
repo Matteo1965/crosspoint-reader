@@ -1,6 +1,7 @@
 #include "DictionaryDefinitionActivity.h"
 
 #include <BidiUtils.h>
+#include <Epub/hyphenation/Hyphenator.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalMemory.h>
@@ -286,9 +287,9 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   int lineWidth = 0;
   bool lineBold = false;
 
-  const auto flushLine = [&](uint32_t nextStart) {
+  const auto flushLine = [&](uint32_t nextStart, bool hyphen = false, bool justify = false) {
     if (lines.size() == lines.capacity() && !reserveLines(next, lines.capacity() * 2)) return false;
-    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold});
+    lines.push_back({lineStart, static_cast<uint16_t>(lineEnd - lineStart), lineBold, hyphen, justify});
     lineStart = nextStart;
     lineEnd = nextStart;
     lineWidth = 0;
@@ -330,49 +331,69 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
     // continuation byte, so this is a no-op there.
     while (i - tokenStart > 1 && (text[i] & 0xC0) == 0x80) i--;
     const uint32_t tokenLen = i - tokenStart;
-    const int tokenWidth =
-        measureSpan(fontId, text + tokenStart, tokenLen, lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const auto family = lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const std::string token(text + tokenStart, tokenLen);
+    const auto legalBreaks = lineBold ? std::vector<Hyphenator::BreakInfo>{}
+        : Hyphenator::breakOffsetsForLanguageExtended(token, false, "hu");
+    const int hyphenWidth = renderer.getTextAdvanceX(fontId, "-", family);
+    uint32_t consumed = 0;
+    while (consumed < tokenLen) {
+      const uint32_t remainingLen = tokenLen - consumed;
+      const int remainingWidth = measureSpan(fontId, text + tokenStart + consumed, remainingLen, family);
+      const bool empty = lineEnd == lineStart;
+      const int gap = empty ? 0 : spaceWidth;
+      if (lineWidth + gap + remainingWidth <= maxWidth) {
+        if (empty) lineStart = tokenStart + consumed;
+        lineEnd = tokenStart + tokenLen;
+        lineWidth += gap + remainingWidth;
+        consumed = tokenLen;
+        break;
+      }
 
-    if (lineEnd == lineStart) {
-      lineStart = tokenStart;
-      lineEnd = tokenStart + tokenLen;
-      lineWidth = tokenWidth;
-    } else if (lineWidth + spaceWidth + tokenWidth <= maxWidth &&
-               tokenStart + tokenLen - lineStart <= UINT16_MAX) {  // span len must fit Line::len
-      lineEnd = tokenStart + tokenLen;
-      lineWidth += spaceWidth + tokenWidth;
-    } else {
-      if (!flushLine(tokenStart)) return false;
-      lineEnd = tokenStart + tokenLen;
-      lineWidth = tokenWidth;
-    }
-
-    // An unbreakable token wider than the screen is now alone on the line
-    // (any previous content was flushed above): split it at the widest
-    // fitting UTF-8 boundary and carry the remainder forward.
-    while (lineWidth > maxWidth && lineEnd - lineStart > 1) {
-      const uint32_t len = lineEnd - lineStart;
-      uint32_t lastFit = 0;
-      for (uint32_t f = 1; f <= len; f++) {
-        if (f == len || (text[lineStart + f] & 0xC0) != 0x80) {  // codepoint boundary
-          if (measureSpan(fontId, text + lineStart, f, lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR) >
-              maxWidth)
-            break;
-          lastFit = f;
+      uint32_t best = 0;
+      int bestWidth = 0;
+      bool needsHyphen = false;
+      const int remainingSpace = maxWidth - lineWidth - gap;
+      for (const auto& candidate : legalBreaks) {
+        if (candidate.byteOffset <= consumed || candidate.byteOffset >= tokenLen) continue;
+        const int width = measureSpan(fontId, text + tokenStart + consumed,
+                                      candidate.byteOffset - consumed, family) +
+                          (candidate.requiresInsertedHyphen ? hyphenWidth : 0);
+        if (width <= remainingSpace) {
+          best = static_cast<uint32_t>(candidate.byteOffset);
+          bestWidth = width;
+          needsHyphen = candidate.requiresInsertedHyphen;
         }
       }
-      if (lastFit == 0) {
-        // Even a single over-wide glyph must make progress; consume its whole
-        // UTF-8 sequence rather than splitting it into invalid fragments.
-        lastFit = 1;
-        while (lastFit < len && (text[lineStart + lastFit] & 0xC0) == 0x80) lastFit++;
+      if (best > consumed) {
+        if (empty) lineStart = tokenStart + consumed;
+        lineEnd = tokenStart + best;
+        lineWidth += gap + bestWidth;
+        if (!flushLine(tokenStart + best, needsHyphen, !lineBold)) return false;
+        consumed = best;
+        continue;
       }
-      const uint32_t rest = lineStart + lastFit;
-      lineEnd = rest;
-      if (!flushLine(rest)) return false;
-      lineEnd = rest + (len - lastFit);
-      lineWidth = measureSpan(fontId, text + lineStart, lineEnd - lineStart,
-                              lineBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+      if (!empty) {
+        if (!flushLine(tokenStart + consumed, false, !lineBold)) return false;
+        continue;
+      }
+      // Preserve UTF-8 integrity if no legal Hungarian break fits.
+      uint32_t fit = 0;
+      for (uint32_t count = 1; count <= remainingLen; ++count) {
+        if (count != remainingLen &&
+            (static_cast<unsigned char>(text[tokenStart + consumed + count]) & 0xC0) == 0x80) continue;
+        if (measureSpan(fontId, text + tokenStart + consumed, count, family) > maxWidth) break;
+        fit = count;
+      }
+      if (!fit) {
+        fit = 1;
+        while (fit < remainingLen &&
+               (static_cast<unsigned char>(text[tokenStart + consumed + fit]) & 0xC0) == 0x80) ++fit;
+      }
+      lineStart = tokenStart + consumed;
+      lineEnd = lineStart + fit;
+      if (!flushLine(lineEnd)) return false;
+      consumed += fit;
     }
   }
   if (lineEnd > lineStart && !flushLine(n)) return false;
