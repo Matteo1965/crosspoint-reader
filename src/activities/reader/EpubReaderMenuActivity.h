@@ -3,6 +3,7 @@
 #include <I18n.h>
 
 #include <string>
+#include <functional>
 #include <vector>
 
 #include "activities/UiTabListActivity.h"
@@ -32,7 +33,9 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
     GO_HOME,
     SYNC,
     DELETE_CACHE,
-    DICTIONARY
+    DICTIONARY,
+    MANUAL_DICTIONARY_SEARCH,
+    DICTIONARY_SETTINGS
   };
 
   struct MenuItem {
@@ -92,6 +95,11 @@ class EpubReaderMenuActivity final : public UiTabListActivity {
   Tab tab_ = Tab::Reading;
   MenuAction& selectedAction;
   bool currentPageBookmarked = false;
+  std::vector<std::string> dictionaryOptionLabels;
+  std::vector<const char*> dictionaryOptionPointers;
+  std::function<void(uint8_t)> dictionarySetter;
+  uint8_t selectedDictionaryOption = 0;
+  std::string dictionaryRowLabel;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";
