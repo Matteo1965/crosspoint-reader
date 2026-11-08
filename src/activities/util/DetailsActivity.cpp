@@ -52,7 +52,8 @@ bool DetailsActivity::needsLayout() const {
 void DetailsActivity::layoutDescription() {
   pages.clear();
   laidOutRect = descriptionRect;
-  if (!buildDictionaryHtmlPages(renderer, spec.description, static_cast<uint16_t>(descriptionRect.width),
+  if (!buildDictionaryHtmlPages(renderer, spec.description, SETTINGS.getReaderFontId(),
+                                 static_cast<uint16_t>(descriptionRect.width),
                                 static_cast<uint16_t>(descriptionRect.height), pages) ||
       pages.empty()) {
     LOG_INF("DETAILS", "Styled description unavailable; using plain text");
