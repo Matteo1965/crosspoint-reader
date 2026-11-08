@@ -57,22 +57,23 @@ inline const fui::KeyboardKey SHIFT_ROW3[] = {
     HUK("B", "B", 'B'), HUK("N", "N", 'N'), HUK("M", "M", 'M'), HUK("Ü", "Ü", 1354),
     HUKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
-// Bottom rows total exactly 22 units. The ordinary controls are 2 units
-// (42 px on X4); Space is 5 keys wide without globe and 4 keys wide with it.
+// Every bottom row totals 22 units, matching the 11-key number row.
+// The outer fn / OK controls use 3 units each, matching Shift / Backspace;
+// Space absorbs the difference and all rows share the same 22-unit grid.
 inline const fui::KeyboardKey BOTTOM[] = {
-    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 6),
     HUK(",", ",", ','), HUK(".", ".", '.'), HUK("-", "-", '-'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
 inline const fui::KeyboardKey BOTTOM_LANG[] = {
-    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 6),
     HUK(",", ",", ','), HUK(".", ".", '.'), HUK("-", "-", '-'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
 inline const fui::KeyboardKey SYMBOL_ROW1[] = {
     HUK("1", "1", '1'), HUK("2", "2", '2'), HUK("3", "3", '3'), HUK("4", "4", '4'),
@@ -111,11 +112,11 @@ inline const fui::KeyboardKey SYMBOL2_ROW3[] = {
     HUKS(nullptr, fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 3)};
 
 inline const fui::KeyboardKey SYMBOL_BOTTOM[] = {
-    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+    HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 10),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 8),
     HUK(",", ",", ','), HUK(".", ".", '.'),
-    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+    HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
 inline const fui::KeyboardRow ROWS[] = {{NUM_ROW, 11, 0}, {ROW1, 11, 0}, {ROW2, 11, 0}, {ROW3, 10, 0}, {BOTTOM, 8, 0}};
 inline const fui::KeyboardRow ROWS_LANG[] = {
