@@ -46,6 +46,8 @@ class EpubReaderActivity final : public ReaderActivity {
   bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
+  bool showNoFootnotesMessage = false;
+  unsigned long noFootnotesMessageTime = 0UL;
   unsigned long dictionaryMessageTime = 0UL;
   bool showFontDamagedMessage = false;
   unsigned long fontDamagedMessageTime = 0UL;
