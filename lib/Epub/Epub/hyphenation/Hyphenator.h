@@ -37,6 +37,10 @@ class Hyphenator {
   //      pattern breaks were found). Used as a last resort to prevent a single oversized
   //      word from overflowing the page width.
   static std::vector<BreakInfo> breakOffsets(const std::string& word, bool includeFallback);
+  // Force extended Hungarian for non-reader text such as CPHUN-style book descriptions.
+  // Restores the current book's hyphenator configuration after the calculation.
+  static std::vector<BreakInfo> breakOffsetsForLanguageExtended(const std::string& word,
+                                                               bool includeFallback, const char* language);
   // Return only explicit soft-hyphen (U+00AD) break opportunities.
   static std::vector<BreakInfo> softHyphenBreakOffsets(const std::string& word);
 
