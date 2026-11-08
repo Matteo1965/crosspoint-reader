@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-117: remove Night Mode from classic Reader menu and More panel.
+# HU-PICCO-118 preview, branch-isolated two-tab menu compile check.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -9,8 +9,7 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-    paths-ignore:
-      - '.github/workflows/hu-picco.yml'
+      - agent/hu-picco-118-reader-tabs
   workflow_dispatch:
 
 permissions:
@@ -44,9 +43,8 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/fontIds.h
-            git commit -m "HU-PICCO-102: refresh built-in font IDs"
-            git push origin HEAD:picco-hungarian-edition-2.0.0
+            echo "Font ID mismatch in preview; generated IDs are used for this build only."
+            git diff --stat -- src/fontIds.h
           fi
 
       - name: Compile Picco
@@ -72,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-117\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-118-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
