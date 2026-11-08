@@ -750,8 +750,49 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
                                               std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES));
     memcpy(buf, definition.c_str() + lines[i].start, len);
     buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf, true,
-                      lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const auto family = lines[i].bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const int y = startY + (i - firstLine) * lineHeight;
+    const int hyphenWidth = lines[i].appendHyphen
+                                ? renderer.getTextAdvanceX(fontId, "-", family) : 0;
+    if (lines[i].justify && !lines[i].bold) {
+      int wordCount = 0;
+      int wordsWidth = 0;
+      for (size_t k = 0; k < len;) {
+        while (k < len && (buf[k] == ' ' || buf[k] == '\t')) ++k;
+        const size_t begin = k;
+        while (k < len && buf[k] != ' ' && buf[k] != '\t') ++k;
+        if (k == begin) continue;
+        const std::string word(buf + begin, k - begin);
+        wordsWidth += renderer.getTextAdvanceX(fontId, word.c_str(), family);
+        ++wordCount;
+      }
+      if (wordCount > 1) {
+        const int gaps = wordCount - 1;
+        const int distributed = std::max(0, bodyArea().width - wordsWidth - hyphenWidth);
+        int cursorX = x;
+        int placedGaps = 0;
+        for (size_t k = 0; k < len;) {
+          while (k < len && (buf[k] == ' ' || buf[k] == '\t')) ++k;
+          const size_t begin = k;
+          while (k < len && buf[k] != ' ' && buf[k] != '\t') ++k;
+          if (k == begin) continue;
+          const std::string word(buf + begin, k - begin);
+          renderer.drawText(fontId, cursorX, y, word.c_str(), true, family);
+          cursorX += renderer.getTextAdvanceX(fontId, word.c_str(), family);
+          if (placedGaps < gaps) {
+            cursorX += distributed / gaps + (placedGaps < distributed % gaps ? 1 : 0);
+            ++placedGaps;
+          }
+        }
+        if (lines[i].appendHyphen) renderer.drawText(fontId, cursorX, y, "-", true, family);
+        continue;
+      }
+    }
+    renderer.drawText(fontId, x, y, buf, true, family);
+    if (lines[i].appendHyphen) {
+      const int at = x + renderer.getTextAdvanceX(fontId, buf, family);
+      renderer.drawText(fontId, at, y, "-", true, family);
+    }
   }
 }
 
