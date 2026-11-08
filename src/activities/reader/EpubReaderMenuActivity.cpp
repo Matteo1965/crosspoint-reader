@@ -54,11 +54,10 @@ void EpubReaderMenuActivity::splitMenuItems() {
       MenuAction::SELECT_CHAPTER, MenuAction::FOOTNOTES, MenuAction::BOOKMARKS,
       MenuAction::TOGGLE_BOOKMARK, MenuAction::SAVE_CLIPPING, MenuAction::VIEW_CLIPPINGS,
       MenuAction::DICTIONARY, MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
-      MenuAction::GO_TO_PERCENT};
+      MenuAction::GO_TO_PERCENT, MenuAction::TEXT_SETTINGS, MenuAction::GO_HOME};
   constexpr MenuAction bookOrder[] = {
       MenuAction::BOOK_DESCRIPTION, MenuAction::BOOK_METADATA, MenuAction::ROTATE_SCREEN,
-      MenuAction::TEXT_SETTINGS, MenuAction::SCREENSHOT, MenuAction::SYNC,
-      MenuAction::BLUETOOTH, MenuAction::GO_HOME};
+      MenuAction::SCREENSHOT, MenuAction::SYNC, MenuAction::BLUETOOTH};
   auto appendInOrder = [this](const MenuAction* order, size_t count, std::vector<MenuItem>& target) {
     for (size_t i = 0; i < count; ++i) {
       const auto found = std::find_if(menuItems.begin(), menuItems.end(),
@@ -84,12 +83,13 @@ void EpubReaderMenuActivity::stepTab(int direction) {
 void EpubReaderMenuActivity::onEnter() {
   RenderLock lock;
   UiTabListActivity::onEnter();
+  // Start on the tab band: Confirm switches Olvasás <-> Könyv immediately.
   for (int tab = 0; tab < tabCount(); ++tab) {
     const auto& items = tab == 0 ? readingItems : bookItems;
     for (size_t i = 0; i < items.size(); ++i) {
       if (items[i].action == selectedAction) {
         tab_ = static_cast<Tab>(tab);
-        tabNavs[tab].selected = static_cast<int>(i) + 1;
+        tabNavs[tab].selected = 0;
         buildMenuRowItems();
         return;
       }
@@ -129,9 +129,10 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, const 
   items.clear();
   items.reserve(MAX_MENU_ITEMS);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-  if (hasFootnotes) {
-    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
-  }
+  // Keep Footnotes visible even on pages without detected notes; the reader
+  // shows a localized no-footnotes message for an empty page.
+  items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES,
+                   I18N.getLanguage() == Language::HU ? "Lábjegyzetek" : "Footnotes"});
   if (hasBookmarks) {
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
