@@ -62,11 +62,12 @@ void EpubReaderMenuActivity::splitMenuItems() {
   constexpr MenuAction readingOrder[] = {
       MenuAction::SELECT_CHAPTER, MenuAction::FOOTNOTES, MenuAction::BOOKMARKS,
       MenuAction::TOGGLE_BOOKMARK, MenuAction::SAVE_CLIPPING, MenuAction::VIEW_CLIPPINGS,
-      MenuAction::DICTIONARY, MenuAction::MANUAL_DICTIONARY_SEARCH,
-      MenuAction::DICTIONARY_SETTINGS, MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
+      MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
       MenuAction::GO_TO_PERCENT, MenuAction::TEXT_SETTINGS, MenuAction::GO_HOME};
   constexpr MenuAction bookOrder[] = {
-      MenuAction::BOOK_DESCRIPTION, MenuAction::BOOK_METADATA, MenuAction::ROTATE_SCREEN,
+      MenuAction::BOOK_DESCRIPTION, MenuAction::BOOK_METADATA,
+      MenuAction::DICTIONARY, MenuAction::MANUAL_DICTIONARY_SEARCH,
+      MenuAction::DICTIONARY_SETTINGS, MenuAction::ROTATE_SCREEN,
       MenuAction::SCREENSHOT, MenuAction::SYNC, MenuAction::BLUETOOTH};
   auto appendInOrder = [this](const MenuAction* order, size_t count, std::vector<MenuItem>& target) {
     for (size_t i = 0; i < count; ++i) {
