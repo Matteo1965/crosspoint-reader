@@ -71,7 +71,7 @@ inline const fui::KeyboardKey BOTTOM_LANG[] = {
     HUKS("fn", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 3),
     HUKS(nullptr, fui::KeyKind::Lang, fui::QWERTY_KEY_LANG, 2),
     HUK("/", "/", '/'), HUK("?", "?", '?'),
-    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 6),
+    HUKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 4),
     HUK(",", ",", ','), HUK(".", ".", '.'), HUK("-", "-", '-'),
     HUKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 3)};
 
