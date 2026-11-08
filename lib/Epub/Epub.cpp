@@ -15,6 +15,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <string_view>
@@ -805,7 +806,24 @@ bool Epub::readBookInfo(BookInfo& info) const {
   info.date = parser.date;
   info.identifier = parser.identifier;
   info.series = parser.series;
-  if (parser.seriesIndex.has_value()) info.seriesIndex = std::to_string(*parser.seriesIndex);
+  if (parser.seriesIndex.has_value()) {
+    const float index = *parser.seriesIndex;
+    if (std::isfinite(index)) {
+      // Keep integer indices (0.000000, 1.000000, ...) concise as in CPHUN-224.
+      // Retain a meaningful fraction for series positions such as 1.5.
+      if (index >= -2147483647.0f && index <= 2147483647.0f && std::trunc(index) == index) {
+        info.seriesIndex = std::to_string(static_cast<int32_t>(index));
+      } else {
+        std::string value = std::to_string(index);
+        const auto decimal = value.find('.');
+        if (decimal != std::string::npos) {
+          while (!value.empty() && value.back() == '0') value.pop_back();
+          if (!value.empty() && value.back() == '.') value.pop_back();
+        }
+        info.seriesIndex = std::move(value);
+      }
+    }
+  }
   info.subjects = parser.subjects;
   return true;
 }
