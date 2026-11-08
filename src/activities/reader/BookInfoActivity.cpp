@@ -839,8 +839,15 @@ void BookInfoActivity::render(RenderLock&&) {
     renderer.fillRect(clearX, headerY, clearWidth, metrics.headerHeight - 1, false);
   }
 
+  // The shared touch header reserves a 48 px leading back-button slot
+  // (x + 4). Keep the BookInfo title outside that hit/paint region.
+  constexpr int BACK_BUTTON_SLOT_WIDTH = 48;
+  constexpr int BACK_BUTTON_LEFT_INSET = 4;
+  constexpr int HEADER_TITLE_GAP = 12;
+  const int titleX = contentX + std::max(SIDE_PADDING,
+      BACK_BUTTON_LEFT_INSET + BACK_BUTTON_SLOT_WIDTH + HEADER_TITLE_GAP);
   const int titleY = headerY + (metrics.headerHeight - renderer.getLineHeight(NOTOSANS_16_FONT_ID)) / 2;
-  renderer.drawText(NOTOSANS_16_FONT_ID, contentX + SIDE_PADDING, titleY, title, true, EpdFontFamily::REGULAR);
+  renderer.drawText(NOTOSANS_16_FONT_ID, titleX, titleY, title, true, EpdFontFamily::BOLD);
 
   if (totalPages_ > 1) {
     char counter[16];
