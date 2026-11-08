@@ -19,6 +19,7 @@
 #include "ReaderUtils.h"
 #include "components/HeaderBackTapTarget.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 #include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
 
@@ -27,7 +28,11 @@ namespace {
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
-constexpr float PLAIN_TEXT_LINE_SPACING = 2.0f;
+// CPHUN-224 dictionary typography independent from book font and line spacing.
+constexpr int DICTIONARY_BODY_FONT_ID = NOTOSERIF_14_FONT_ID;
+constexpr int DICTIONARY_HEADWORD_FONT_ID = NOTOSANS_16_FONT_ID;
+constexpr int DICTIONARY_COUNTER_FONT_ID = UI_10_FONT_ID;
+constexpr float PLAIN_TEXT_LINE_SPACING = 1.0f;
 constexpr size_t HEAP_HEADROOM = 8 * 1024;
 constexpr unsigned long MESSAGE_DURATION_MS = 1500;
 constexpr size_t SELECTION_PAGE_WINDOW = 3;
@@ -40,6 +45,33 @@ constexpr size_t MAX_PLAIN_WORDS = (MAX_LINE_BYTES + 1) / 2;
 // reader and word-select. Bigger definitions take the span-based plain-text
 // path, which holds no per-page copies.
 constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
+
+// Uppercase Hungarian accented headwords, matching CPHUN-224.
+std::string uppercaseHungarian(std::string text) {
+  for (size_t i = 0; i < text.size(); ++i) {
+    const auto c = static_cast<unsigned char>(text[i]);
+    if (c >= 'a' && c <= 'z') {
+      text[i] = static_cast<char>(c - 'a' + 'A');
+      continue;
+    }
+    if (i + 1 >= text.size()) continue;
+    const auto next = static_cast<unsigned char>(text[i + 1]);
+    if (c == 0xC3) {
+      switch (next) {
+        case 0xA1: case 0xA9: case 0xAD: case 0xB3:
+        case 0xB6: case 0xBA: case 0xBC:
+          text[i + 1] = static_cast<char>(next - 0x20);
+          ++i;
+          break;
+        default: break;
+      }
+    } else if (c == 0xC5 && (next == 0x91 || next == 0xB1)) {
+      text[i + 1] = static_cast<char>(next - 1);
+      ++i;
+    }
+  }
+  return text;
+}
 
 }  // namespace
 
@@ -132,6 +164,7 @@ bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::str
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  renderer.setMissingGlyphFallbackFont(DICTIONARY_BODY_FONT_ID);
   initialLayoutFailed = !prepareDefinition(content);
   if (initialLayoutFailed) {
     content.lines.clear();
@@ -156,6 +189,7 @@ bool DictionaryDefinitionActivity::prepareDefinition(Definition& next, const boo
 }
 
 void DictionaryDefinitionActivity::onExit() {
+  renderer.clearMissingGlyphFallbackFont();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) {
     fcm->releaseSdFontCaches();
@@ -194,7 +228,7 @@ bool DictionaryDefinitionActivity::layoutHtmlPages(Definition& next) {
     LOG_ERR("DHTML", "Invalid definition viewport: %dx%d", body.width, body.height);
     return false;
   }
-  if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
+  if (!buildDictionaryHtmlPages(renderer, definition, DICTIONARY_BODY_FONT_ID, static_cast<uint16_t>(body.width),
                                 static_cast<uint16_t>(body.height), pages)) {
     return false;
   }
@@ -232,7 +266,7 @@ bool DictionaryDefinitionActivity::wrapText(Definition& next) {
   lines.clear();
   if (!reserveLines(next, definition.size() / 32 + 8)) return false;
 
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = DICTIONARY_BODY_FONT_ID;
   // SD-card fonts: merge every definition codepoint into the persistent
   // advance table up front. Otherwise each unseen codepoint measured below
   // falls back to an on-demand glyph load from SD (8-slot overflow ring).
@@ -455,7 +489,7 @@ void DictionaryDefinitionActivity::navigateDefinition(const bool back) {
 
 bool DictionaryDefinitionActivity::buildPlainSelectionPages() {
   // Only the selection window gets packed word arenas; the definition keeps its cheap line spans.
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = DICTIONARY_BODY_FONT_ID;
   const int lineHeight = renderer.getLineHeight(fontId, PLAIN_TEXT_LINE_SPACING);
   const int pageCount = std::min<int>(SELECTION_PAGE_WINDOW, content.totalPages - content.selectionPage);
   const size_t scratchBytes =
@@ -698,13 +732,22 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   if (totalPages > 1) {
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
   }
-  GUI.drawHeader(renderer, Rect{contentX, contentY + metrics.topPadding, contentWidth, metrics.headerHeight},
-                 content.headword.c_str(), counter[0] ? counter : nullptr);
+  // CPHUN-224: large bold uppercase headword with a small page number at right.
+  const int headerY = contentY + metrics.topPadding + 10;
+  const std::string displayHeadword = uppercaseHungarian(content.headword);
+  renderer.drawText(DICTIONARY_HEADWORD_FONT_ID, contentX + metrics.contentSidePadding,
+                    headerY, displayHeadword.c_str(), true, EpdFontFamily::BOLD);
+  if (counter[0]) {
+    const int counterWidth = renderer.getTextWidth(DICTIONARY_COUNTER_FONT_ID, counter);
+    renderer.drawText(DICTIONARY_COUNTER_FONT_ID,
+                      contentX + contentWidth - metrics.contentSidePadding - counterWidth,
+                      headerY, counter);
+  }
 
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's
   // renderContents) so SD-card font glyphs load from SD in one batch instead
   // of one on-demand overflow read per character on every page turn.
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = DICTIONARY_BODY_FONT_ID;
   const BodyArea body = bodyArea();
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
