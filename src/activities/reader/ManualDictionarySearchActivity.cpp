@@ -1,6 +1,7 @@
 #include "ManualDictionarySearchActivity.h"
 
 #include <GfxRenderer.h>
+#include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
