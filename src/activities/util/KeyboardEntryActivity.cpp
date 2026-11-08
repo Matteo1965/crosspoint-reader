@@ -928,6 +928,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const fui::Rect keysRect{kbRect.x, static_cast<int16_t>(kbRect.y + (kbRect.height - keysHeight) / 2), kbRect.width,
                            static_cast<int16_t>(keysHeight)};
 
+  // The Picco manual dictionary search has a deliberately minimal, larger
+  // two-line hint; all other keyboard clients keep their existing help.
+  if (title == "Kézi keresés") {
+    constexpr int tipFontId = UI_12_FONT_ID;
+    const int hintLineHeight = renderer.getLineHeight(tipFontId);
+    const int hintTop = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
+    const int spaceAvailable = kbRect.y - hintTop;
+    if (spaceAvailable >= 2 * hintLineHeight) {
+      const int firstY = hintTop + (spaceAvailable - 2 * hintLineHeight) / 2;
+      renderer.drawCenteredText(tipFontId, firstY, "Tartsd nyomva a DEL gombot", true);
+      renderer.drawCenteredText(tipFontId, firstY + hintLineHeight,
+                                "az összes szöveg törléséhez.", true);
+    }
+  } else {
   const int tipsLh = renderer.getLineHeight(SMALL_FONT_ID);
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
   auto drawTip = [&](const char* tip, int y) { renderer.drawCenteredText(SMALL_FONT_ID, y, tip, true); };
@@ -977,6 +991,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
       }
     }
+  }
+
   }
 
   // The FreeInkUI keyboard draws the keys and registers their hit rects into
