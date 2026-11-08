@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-123 preview: align Hungarian keyboard DEL and bottom controls.
+# HU-PICCO-124 preview: manual dictionary search tips simplified and enlarged.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-      - agent/hu-picco-123-hu-keyboard
+      - agent/hu-picco-124-manual-search-hints
   workflow_dispatch:
 
 permissions:
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-123-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-124-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
