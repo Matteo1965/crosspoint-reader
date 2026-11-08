@@ -32,6 +32,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
+#include "ManualDictionarySearchActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderClippingListActivity.h"
@@ -1289,6 +1290,25 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openDictionaryWordSelect();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::MANUAL_DICTIONARY_SEARCH: {
+      if (SETTINGS.dictionaryName[0] == '\0') {
+        showDictionaryMessage = true;
+        dictionaryMessageTime = millis();
+        requestUpdate();
+        break;
+      }
+      auto activity = makeUniqueNoThrow<ManualDictionarySearchActivity>(renderer, mappedInput);
+      if (!activity) {
+        LOG_ERR("DICT", "OOM: manual dictionary search activity");
+        requestUpdate();
+        break;
+      }
+      startActivityForResult(std::move(activity), [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DICTIONARY_SETTINGS:
+      // Selected and saved in-place in the Reader menu.
+      break;
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
         std::string fullText = section->getTextFromSectionFile();
