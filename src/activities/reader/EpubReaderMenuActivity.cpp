@@ -47,25 +47,26 @@ const char* EpubReaderMenuActivity::tabLabel(int index) const {
 void EpubReaderMenuActivity::splitMenuItems() {
   readingItems.clear();
   bookItems.clear();
-  for (const auto& item : menuItems) {
-    switch (item.action) {
-      case MenuAction::SELECT_CHAPTER:
-      case MenuAction::FOOTNOTES:
-      case MenuAction::BOOKMARKS:
-      case MenuAction::TOGGLE_BOOKMARK:
-      case MenuAction::SAVE_CLIPPING:
-      case MenuAction::VIEW_CLIPPINGS:
-      case MenuAction::FRONTLIGHT:
-      case MenuAction::DICTIONARY:
-      case MenuAction::AUTO_PAGE_TURN:
-      case MenuAction::GO_TO_PERCENT:
-        readingItems.push_back(item);
-        break;
-      default:
-        bookItems.push_back(item);
-        break;
+  // Keep only implemented actions. Reorder within the two tabs to match the
+  // CPHUN-261007-224 X4 menu; missing X4 features will be ported separately.
+  constexpr MenuAction readingOrder[] = {
+      MenuAction::SELECT_CHAPTER, MenuAction::FOOTNOTES, MenuAction::BOOKMARKS,
+      MenuAction::TOGGLE_BOOKMARK, MenuAction::SAVE_CLIPPING, MenuAction::VIEW_CLIPPINGS,
+      MenuAction::DICTIONARY, MenuAction::FRONTLIGHT, MenuAction::AUTO_PAGE_TURN,
+      MenuAction::GO_TO_PERCENT};
+  constexpr MenuAction bookOrder[] = {
+      MenuAction::BOOK_DESCRIPTION, MenuAction::BOOK_METADATA, MenuAction::ROTATE_SCREEN,
+      MenuAction::TEXT_SETTINGS, MenuAction::SCREENSHOT, MenuAction::SYNC,
+      MenuAction::BLUETOOTH, MenuAction::GO_HOME};
+  auto appendInOrder = [this](const MenuAction* order, size_t count, std::vector<MenuItem>& target) {
+    for (size_t i = 0; i < count; ++i) {
+      const auto found = std::find_if(menuItems.begin(), menuItems.end(),
+                                    [action = order[i]](const MenuItem& item) { return item.action == action; });
+      if (found != menuItems.end()) target.push_back(*found);
     }
-  }
+  };
+  appendInOrder(readingOrder, std::size(readingOrder), readingItems);
+  appendInOrder(bookOrder, std::size(bookOrder), bookItems);
 }
 
 void EpubReaderMenuActivity::onTabAction(int index) {
