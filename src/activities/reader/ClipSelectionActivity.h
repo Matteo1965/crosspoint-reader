@@ -108,6 +108,9 @@ class ClipSelectionActivity final : public Activity {
   const int initialY;
   const Mode mode;
   bool lookupAvailable = false;
+  // Touch dictionary lookup starts without an arbitrary word highlighted.
+  // Navigation buttons can reveal the cursor when explicitly used.
+  bool dictionaryCursorVisible = true;
   OptionPopup actionPopup;
   // ponytail: retain 16 button frames during refresh; increase only if overflow is observed.
   std::array<uint8_t, 16> pendingButtons{};
