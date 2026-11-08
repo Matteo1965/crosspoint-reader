@@ -473,7 +473,7 @@ void EpubReaderActivity::openDictionaryWordSelect() {
     requestUpdate();
     return;
   }
-  startClipSelection(-1, -1, ClipSelectionActivity::Mode::Lookup);
+  startClipSelection(-1, -1, ClipSelectionActivity::Mode::DictionaryWord);
 }
 
 void EpubReaderActivity::startClipSelection(const int initialX, const int initialY,
@@ -536,7 +536,7 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
     requestUpdate();
     return;
   }
-  startActivityForResult(std::move(activity), [this, spineIndex, pageNumber, pageCount, layoutSignature,
+  startActivityForResult(std::move(activity), [this, spineIndex, pageNumber, pageCount, layoutSignature, mode,
                                                bookTitle = std::move(bookTitle), author = std::move(author),
                                                chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
     if (result.isCancelled) {
@@ -574,8 +574,15 @@ void EpubReaderActivity::startClipSelection(const int initialX, const int initia
         requestUpdate();
         return;
       }
-      startActivityForResult(std::move(lookup), [this](const ActivityResult& result) {
-        if (!result.isCancelled && !mappedInput.hasTouch()) openDictionaryWordSelect();
+      startActivityForResult(std::move(lookup), [this, mode](const ActivityResult& result) {
+        // Reopen word picking after Back from a definition, on touch as well
+        // as hardware-button devices. Errors/cancel return to the reader.
+        if (!result.isCancelled &&
+            (mode == ClipSelectionActivity::Mode::DictionaryWord || !mappedInput.hasTouch())) {
+          openDictionaryWordSelect();
+        } else {
+          requestUpdate();
+        }
       });
       return;
     }
