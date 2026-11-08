@@ -210,8 +210,9 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
   const int contentRight =
       std::max(right, orientation == GfxRenderer::Orientation::LandscapeCounterClockwise ? hintGutterWidth : 0);
   const int x = contentLeft + metrics.contentSidePadding;
+  // CPHUN-224 reserves an empty body line beneath the headword.
   const int y = std::max(top, isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight +
-                metrics.verticalSpacing;
+                renderer.getLineHeight(DICTIONARY_BODY_FONT_ID);
   const int bottomArea = std::max(bottom, metrics.buttonHintsHeight) + metrics.verticalSpacing;
   return {x, y, renderer.getScreenWidth() - contentLeft - contentRight - 2 * metrics.contentSidePadding,
           renderer.getScreenHeight() - y - bottomArea};
@@ -646,6 +647,26 @@ void DictionaryDefinitionActivity::loop() {
 
   // Page navigation must keep polling input while the render task refreshes the display.
   auto currentPage = std::atomic_ref(content.currentPage);
+  // Picco: support swiping long definitions in both orientations.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Left || swipe == MappedInputManager::SwipeDir::Up) {
+    if (currentPage + 1 < totalPages) {
+      currentPage++;
+      content.selection.valid = false;
+      haptic_feedback::touchAction();
+      requestUpdate();
+    }
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Right || swipe == MappedInputManager::SwipeDir::Down) {
+    if (currentPage > 0) {
+      currentPage--;
+      content.selection.valid = false;
+      haptic_feedback::touchAction();
+      requestUpdate();
+    }
+    return;
+  }
   // Same tap zones as the reader page turns: left third = previous page,
   // the rest = next. Back is the usual left-edge swipe.
   int tx = 0;
