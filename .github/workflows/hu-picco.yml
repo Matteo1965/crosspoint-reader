@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-126 preview: dictionary opens with no preselected touch word.
+# HU-PICCO-127 preview: CPHUN dictionary/description typesetting and dictionary paging.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -9,7 +9,7 @@ on:
   push:
     branches:
       - picco-hungarian-edition-2.0.0
-      - agent/hu-picco-126-unselected-dictionary-start
+      - agent/hu-picco-127-dictionary-typesetting-pages
   workflow_dispatch:
 
 permissions:
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-126-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-127-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
