@@ -30,7 +30,7 @@ namespace {
 // (far below this); only pathological unbreakable tokens are split at this cap.
 constexpr size_t MAX_LINE_BYTES = 191;
 // CPHUN-224 dictionary typography independent from book font and line spacing.
-constexpr int DICTIONARY_BODY_FONT_ID = NOTOSANS_14_FONT_ID;
+constexpr int DICTIONARY_BODY_FONT_ID = NOTOSERIF_14_FONT_ID;
 constexpr int DICTIONARY_HEADWORD_FONT_ID = NOTOSANS_16_FONT_ID;
 constexpr int DICTIONARY_COUNTER_FONT_ID = UI_10_FONT_ID;
 constexpr float PLAIN_TEXT_LINE_SPACING = 1.0f;
@@ -165,6 +165,9 @@ bool DictionaryDefinitionActivity::enableLookup(Dictionary& dictionary, std::str
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  // CPHUN-224: dictionary body is Noto Serif 14; if a bold/italic face lacks
+  // an uncommon Unicode glyph, render that glyph with the Regular face.
+  renderer.setMissingGlyphFallbackFont(NOTOSERIF_14_FONT_ID);
   initialLayoutFailed = !prepareDefinition(content);
   if (initialLayoutFailed) {
     content.lines.clear();
@@ -189,6 +192,7 @@ bool DictionaryDefinitionActivity::prepareDefinition(Definition& next, const boo
 }
 
 void DictionaryDefinitionActivity::onExit() {
+  renderer.clearMissingGlyphFallbackFont();
   Activity::onExit();
   if (auto* fcm = renderer.getFontCacheManager()) {
     fcm->releaseSdFontCaches();
