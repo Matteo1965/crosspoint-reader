@@ -1017,7 +1017,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // Match the label to the layer the mode key leads back from: the symbols
   // layer and the URL snippet panel both label it "abc" in the static tables.
   props.modeLabel =
-      (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
+      (layoutId == keyboard_layouts::HUNGARIAN_ID && inputType != InputType::Url)
+          ? "fn"
+          : ((symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS));
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = (cursorMode || mappedInput.hasTouch()) ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   // The 12-column Arabic rows need the smaller font for wide isolated letters.
@@ -1040,8 +1042,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const int gap = props.gap;
     const int keyHeight = (keysRect.height - (rowCount - 1) * gap) / rowCount;
     const int keyWidth = (keysRect.width - 10 * gap) / 11;
-    const int cx = keysRect.x + keysRect.width - keyWidth / 2 - 5;  // Picco DEL optical centering
-    const int cy = keysRect.y + keyHeight / 2;
+    const int cx = keysRect.x + keysRect.width - keyWidth / 2 - 8;  // 3 px further left
+    const int cy = keysRect.y + keyHeight / 2 + 3;  // 3 px further down
     renderer.drawLine(cx - 12, cy - 8, cx + 1, cy - 8, 2, true);
     renderer.drawLine(cx - 12, cy + 8, cx + 1, cy + 8, 2, true);
     renderer.drawLine(cx - 12, cy - 8, cx - 12, cy + 8, 2, true);
