@@ -237,6 +237,7 @@ bool buttonContactClosed() { return gpio.rawInputActive(); }
 }  // namespace
 
 EpubReaderActivity::~EpubReaderActivity() {
+  renderer.clearReaderGlyphFallbackFonts();
   ImageBlock::setExtractor(nullptr, nullptr);
   // ActivityManager destroys activities with its RenderLock already held;
   // taking another here self-deadlocks (renderingMutex is non-recursive).
@@ -261,6 +262,11 @@ EpubReaderActivity::~EpubReaderActivity() {
 }
 
 bool EpubReaderActivity::loadBook() {
+  // CPHUN-224: reader-only per-codepoint fallback. Keep the selected reader
+  // font for all glyphs it owns and use the nearest Noto Serif size only for
+  // missing Unicode codepoints.
+  renderer.setReaderGlyphFallbackFonts(NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID,
+                                       NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID);
   auto loadedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
   if (!loadedEpub) {
     LOG_ERR("ERS", "Failed to allocate EPUB object");
