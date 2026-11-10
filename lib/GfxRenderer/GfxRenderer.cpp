@@ -16,6 +16,7 @@
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 #include "GlyphBitmap.h"
+#include "ReaderGlyphFallback.h"
 
 namespace {
 // Synthesized small caps: lowercase letters draw as capitals at roughly x-height.
@@ -265,6 +266,37 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   if (!result.second) {
     LOG_ERR("GFX", "Font ID %d already registered, ignoring duplicate", fontId);
   }
+}
+
+GfxRenderer::ReaderGlyphChoice GfxRenderer::chooseReaderGlyph(
+    const int fontId, const uint32_t cp, const EpdFontFamily::Style style) const {
+  ReaderGlyphChoice original{fontId, cp, style, false};
+  if (!readerGlyphFallbackEnabled_) return original;
+  const auto primaryIt = fontMap.find(fontId);
+  if (primaryIt == fontMap.end()) return original;
+  const auto& primary = primaryIt->second;
+  if (primary.hasCodepoint(cp, style)) return original;
+
+  const uint32_t local = ReaderGlyphFallback::localSubstitute(
+      cp, [&primary, style](uint32_t candidate) { return primary.hasCodepoint(candidate, style); });
+  if (local != cp) return {fontId, local, style, true};
+
+  const int primaryHeight = getLineHeight(fontId);
+  int bestId = 0;
+  int bestDelta = 0x7fffffff;
+  for (int candidateId : readerGlyphFallbackIds_) {
+    if (candidateId == 0 || candidateId == fontId) continue;
+    const auto candidateIt = fontMap.find(candidateId);
+    if (candidateIt == fontMap.end() || !candidateIt->second.hasCodepoint(cp, style)) continue;
+    int delta = getLineHeight(candidateId) - primaryHeight;
+    if (delta < 0) delta = -delta;
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      bestId = candidateId;
+    }
+  }
+  if (bestId) return {bestId, cp, style, true};
+  return original;
 }
 
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
