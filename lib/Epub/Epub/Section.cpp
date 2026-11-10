@@ -83,7 +83,7 @@ namespace {
 // v73: TrueType vector fonts load and advance .notdef for missing glyphs.
 // v78: CPHUN-224 per-line letter-spacing config is persisted in TextBlock/header.
 // v79: Hungarian hyphenation threshold + embedded soft-hyphen setting in the cache header.
-constexpr uint8_t SECTION_FILE_VERSION = 79;
+constexpr uint8_t SECTION_FILE_VERSION = 80;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
