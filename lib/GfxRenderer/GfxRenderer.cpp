@@ -757,6 +757,15 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
 
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
     fontCacheManager_->recordText(renderedText, resolvedFontId, style);
+    if (missingGlyphFallbackFontId_ != 0) {
+      fontCacheManager_->recordText(renderedText, missingGlyphFallbackFontId_, EpdFontFamily::REGULAR);
+    }
+    if (readerGlyphFallbackEnabled_) {
+      for (int fallbackId : readerGlyphFallbackIds_) {
+        if (fallbackId != 0 && fallbackId != resolvedFontId)
+          fontCacheManager_->recordText(renderedText, fallbackId, style);
+      }
+    }
     return;
   }
 
@@ -804,41 +813,51 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       cp = font.applyLigatures(cp, textCursor, style);
     }
 
-    // Differential rounding: snap (previous advance + current kern) as one unit so
-    // identical character pairs always produce the same pixel step regardless of
-    // where they fall on the line.
+    auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
+    const EpdFontFamily* glyphFont = &font;
+    EpdFontFamily::Style glyphStyle = style;
+    uint32_t renderedCp = choice.cp;
+    if (choice.fontId != resolvedFontId) {
+      const auto altIt = fontMap.find(choice.fontId);
+      if (altIt != fontMap.end()) glyphFont = &altIt->second;
+    } else if (!font.hasCodepoint(renderedCp, style) && missingGlyphFallbackFontId_ != 0) {
+      const auto fallbackIt = fontMap.find(missingGlyphFallbackFontId_);
+      if (fallbackIt != fontMap.end() && fallbackIt->second.hasCodepoint(cp, EpdFontFamily::REGULAR)) {
+        glyphFont = &fallbackIt->second;
+        glyphStyle = EpdFontFamily::REGULAR;
+        renderedCp = cp;
+      }
+    }
+
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, cp, tracking);
+      const auto kernFP = (glyphFont == &font) ? font.getKerning(prevCp, renderedCp, style) : 0;
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, renderedCp, tracking);
     }
 
     EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
-
+    const EpdGlyph* glyph = glyphFont->getGlyphMetrics(renderedCp, solidFallback, glyphStyle);
     lastBaseLeft = glyph ? glyph->left : 0;
     lastBaseWidth = glyph ? glyph->width : 0;
     lastBaseTop = glyph ? glyph->top : 0;
-    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;
 
-    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+    const bool crossFont = glyphFont != &font;
+    const bool isSupSub = !crossFont && (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     if (isSupSub) {
-      // Halve the advance so the cursor advances by the same amount the scaled glyph
-      // actually occupies, keeping spacing correct without needing a separate smaller font.
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
-    } else if (isSmallCap) {
+    } else if (isSmallCap && !crossFont) {
       prevAdvanceFP = scaleSmallCapAdvance(prevAdvanceFP);
     }
 
     if (isSupSub) {
-      // yPos already carries the vertical offset applied by TextBlock::render().
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style, 1, 2);
-    } else if (isSmallCap) {
-      renderCharScaled(*this, renderMode, font, cp, lastBaseX, yPos, black, style, SMALL_CAPS_SCALE_NUM,
-                       SMALL_CAPS_SCALE_DEN);
+      renderCharScaled(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle, 1, 2);
+    } else if (isSmallCap && !crossFont) {
+      renderCharScaled(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle,
+                       SMALL_CAPS_SCALE_NUM, SMALL_CAPS_SCALE_DEN);
     } else {
-      renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
+      renderCharImpl<TextRotation::None>(*this, renderMode, *glyphFont, renderedCp, lastBaseX, yPos, black, glyphStyle);
     }
-    prevCp = cp;
+    prevCp = renderedCp;
   }
 }
 
@@ -2169,7 +2188,8 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   // Snap each advance like drawText. Kerning/ligature data is not resident
   // during layout, so kerned-pair steps can still differ.
   auto sdIt = sdCardFonts_.find(resolvedFontId);
-  if (mode == TextMeasureMode::Layout && sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
+  if (mode == TextMeasureMode::Layout && !readerGlyphFallbackEnabled_ &&
+      sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int widthPx = 0;
     int32_t prevAdvanceFP = 0;
     uint32_t prevCp = 0;
@@ -2232,22 +2252,37 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       cp = font.applyLigatures(cp, text, style);
     }
 
-    // Differential rounding: snap (previous advance + current kern) together,
-    // matching drawText so measurement and rendering agree exactly.
+    auto choice = chooseReaderGlyph(resolvedFontId, cp, style);
+    const EpdFontFamily* glyphFont = &font;
+    EpdFontFamily::Style glyphStyle = style;
+    uint32_t renderedCp = choice.cp;
+    if (choice.fontId != resolvedFontId) {
+      const auto altIt = fontMap.find(choice.fontId);
+      if (altIt != fontMap.end()) glyphFont = &altIt->second;
+    } else if (!font.hasCodepoint(renderedCp, style) && missingGlyphFallbackFontId_ != 0) {
+      const auto fallbackIt = fontMap.find(missingGlyphFallbackFontId_);
+      if (fallbackIt != fontMap.end() && fallbackIt->second.hasCodepoint(cp, EpdFontFamily::REGULAR)) {
+        glyphFont = &fallbackIt->second;
+        glyphStyle = EpdFontFamily::REGULAR;
+        renderedCp = cp;
+      }
+    }
+
     if (prevCp != 0) {
-      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
-      widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, cp, tracking);
+      const auto kernFP = (glyphFont == &font) ? font.getKerning(prevCp, renderedCp, style) : 0;
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP) + trackingBetween(prevCp, renderedCp, tracking);
     }
 
     EpdGlyph solidFallback;
-    const EpdGlyph* glyph = font.getGlyphMetrics(cp, solidFallback, style);
+    const EpdGlyph* glyph = glyphFont->getGlyphMetrics(renderedCp, solidFallback, glyphStyle);
     prevAdvanceFP = glyph ? glyph->advanceX : 0;
-    if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+    const bool crossFont = glyphFont != &font;
+    if (!crossFont && (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
       prevAdvanceFP = (prevAdvanceFP + 1) / 2;
-    } else if (isSmallCap) {
+    } else if (isSmallCap && !crossFont) {
       prevAdvanceFP = scaleSmallCapAdvance(prevAdvanceFP);
     }
-    prevCp = cp;
+    prevCp = renderedCp;
   }
   widthPx += fp4::toPixel(prevAdvanceFP);  // final glyph's advance
   return widthPx;
