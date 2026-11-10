@@ -106,6 +106,16 @@ class GfxRenderer {
   // appears at the same point size as the surrounding UI text. Populated by the
   // app-level SD font setup when an SD family is loaded. See resolveTextFontId().
   std::map<int, int> fallbackFontMap_;
+  int missingGlyphFallbackFontId_ = 0;
+  bool readerGlyphFallbackEnabled_ = false;
+  int readerGlyphFallbackIds_[4] = {0, 0, 0, 0};
+  struct ReaderGlyphChoice {
+    int fontId;
+    uint32_t cp;
+    EpdFontFamily::Style style;
+    bool substituted;
+  };
+  ReaderGlyphChoice chooseReaderGlyph(int fontId, uint32_t cp, EpdFontFamily::Style style) const;
   FontVariantProvider fontVariantProvider_;
 
   // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
@@ -199,6 +209,16 @@ class GfxRenderer {
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.
   void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
   void clearFallbackFonts() { fallbackFontMap_.clear(); }
+  void setMissingGlyphFallbackFont(int fontId) { missingGlyphFallbackFontId_ = fontId; }
+  void clearMissingGlyphFallbackFont() { missingGlyphFallbackFontId_ = 0; }
+  void setReaderGlyphFallbackFonts(int noto12, int noto14, int noto16, int noto18) {
+    readerGlyphFallbackIds_[0] = noto12;
+    readerGlyphFallbackIds_[1] = noto14;
+    readerGlyphFallbackIds_[2] = noto16;
+    readerGlyphFallbackIds_[3] = noto18;
+    readerGlyphFallbackEnabled_ = true;
+  }
+  void clearReaderGlyphFallbackFonts() { readerGlyphFallbackEnabled_ = false; }
 
   void setFontVariantProvider(const FontVariantProvider& provider) { fontVariantProvider_ = provider; }
   int resolveFontVariant(const int fontId, const float scale) const {
