@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-129-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-130-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
