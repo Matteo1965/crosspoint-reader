@@ -124,6 +124,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   tabRect.height = tabHeight;
   // The board's share of the row the tabs spread across, centered.
   const auto fitTabWidth = [&board](fui::Rect rect) {
+    if (BoardConfig::hasTouch()) return rect;
     const auto width = static_cast<int16_t>(rect.width * board.tabBarWidthPct / 100);
     rect.x = static_cast<int16_t>(rect.x + (rect.width - width) / 2);
     rect.width = width;
@@ -303,7 +304,7 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.layout = fui::TabBarLayout::SpaceBetween;
   tabs.action = SELECT;
   tabs.inputMask = fui::InputTouch;
-  tabs.iconSize = 32;
+  tabs.iconSize = BoardConfig::hasTouch() ? 40 : 32;
   tabs.iconPainterUserData = this;
   tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
     const auto& self = *static_cast<CoverGridHomeUi*>(user);
