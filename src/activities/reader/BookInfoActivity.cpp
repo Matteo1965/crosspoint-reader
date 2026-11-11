@@ -12,6 +12,7 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/HeaderBackTapTarget.h"
 #include "fontIds.h"
 
 namespace {
