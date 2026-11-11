@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-139 preview: wider Cover Grid bottom navigation icons.
+# HU-PICCO-140 preview: native 48px Cover Grid icons supplied by user.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-139-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-140-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
