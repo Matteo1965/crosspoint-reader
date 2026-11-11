@@ -245,6 +245,7 @@ class Dictionary {
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
   bool htmlDefinitions = false;
   bool inlineTypes = false;
+  bool hungarianDictionary = false;
 
   // The entry list of the current lookup. Allocated once when the dictionary
   // opens and reused by every lookup, so a lookup never allocates a container.
