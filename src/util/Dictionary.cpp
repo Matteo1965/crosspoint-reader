@@ -934,6 +934,31 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     bool idxReadError = false;
     locateAll(session, cleaned.c_str(), group, &idxReadError);
     searchFailed = idxReadError;
+
+    // Kobalt beta7: some Hungarian Wiktionary indexes contain generated
+    // inflected-form entries whose body is only a "no unambiguous Hungarian
+    // meaning" placeholder. Do not let that synthetic exact hit suppress the
+    // real lemma fallback. Keep the check bounded to small entries so a lookup
+    // never allocates a large definition merely to classify it.
+    if (hungarianDictionary && !group.empty() && !group.lowMemory()) {
+      bool allPlaceholder = true;
+      for (size_t i = 0; i < group.size(); ++i) {
+        const auto& entry = group.at(i);
+        if (entry.location.size > 4096) {
+          allPlaceholder = false;
+          break;
+        }
+        std::string preview;
+        LookupResult previewResult = LookupResult::NotFound;
+        if (!readDefinition(entry.location, preview, &previewResult) ||
+            preview.find("nem áll rendelkezésre egyértelmű magyar jelentés") == std::string::npos) {
+          allPlaceholder = false;
+          break;
+        }
+      }
+      if (allPlaceholder) group.clear();
+    }
+
     if (!group.empty() && !group.lowMemory()) matchedHeadwordOut = group.front().headword.get();
 
     // Kobalt beta7 priority: before dictionary-authored synonyms, try the
