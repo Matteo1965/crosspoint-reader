@@ -14,6 +14,7 @@
 
 #include "../../lib/Epub/Epub/CjkBreaks.h"
 #include "DictZip.h"
+#include "HungarianDictionaryStemmer.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
 #include "TxtToHtml.h"
@@ -121,6 +122,39 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   readIfoLine(facts, std::string_view(line, lineLength), hasFixedTypes);
   facts.inlineTypes = !hasFixedTypes;
   return facts;
+}
+
+bool containsAsciiCaseInsensitive(const std::string& value, const char* needle) {
+  std::string lower = value;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) {
+    return c < 0x80 ? static_cast<char>(std::tolower(c)) : static_cast<char>(c);
+  });
+  return lower.find(needle) != std::string::npos;
+}
+
+void lowercaseHungarianUtf8(std::string& value) {
+  for (size_t i = 0; i < value.size(); ++i) {
+    auto c = static_cast<unsigned char>(value[i]);
+    if (c >= 'A' && c <= 'Z') {
+      value[i] = static_cast<char>(c - 'A' + 'a');
+      continue;
+    }
+    if (i + 1 >= value.size()) continue;
+    auto next = static_cast<unsigned char>(value[i + 1]);
+    if (c == 0xC3) {
+      switch (next) {
+        case 0x81: case 0x89: case 0x8D: case 0x93:
+        case 0x96: case 0x9A: case 0x9C:
+          value[i + 1] = static_cast<char>(next + 0x20);
+          ++i;
+          break;
+        default: break;
+      }
+    } else if (c == 0xC5 && (next == 0x90 || next == 0xB0)) {
+      value[i + 1] = static_cast<char>(next + 1);
+      ++i;
+    }
+  }
 }
 
 bool readInlineField(std::string_view& input, char& type, std::string_view& field, bool truncated) {
@@ -273,6 +307,10 @@ bool Dictionary::open(const char* folderName) {
   hasSyn = Storage.exists((resolved + ".syn").c_str());
   inlineTypes = ifo.inlineTypes;
   htmlDefinitions = ifo.htmlDefinitions || inlineTypes;
+  hungarianDictionary = containsAsciiCaseInsensitive(resolved, "hungarian") ||
+                        containsAsciiCaseInsensitive(resolved, "magyar") ||
+                        containsAsciiCaseInsensitive(resolved, "hu-hu") ||
+                        containsAsciiCaseInsensitive(resolved, "hu_hu");
 
   // The entry list holds every definition a word maps to. It is allocated once
   // here and reused by every lookup, so a lookup never grows a container on the
@@ -815,8 +853,7 @@ std::string Dictionary::cleanWord(const char* word) {
   if (start >= end) return "";
 
   std::string result(word + start, end - start);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
+  lowercaseHungarianUtf8(result);
   return result;
 }
 
@@ -899,14 +936,33 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     searchFailed = idxReadError;
     if (!group.empty() && !group.lowMemory()) matchedHeadwordOut = group.front().headword.get();
 
-    // Dictionary-authored synonyms (alternate spellings, irregular forms) take
-    // precedence over the English-only stemmer, and are language-agnostic.
+    // Kobalt beta7 priority: before dictionary-authored synonyms, try the
+    // common Hungarian direct possessive -ja/-je form. This deliberately runs
+    // only after an exact hit failed, so a real dictionary headword always wins.
+    if (group.empty() && !group.lowMemory() && hungarianDictionary) {
+      for (const char* ending : {"ja", "je"}) {
+        const size_t suffix = strlen(ending);
+        if (cleaned.size() <= suffix || cleaned.compare(cleaned.size() - suffix, suffix, ending) != 0) continue;
+        const std::string base = cleaned.substr(0, cleaned.size() - suffix);
+        bool possessiveReadError = false;
+        locateAll(session, base.c_str(), group, &possessiveReadError);
+        searchFailed = searchFailed || possessiveReadError;
+        if (group.empty() && base.size() >= strlen("nő") &&
+            base.compare(base.size() - strlen("nő"), strlen("nő"), "nő") == 0) {
+          const std::string withoutNo = base.substr(0, base.size() - strlen("nő"));
+          locateAll(session, withoutNo.c_str(), group, &possessiveReadError);
+          searchFailed = searchFailed || possessiveReadError;
+        }
+        if (!group.empty() || group.lowMemory()) break;
+      }
+      if (!group.empty() && !group.lowMemory()) matchedHeadwordOut = group.front().headword.get();
+    }
+
+    // Dictionary-authored synonyms remain ahead of generated morphology.
     if (group.empty() && !group.lowMemory() && hasSyn) {
       bool synonymReadError = false;
       locateSynonyms(session, cleaned.c_str(), group, &synonymReadError);
       searchFailed = searchFailed || synonymReadError;
-      // A synonym maps to other headwords, so the title bar shows the word the
-      // reader looked up; the headword of each entry labels its definition.
       if (!group.empty() && !group.lowMemory()) {
         groupFromSynonyms = true;
         matchedHeadwordOut = cleaned;
@@ -915,8 +971,17 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
 
     if (group.empty() && !group.lowMemory()) {
       std::vector<std::string> variants;
-      stemVariants(cleaned, variants);
+      if (hungarianDictionary)
+        hungarianStemVariants(cleaned, variants);
+      else
+        stemVariants(cleaned, variants);
+
+      // Kobalt beta7 bounds actual morphology lookups to 64 probes. The
+      // generator can emit up to 128 ordered candidates, but Picco never turns
+      // all of them into SD-card seeks.
+      size_t probes = 0;
       for (const auto& variant : variants) {
+        if (hungarianDictionary && probes++ >= 64) break;
         bool variantReadError = false;
         locateAll(session, variant.c_str(), group, &variantReadError);
         searchFailed = searchFailed || variantReadError;
