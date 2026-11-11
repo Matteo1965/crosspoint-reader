@@ -145,7 +145,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   const int coverRowHeight = std::max(1, (body.height - theme.spaceSm - 2 * rowGap) / 3 + COVER_ROW_EXTRA_HEIGHT);
   const int16_t featuredHeight = std::min<int>(
       body.height, std::max<int>(coverRowHeight, screen.target().lineHeight(theme.bodyText.font) * (landscape ? 1 : 2) +
-                                                     screen.target().lineHeight(theme.smallText.font) * 2 + 32));
+                                                     screen.target().lineHeight(theme.smallText.font) * 3 + 32));
   drawCurrent(screen, screen.takeTop(featuredHeight, theme.spaceSm), coverRowHeight);
   drawGrid(screen);
   tabRect.x = gridBounds.x + grid.cellInset.left;
@@ -187,7 +187,12 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect, const int co
   const auto& book = books->front();
   card.title = book.title.c_str();
   card.author = book.author.empty() ? nullptr : book.author.c_str();
-  card.meta = nullptr;
+  featuredSeries = book.series;
+  if (!featuredSeries.empty() && !book.seriesIndex.empty()) {
+    featuredSeries += " ";
+    featuredSeries += book.seriesIndex;
+  }
+  card.meta = featuredSeries.empty() ? nullptr : featuredSeries.c_str();
   card.progressLabel = progress >= 0 ? progressText : nullptr;
   card.centerTextOnCover = true;
   card.progress = std::max(0, progress);
