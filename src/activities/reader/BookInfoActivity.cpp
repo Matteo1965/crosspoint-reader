@@ -669,14 +669,9 @@ void BookInfoActivity::wrapText() {
 }
 
 void BookInfoActivity::loop() {
-  // Picco has no dedicated Back key: a short Power press exits BookInfo.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    finish();
-    return;
-  }
-
-  // Horizontal page gestures mirror normal reader paging.
+  // Handle horizontal swipes BEFORE Back: on Picco a left-edge rightward
+  // swipe is also the global Back gesture. Inside BookInfo, horizontal swipes
+  // are page navigation; header-back tap and physical Back still exit.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Left) {
     if (currentPage_ + 1 < totalPages_) {
@@ -685,11 +680,18 @@ void BookInfoActivity::loop() {
     }
     return;
   }
-  if (swipe == MappedInputManager::SwipeDir::Right && !mappedInput.wasBackGesture()) {
+  if (swipe == MappedInputManager::SwipeDir::Right) {
     if (currentPage_ > 0) {
       --currentPage_;
       requestUpdate();
     }
+    return;
+  }
+
+  // Picco has no dedicated Back key: Power exits too.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    finish();
     return;
   }
 
@@ -708,24 +710,38 @@ void BookInfoActivity::loop() {
     return;
   }
 
-  // Support both logical page-nav buttons and direct screen-left/right mapped
-  // buttons so Picco side/front button configurations can page this view too.
-  const auto nextPage = [this] {
+  // Use the SAME logical page buttons as the EPUB reader. PageForward/PageBack
+  // honor the user's side-button layout (Prev/Next, Next/Prev, Next/Next, etc.).
+  if (mappedInput.wasPressed(MappedInputManager::Button::PageForward)) {
     if (currentPage_ + 1 < totalPages_) {
       ++currentPage_;
       requestUpdate();
     }
-  };
-  const auto previousPage = [this] {
+    return;
+  }
+  if (mappedInput.wasPressed(MappedInputManager::Button::PageBack)) {
     if (currentPage_ > 0) {
       --currentPage_;
       requestUpdate();
     }
-  };
-  buttonNavigator_.onNext(nextPage);
-  buttonNavigator_.onPrevious(previousPage);
-  ButtonNavigator::onPress({MappedInputManager::Button::ScreenRight}, nextPage);
-  ButtonNavigator::onPress({MappedInputManager::Button::ScreenLeft}, previousPage);
+    return;
+  }
+
+  // Front directional buttons follow screen orientation.
+  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight)) {
+    if (currentPage_ + 1 < totalPages_) {
+      ++currentPage_;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft)) {
+    if (currentPage_ > 0) {
+      --currentPage_;
+      requestUpdate();
+    }
+    return;
+  }
 }
 
 void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidth) const {
