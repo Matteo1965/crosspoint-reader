@@ -1,0 +1,78 @@
+name: HU X4 Pro firmware
+# HU-X4PRO-001 preview: X4 Pro native board target with shared Hungarian Edition features.
+
+concurrency:
+  group: hu-x4pro-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - hungarian-edition-x4pro-preview
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  x4pro:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install PlatformIO
+        run: |
+          python -m pip install -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          python -m pip install -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
+      - name: Refresh built-in font IDs
+        run: |
+          set -euo pipefail
+          cd lib/EpdFont/scripts
+          bash build-font-ids.sh > ../../../src/fontIds.h
+          cd ../../..
+          if git diff --quiet -- src/fontIds.h; then
+            echo "Built-in font IDs already match the committed font headers."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            echo "Font ID mismatch in preview; generated IDs are used for this build only."
+            git diff --stat -- src/fontIds.h
+          fi
+
+      - name: Compile X4 Pro
+        run: |
+          set -euo pipefail
+          pio run -e x4pro | tee pio.log
+      - name: Build and run Hungarian hyphenation unit tests
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+          cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/test --target HyphenationEvaluationTest
+          ctest --test-dir build/test -R 'HungarianHyphenation' --output-on-failure
+      - name: Firmware footprint
+        if: success()
+        run: |
+          grep -E 'RAM:|Flash:' pio.log >> "$GITHUB_STEP_SUMMARY" || true
+          stat -c 'Firmware size: %s bytes' .pio/build/x4pro/firmware.bin >> "$GITHUB_STEP_SUMMARY"
+      - name: Number X4 Pro firmware
+        if: success()
+        id: artifact_name
+        shell: bash
+        run: |
+          printf 'name=HU-X4PRO-001-PREVIEW\n' >> "$GITHUB_OUTPUT"
+      - name: Upload X4 Pro firmware
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.artifact_name.outputs.name }}
+          path: .pio/build/x4pro/firmware.bin
+          if-no-files-found: error
