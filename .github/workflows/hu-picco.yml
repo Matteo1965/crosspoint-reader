@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-129 preview: align DEL icon and match symbol keyboard width.
+# HU-PICCO-131 preview: dictionary Power-close and Cover Grid series metadata.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-130-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-131-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
