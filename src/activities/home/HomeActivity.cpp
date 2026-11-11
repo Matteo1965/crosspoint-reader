@@ -14,6 +14,7 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -193,7 +194,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
           bool success = epub.generateThumbBmp(thumbHeight);
           if (!success) {
-            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "", book.series, book.seriesIndex);
             book.coverBmpPath = "";
           }
           coverRendered = false;
@@ -210,7 +211,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
             bool success = xtc.generateThumbBmp(thumbHeight);
             if (!success) {
-              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "", book.series, book.seriesIndex);
               book.coverBmpPath = "";
             }
             coverRendered = false;
@@ -245,6 +246,28 @@ void HomeActivity::onEnter() {
   hasContinueReading = !recentBooks.empty();
   if (coverGridUi) {
     fillCoverGridFromLibrary();
+
+    // Older recent.json entries and library-index rows predate series metadata.
+    // Hydrate only the featured book, keeping home startup cheap while ensuring
+    // the hero card can show e.g. "Dominium 1" immediately.
+    if (!recentBooks.empty() && recentBooks.front().series.empty() &&
+        FsHelpers::hasReflowableBookExtension(recentBooks.front().path)) {
+      Epub epub(recentBooks.front().path, "/.crosspoint");
+      Epub::SyncMetadata metadata;
+      if (epub.loadSyncMetadata(metadata) && !metadata.series.empty()) {
+        RecentBook& featured = recentBooks.front();
+        featured.series = std::move(metadata.series);
+        if (metadata.seriesIndex.has_value()) {
+          char index[24] = {};
+          snprintf(index, sizeof(index), "%.6g", static_cast<double>(*metadata.seriesIndex));
+          featured.seriesIndex = index;
+        }
+        // No-op for a library-only row; persists the upgrade when this is a recent book.
+        RECENT_BOOKS.updateBook(featured.path, featured.title, featured.author, featured.coverBmpPath,
+                                featured.series, featured.seriesIndex);
+      }
+    }
+
     resolveGridCoverPaths();
     coverGridUi->begin(recentBooks, hasLibrarySlot(), hasContinueReading);
   }
