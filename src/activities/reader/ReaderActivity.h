@@ -34,6 +34,8 @@ class ReaderActivity : public Activity {
   virtual bool handleLoadFailure() { return false; }
   virtual std::string getBookTitle() const = 0;
   virtual std::string getBookAuthor() const { return ""; }
+  virtual std::string getBookSeries() const { return ""; }
+  virtual std::string getBookSeriesIndex() const { return ""; }
   virtual std::string getBookThumbBmpPath() const { return ""; }
   // Whole-book progress for the reader.exit plugin event, reusing the
   // per-reader ScreenshotInfo implementations.
