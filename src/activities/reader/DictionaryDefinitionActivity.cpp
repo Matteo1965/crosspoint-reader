@@ -647,6 +647,17 @@ void DictionaryDefinitionActivity::loop() {
   int sy = 0;
   const bool longPress = lookup && mappedInput.wasScreenLongPress(sx, sy);
   const bool headerLongPress = longPress && HeaderBackTapTarget::containsUnpadded(sx, sy);
+
+  // Picco has no dedicated Back key. A short Power/Select-side click closes
+  // the dictionary result page, while Confirm remains available for selecting
+  // a word inside the definition and following a nested lookup.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
   if (headerLongPress || mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (lookup && (headerLongPress || mappedInput.getHeldTime() >= ReaderUtils::GO_BACK_OR_HOME_MS)) {
       ActivityResult result;
