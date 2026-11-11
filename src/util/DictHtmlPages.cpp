@@ -225,7 +225,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // handling, the only path that dereferences it.
     std::unique_ptr<ChapterHtmlSlimParser> parser;
     parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-        nullptr, tmpPath, renderer, fontId, SETTINGS.getReaderLineCompression(),
+        nullptr, tmpPath, renderer, fontId, 1.0f,
         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
         SETTINGS.hyphenationEnabled, SETTINGS.softHyphenEnabled, SETTINGS.focusReadingEnabled,
         /*fixedDialogueSpacing=*/false,
