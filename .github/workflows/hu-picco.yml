@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-133 preview: Kobalt beta7 Hungarian dictionary morphology.
+# HU-PICCO-134 preview: wider Cover Grid bottom action tabs.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-133-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-134-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
