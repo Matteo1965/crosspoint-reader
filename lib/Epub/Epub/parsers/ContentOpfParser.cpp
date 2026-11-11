@@ -36,15 +36,15 @@ bool startsWithImageMediaType(const std::string& mediaType) {
 
 bool isXmlWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 
-// Metadata text comes straight from the (untrusted) OPF; unbounded growth on
-// a multi-megabyte title would exhaust the heap. Downstream consumers truncate
-// far below this anyway, so overflow is clamped, not fatal.
+// Keep ordinary metadata small, but allow multi-page descriptions. All OPF
+// strings are untrusted, so even descriptions retain a finite memory bound.
 constexpr size_t MAX_METADATA_TEXT = 512;
+constexpr size_t MAX_DESCRIPTION_TEXT = 16 * 1024;
 constexpr size_t MAX_COLLECTION_CANDIDATES = 8;
 
 void appendMetadataText(std::string& out, const XML_Char* text, const int len, bool& spacePending,
-                        bool* separatorPending = nullptr) {
-  if (out.size() >= MAX_METADATA_TEXT) return;  // already clamped and logged
+                        bool* separatorPending = nullptr, const size_t maxBytes = MAX_METADATA_TEXT) {
+  if (out.size() >= maxBytes) return;
   for (int i = 0; i < len; i++) {
     const char c = text[i];
     if (isXmlWhitespace(c)) {
@@ -52,8 +52,8 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
       continue;
     }
 
-    if (out.size() >= MAX_METADATA_TEXT) {
-      LOG_DBG("COF", "Metadata text exceeds %u bytes; truncating", static_cast<unsigned>(MAX_METADATA_TEXT));
+    if (out.size() >= maxBytes) {
+      LOG_DBG("COF", "Metadata text exceeds %u bytes; truncating", static_cast<unsigned>(maxBytes));
       return;
     }
     if (separatorPending != nullptr && *separatorPending) {
@@ -73,10 +73,21 @@ std::string lowerAscii(std::string value) {
   return value;
 }
 
-std::string boundedMetadataValue(const XML_Char* value) {
+std::string boundedMetadataValue(const XML_Char* value, const size_t maxBytes = MAX_METADATA_TEXT) {
   if (!value) return {};
   size_t length = 0;
-  while (length < MAX_METADATA_TEXT && value[length] != '\0') ++length;
+  while (length < maxBytes && value[length] != '\0') ++length;
+  // Do not return a dangling UTF-8 prefix if an attribute is truncated.
+  if (length == maxBytes) {
+    size_t start = length;
+    while (start > 0 && (static_cast<unsigned char>(value[start - 1]) & 0xC0) == 0x80) --start;
+    if (start > 0) {
+      const unsigned char lead = static_cast<unsigned char>(value[start - 1]);
+      const size_t width = (lead & 0xE0) == 0xC0 ? 2 : (lead & 0xF0) == 0xE0 ? 3 :
+                           (lead & 0xF8) == 0xF0 ? 4 : 1;
+      if (width > length - (start - 1)) length = start - 1;
+    }
+  }
   return std::string(value, length);
 }
 
@@ -286,6 +297,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
     std::string metaName;
     std::string content;
+    const XML_Char* rawContent = nullptr;
     self->metaProperty.clear();
     self->metaRefines.clear();
     self->metaId.clear();
@@ -295,7 +307,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       if (xmlLocalNameEquals(atts[i], "name")) {
         metaName = boundedMetadataValue(atts[i + 1]);
       } else if (xmlLocalNameEquals(atts[i], "content")) {
-        content = boundedMetadataValue(atts[i + 1]);
+        rawContent = atts[i + 1];
       } else if (xmlLocalNameEquals(atts[i], "property")) {
         self->metaProperty = boundedMetadataValue(atts[i + 1]);
       } else if (xmlLocalNameEquals(atts[i], "refines")) {
@@ -307,6 +319,9 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     }
 
     const std::string lowerName = lowerAscii(metaName);
+    const bool contentIsDescription = lowerName == "description" || lowerName == "calibre:comments" ||
+                                      lowerName == "comments" || lowerName == "summary";
+    content = boundedMetadataValue(rawContent, contentIsDescription ? MAX_DESCRIPTION_TEXT : MAX_METADATA_TEXT);
     if (lowerName == "cover") self->coverItemId = content;
     if (self->description.empty() &&
         (lowerName == "description" || lowerName == "calibre:comments" || lowerName == "comments" ||
@@ -508,7 +523,10 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     return;
   }
 
-  if (self->state == IN_BOOK_DESCRIPTION) { appendMetadataText(self->description, s, len, self->metadataSpacePending); return; }
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    appendMetadataText(self->description, s, len, self->metadataSpacePending, nullptr, MAX_DESCRIPTION_TEXT);
+    return;
+  }
   if (self->state == IN_BOOK_PUBLISHER) { appendMetadataText(self->publisher, s, len, self->metadataSpacePending); return; }
   if (self->state == IN_BOOK_DATE) { appendMetadataText(self->date, s, len, self->metadataSpacePending); return; }
   if (self->state == IN_BOOK_SUBJECT) { appendMetadataText(self->metaText, s, len, self->metadataSpacePending); return; }
@@ -519,7 +537,11 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   }
 
   if (self->state == IN_META_TEXT) {
-    appendMetadataText(self->metaText, s, len, self->metadataSpacePending);
+    const std::string property = lowerAscii(self->metaProperty);
+    const bool isDescription = property == "description" || property == "dcterms:description" ||
+                               property == "schema:description";
+    appendMetadataText(self->metaText, s, len, self->metadataSpacePending, nullptr,
+                       isDescription ? MAX_DESCRIPTION_TEXT : MAX_METADATA_TEXT);
     return;
   }
 }
