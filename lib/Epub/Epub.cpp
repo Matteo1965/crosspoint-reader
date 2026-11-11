@@ -105,6 +105,25 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = utf8ComposeNfc(opfParser.author);
   bookMetadata.language = opfParser.language;
+  bookMetadata.series = utf8ComposeNfc(opfParser.series);
+  bookMetadata.seriesIndex.clear();
+  if (opfParser.seriesIndex.has_value()) {
+    const float index = *opfParser.seriesIndex;
+    if (std::isfinite(index)) {
+      if (index >= -2147483647.0f && index <= 2147483647.0f && std::trunc(index) == index) {
+        bookMetadata.seriesIndex = std::to_string(static_cast<int32_t>(index));
+      } else {
+        bookMetadata.seriesIndex = std::to_string(index);
+        const auto decimal = bookMetadata.seriesIndex.find('.');
+        if (decimal != std::string::npos) {
+          while (!bookMetadata.seriesIndex.empty() && bookMetadata.seriesIndex.back() == '0')
+            bookMetadata.seriesIndex.pop_back();
+          if (!bookMetadata.seriesIndex.empty() && bookMetadata.seriesIndex.back() == '.')
+            bookMetadata.seriesIndex.pop_back();
+        }
+      }
+    }
+  }
 
   if (metadataOnly) {
     LOG_DBG("EBP", "Successfully parsed package metadata");
@@ -770,6 +789,18 @@ const std::string& Epub::getLanguage() const {
   static std::string blank;
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
   return bookMetadataCache->coreMetadata.language;
+}
+
+const std::string& Epub::getSeries() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.series;
+}
+
+const std::string& Epub::getSeriesIndex() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.seriesIndex;
 }
 
 bool Epub::readBookInfo(BookInfo& info) const {
