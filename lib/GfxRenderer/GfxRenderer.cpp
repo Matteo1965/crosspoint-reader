@@ -296,6 +296,12 @@ GfxRenderer::ReaderGlyphChoice GfxRenderer::chooseReaderGlyph(
     }
   }
   if (bestId) return {bestId, cp, style, true};
+
+  // If neither the selected reader font nor any size-matched Noto Serif
+  // fallback contains the codepoint, do not expose EpdFont's solid missing-
+  // glyph marker (black diamond/question mark). Treat it as a normal space in
+  // both measurement and rendering so layout stays consistent.
+  if (primary.hasCodepoint(' ', style)) return {fontId, static_cast<uint32_t>(' '), style, true};
   return original;
 }
 
