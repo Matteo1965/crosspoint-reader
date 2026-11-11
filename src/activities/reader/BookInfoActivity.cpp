@@ -669,8 +669,27 @@ void BookInfoActivity::wrapText() {
 }
 
 void BookInfoActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Picco has no dedicated Back key: a short Power press exits BookInfo.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
     finish();
+    return;
+  }
+
+  // Horizontal page gestures mirror normal reader paging.
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Left) {
+    if (currentPage_ + 1 < totalPages_) {
+      ++currentPage_;
+      requestUpdate();
+    }
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Right && !mappedInput.wasBackGesture()) {
+    if (currentPage_ > 0) {
+      --currentPage_;
+      requestUpdate();
+    }
     return;
   }
 
@@ -689,18 +708,24 @@ void BookInfoActivity::loop() {
     return;
   }
 
-  buttonNavigator_.onNext([this] {
+  // Support both logical page-nav buttons and direct screen-left/right mapped
+  // buttons so Picco side/front button configurations can page this view too.
+  const auto nextPage = [this] {
     if (currentPage_ + 1 < totalPages_) {
       ++currentPage_;
       requestUpdate();
     }
-  });
-  buttonNavigator_.onPrevious([this] {
+  };
+  const auto previousPage = [this] {
     if (currentPage_ > 0) {
       --currentPage_;
       requestUpdate();
     }
-  });
+  };
+  buttonNavigator_.onNext(nextPage);
+  buttonNavigator_.onPrevious(previousPage);
+  ButtonNavigator::onPress({MappedInputManager::Button::ScreenRight}, nextPage);
+  ButtonNavigator::onPress({MappedInputManager::Button::ScreenLeft}, previousPage);
 }
 
 void BookInfoActivity::drawBody(const int x, const int startY, const int maxWidth) const {
