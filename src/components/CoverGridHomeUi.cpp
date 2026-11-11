@@ -304,7 +304,9 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.layout = fui::TabBarLayout::SpaceBetween;
   tabs.action = SELECT;
   tabs.inputMask = fui::InputTouch;
-  tabs.iconSize = BoardConfig::hasTouch() ? 40 : 32;
+  // Picco touch: enlarge the four bottom icons without shrinking the tab bar.
+  // SpaceBetween distributes the entire row, keeping each target separated.
+  tabs.iconSize = BoardConfig::hasTouch() ? 48 : 32;
   tabs.iconPainterUserData = this;
   tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
     const auto& self = *static_cast<CoverGridHomeUi*>(user);
