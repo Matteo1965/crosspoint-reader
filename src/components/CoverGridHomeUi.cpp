@@ -11,6 +11,7 @@
 #include "MappedInputManager.h"
 #include "UITheme.h"
 #include "icons/blocks.h"
+#include "icons/picco_custom_48.h"
 #include "icons/book.h"
 #include "icons/folder.h"
 #include "icons/library.h"
@@ -290,6 +291,11 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   static constexpr const uint8_t* ICONS[] = {FolderIcon, LibraryIcon, BlocksIcon, TransferIcon, Settings2Icon};
+  // Touch boards use native 48x48 1-bit bitmaps. Never reinterpret 32x32 data
+  // at a 48px stride: that reads outside the image and scrambles the pixels.
+  static constexpr const uint8_t* TOUCH_ICONS[] = {
+      PiccoFolder48Icon, PiccoLibrary48Icon, PiccoBlocks48Icon,
+      PiccoTransfer48Icon, PiccoSettings248Icon};
   int count = 0;
   for (int i = 0; i < 5; ++i) {
     if (i == 2 && !hasOpds) continue;
@@ -312,7 +318,8 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
     const auto& self = *static_cast<CoverGridHomeUi*>(user);
     const int index = tab.value - static_cast<int>(self.books->size());
     const int icon = !self.hasOpds && index >= 2 ? index + 1 : index;
-    self.renderer.drawIcon(ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
+    self.renderer.drawIcon(BoardConfig::hasTouch() ? TOUCH_ICONS[icon] : ICONS[icon],
+                           iconRect.x, iconRect.y, BoardConfig::hasTouch() ? 48 : 32);
     return true;
   };
   // No pill fill; the underline marks the selected tab.
