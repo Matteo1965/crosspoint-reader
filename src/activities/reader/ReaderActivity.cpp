@@ -89,7 +89,8 @@ void ReaderActivity::rememberBookOnceRendered() {
   bookRemembered = true;
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());
+  RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath(),
+                       getBookSeries(), getBookSeriesIndex());
   const pluginevents::Var openVars[] = {{"book", bookPath.c_str()}};
   pluginevents::emit(pluginevents::Event::ReaderOpen, openVars, 1);
 }
