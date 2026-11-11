@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-137 preview: fixed BookInfo swipe and page-button routing.
+# HU-PICCO-138 preview: prevent OPF description truncation; restore multi-page BookInfo.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-137-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-138-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
