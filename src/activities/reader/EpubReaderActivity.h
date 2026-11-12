@@ -36,6 +36,9 @@ class EpubReaderActivity final : public ReaderActivity {
   unsigned long pageTurnDuration = 0UL;
   int8_t pendingManualTurn = 0;
   bool pendingManualTurnTouch = false;
+  // A requested chapter page is still being laid out in small idle steps.
+  // Ignore additional page turns until the requested page has actually been painted.
+  bool waitingForChapterPage = false;
   bool pendingPercentJump = false;
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
