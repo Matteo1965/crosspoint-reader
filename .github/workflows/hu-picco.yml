@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-140 preview: native 48px Cover Grid icons supplied by user.
+# HU-PICCO-141 preview: restore Hungarian compound guards and responsive chapter transitions.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -10,6 +10,7 @@ on:
     branches:
       - picco-hungarian-edition-2.0.0
       - agent/hu-picco-129-keyboard-symbol-width
+      - agent/hu-picco-141-hyphen-chapter-response
   workflow_dispatch:
 
 permissions:
@@ -70,7 +71,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-140-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-141-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
