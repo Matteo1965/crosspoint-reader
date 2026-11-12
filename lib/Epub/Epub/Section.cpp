@@ -357,9 +357,15 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
   }
-  // Reclaim rebuildable font caches before CSS and layout allocations.
-  if (auto* fontCache = renderer.getFontCacheManager()) {
-    fontCache->releaseSdFontCaches();
+  // TTF may need substantial temporary heap for CSS and layout parsing.
+  // Unlike TTF, a resident .cpfont advance table is used throughout page
+  // layout: evicting it on every chapter forces synchronous SD metric reads
+  // during the very next chapter. The reader already applies the same
+  // TTF-only policy at its chapter-build entry point.
+  if (!renderer.getTtfFonts().empty()) {
+    if (auto* fontCache = renderer.getFontCacheManager()) {
+      fontCache->releaseSdFontCaches();
+    }
   }
   buildComplete_ = false;
   builtPageCount_ = 0;
