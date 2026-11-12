@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-141 preview: restore Hungarian compound guards and responsive chapter transitions.
+# HU-PICCO-142 preview: bookmark icon feedback without confirmation popup.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-141-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-142-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
