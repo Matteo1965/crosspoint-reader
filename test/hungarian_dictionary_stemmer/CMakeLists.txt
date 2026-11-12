@@ -1,0 +1,3 @@
+add_executable(HungarianDictionaryStemmerTest HungarianDictionaryStemmerTest.cpp)
+target_link_libraries(HungarianDictionaryStemmerTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(HungarianDictionaryStemmerTest)
