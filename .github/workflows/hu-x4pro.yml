@@ -1,5 +1,5 @@
 name: HU X4 Pro firmware
-# HU-X4PRO-004 preview: X4 Pro native board target with shared Hungarian Edition features.
+# HU-X4PRO-005 preview: X4 Pro native board target with shared Hungarian Edition features.
 
 concurrency:
   group: hu-x4pro-${{ github.ref }}
@@ -68,7 +68,7 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          printf 'name=HU-X4PRO-004-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-X4PRO-005-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload X4 Pro firmware
         if: success()
         uses: actions/upload-artifact@v6
