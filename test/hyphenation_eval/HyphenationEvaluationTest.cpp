@@ -252,6 +252,6 @@ TEST(HungarianHyphenation, Cphun224CompoundGuards) {
   // Real geminate multigraphs retain their extended reconstruction rule.
   const auto meggyes = Hyphenator::breakOffsetsForLanguageExtended("meggyes", false, "hu");
   EXPECT_TRUE(std::any_of(meggyes.begin(), meggyes.end(), [](const auto& b) {
-    return b.byteOffset == 2 && b.replacement == Replacement::AppendY;
+    return b.byteOffset == 3 && b.replacement == Replacement::AppendY;
   }));
 }
