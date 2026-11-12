@@ -296,6 +296,14 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   static constexpr const uint8_t* TOUCH_ICONS[] = {
       PiccoFolder48Icon, PiccoLibrary48Icon, PiccoBlocks48Icon,
       PiccoTransfer48Icon, PiccoSettings248Icon};
+  // Both Picco and X4 Pro use the same 480x800 portrait UI layout.
+  // The 48px raster assets must be exactly 48*48/8 bytes; this catches the
+  // accidental 32px-data-at-48px-stride corruption seen in earlier previews.
+  static_assert(sizeof(PiccoFolder48Icon) == 288);
+  static_assert(sizeof(PiccoLibrary48Icon) == 288);
+  static_assert(sizeof(PiccoBlocks48Icon) == 288);
+  static_assert(sizeof(PiccoTransfer48Icon) == 288);
+  static_assert(sizeof(PiccoSettings248Icon) == 288);
   int count = 0;
   for (int i = 0; i < 5; ++i) {
     if (i == 2 && !hasOpds) continue;
@@ -310,7 +318,7 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.layout = fui::TabBarLayout::SpaceBetween;
   tabs.action = SELECT;
   tabs.inputMask = fui::InputTouch;
-  // Picco touch: enlarge the four bottom icons without shrinking the tab bar.
+  // Picco / X4 Pro touch: draw the same native 48px icons without shrinking the tab bar.
   // SpaceBetween distributes the entire row, keeping each target separated.
   tabs.iconSize = BoardConfig::hasTouch() ? 48 : 32;
   tabs.iconPainterUserData = this;
