@@ -1,5 +1,5 @@
 name: HU X4 Pro firmware
-# HU-X4PRO-004 preview: X4 Pro native board target with shared Hungarian Edition features.
+# HU-X4PRO-005 preview: X4 Pro native board target with shared Hungarian Edition features.
 
 concurrency:
   group: hu-x4pro-${{ github.ref }}
@@ -50,14 +50,14 @@ jobs:
         run: |
           set -euo pipefail
           pio run -e x4pro | tee pio.log
-      - name: Build and run Hungarian hyphenation unit tests
+      - name: Build and run Hungarian language, dictionary, EPUB metadata and keyboard tests
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build
           cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/test --target HyphenationEvaluationTest
-          ctest --test-dir build/test -R 'HungarianHyphenation' --output-on-failure
+          cmake --build build/test --target HyphenationEvaluationTest HungarianDictionaryStemmerTest ContentOpfParserTest
+          ctest --test-dir build/test -R 'HungarianHyphenation|HungarianDictionaryStemmer|ContentOpfParserMetadata|HungarianKeyboardStructure' --output-on-failure
       - name: Firmware footprint
         if: success()
         run: |
@@ -68,7 +68,7 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          printf 'name=HU-X4PRO-004-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-X4PRO-005-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload X4 Pro firmware
         if: success()
         uses: actions/upload-artifact@v6
