@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-144 preview: show indexing for uncached forward chapter transitions.
+# HU-PICCO-145 preview: avoid repeated cpfont metric cache reloads across chapters.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -11,6 +11,7 @@ on:
       - picco-hungarian-edition-2.0.0
       - agent/hu-picco-129-keyboard-symbol-width
       - agent/hu-picco-141-hyphen-chapter-response
+      - agent/hu-picco-145-chapter-startup
   workflow_dispatch:
 
 permissions:
@@ -71,7 +72,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-144-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-145-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
