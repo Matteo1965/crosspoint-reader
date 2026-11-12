@@ -66,6 +66,7 @@ add_subdirectory(em_dash_line_breaking)
 add_subdirectory(ligature_guard)
 add_subdirectory(page_link)
 add_subdirectory(content_opf_parser)
+add_subdirectory(hungarian_dictionary_stemmer)
 add_subdirectory(chapter_position)
 add_subdirectory(book_metadata_cache)
 add_subdirectory(home_button)
@@ -114,3 +115,5 @@ add_test(NAME clipping_highlight_planes COMMAND ${Python3_EXECUTABLE} ${CMAKE_CU
 add_test(NAME clipping_selection_text COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_clipping_selection_text.py)
 
 add_test(NAME recursive_dictionary COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_recursive_dictionary.py)
+
+add_test(NAME HungarianKeyboardStructure COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_hungarian_keyboard_structure.py)
