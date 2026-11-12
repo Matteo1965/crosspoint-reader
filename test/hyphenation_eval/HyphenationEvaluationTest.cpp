@@ -10,6 +10,7 @@
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
 #ifndef HYPHENATION_RESOURCES_DIR
@@ -233,3 +234,24 @@ TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphe
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
+
+TEST(HungarianHyphenation, Cphun224CompoundGuards) {
+  using Replacement = Hyphenator::Replacement;
+  // A compound boundary after "meg" is real; it must not be rewritten as
+  // the doubled "ggy" consonant (megy-győzzék is wrong).
+  for (const auto& word : {"meggyőz", "meggyőzzék", "meggyull", "meggyón"}) {
+    const auto breaks = Hyphenator::breakOffsetsForLanguageExtended(word, false, "hu");
+    const auto boundary = std::find_if(breaks.begin(), breaks.end(),
+                                      [](const auto& b) { return b.byteOffset == 3; });
+    EXPECT_NE(boundary, breaks.end()) << word;
+    if (boundary != breaks.end()) EXPECT_EQ(boundary->replacement, Replacement::None) << word;
+    EXPECT_FALSE(std::any_of(breaks.begin(), breaks.end(), [](const auto& b) {
+      return b.byteOffset == 2 && b.replacement == Replacement::AppendY;
+    })) << word;
+  }
+  // Real geminate multigraphs retain their extended reconstruction rule.
+  const auto meggyes = Hyphenator::breakOffsetsForLanguageExtended("meggyes", false, "hu");
+  EXPECT_TRUE(std::any_of(meggyes.begin(), meggyes.end(), [](const auto& b) {
+    return b.byteOffset == 2 && b.replacement == Replacement::AppendY;
+  }));
+}
