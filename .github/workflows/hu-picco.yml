@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-143 diagnostic: measure chapter HTML extraction and parser startup.
+# HU-PICCO-144 preview: show indexing for uncached forward chapter transitions.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-143-DIAGNOSTIC\n' >> "$GITHUB_OUTPUT"
+          printf 'name=HU-PICCO-144-PREVIEW\n' >> "$GITHUB_OUTPUT"
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
