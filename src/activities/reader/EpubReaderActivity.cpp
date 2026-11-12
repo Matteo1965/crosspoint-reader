@@ -1838,8 +1838,14 @@ void EpubReaderActivity::renderBook() {
             showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
                                              target > BUILD_POPUP_PAGE_THRESHOLD);
           }
+          // A new uncached chapter can spend a long time inflating its HTML
+          // before the incremental page builder even starts. Show progress for
+          // forward turns too; the old size heuristic hid it for target page 0.
+          if (!cacheLoaded) showPopup = true;
           if (showPopup) {
+            renderer.clearScreen();
             GUI.drawPopup(renderer, tr(STR_INDEXING));
+            renderer.displayBuffer();  // Make it visible before synchronous ZIP inflation.
             pagesUntilFullRefresh = 1;
           }
           buildPopupPending = !showPopup;
