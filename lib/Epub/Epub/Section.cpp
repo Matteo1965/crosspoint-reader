@@ -352,6 +352,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
 }
 
 bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+  const unsigned long startBuildMs = millis();
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -447,6 +448,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
       LOG_DBG("SCT", "Failed to promote HTML cache; parsing from temp");
     }
   }
+
+  LOG_DBG("SCT", "Chapter HTML ready: spine=%d reused=%d time=%lums",
+          spineIndex, reusedHtml ? 1 : 0, millis() - startBuildMs);
 
   if (!Storage.openFileForWrite("SCT", binTmpPath(), file)) {
     if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
@@ -548,6 +552,8 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
     return false;
   }
   build_->totalBytes = build_->parser->parseTotalBytes();
+  LOG_DBG("SCT", "Chapter parser ready: spine=%d start_total=%lums",
+          spineIndex, millis() - startBuildMs);
   return true;
 }
 
