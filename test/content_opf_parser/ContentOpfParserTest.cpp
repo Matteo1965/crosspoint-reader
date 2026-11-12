@@ -36,6 +36,16 @@ TEST(ContentOpfParserMetadata, ClampsOversizedMetadataTextInsteadOfGrowingUnboun
   EXPECT_EQ(parser.title[0], 'A');
 }
 
+TEST(ContentOpfParserMetadata, KeepsLongHungarianDescriptionBeyondLegacy512Bytes) {
+  const std::string description = std::string(900, 'a') + " Ázsiát és Európát is megnézné.";
+  const std::string xml = "<package xmlns:dc=\"urn:dc\"><metadata><dc:description>" +
+                          description + "</dc:description></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+  parse(parser, xml);
+  EXPECT_EQ(parser.description, description);
+  EXPECT_GT(parser.description.size(), 512u);
+}
+
 TEST(ContentOpfParserMetadata, SeparatesCreatorElementsAndCollapsesXmlWhitespace) {
   const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
     <dc:title>  The
