@@ -2064,9 +2064,9 @@ void EpubReaderActivity::renderBook() {
     ScreenshotUtil::takeScreenshot(renderer);
   }
 
-  if (showBookmarkMessage) {
-    GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
-  }
+  // Bookmark changes are indicated by the top-right dog-ear icon.
+  // Keep the timed showBookmarkMessage state solely as input debounce for
+  // shortcut buttons; do not overlay an unnecessary confirmation popup.
 
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
