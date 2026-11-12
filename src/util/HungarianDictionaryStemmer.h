@@ -607,7 +607,15 @@ inline void hungarianStemVariants(const std::string& word, std::vector<std::stri
       seen.push_back(cand);
       size_t candCodepoints = 0;
       for (const unsigned char ch : cand) if ((ch & 0xC0) != 0x80) ++candCodepoints;
-      if (candCodepoints >= 3 && out.size() < MAX_STEM_VARIANTS) addUnique(out, cand);
+      // Keep the 3-letter floor for algorithmic stemming to avoid noisy
+      // short-word matches. Explicitly validated irregular two-letter lemmas
+      // are safe exceptions (otherwise írtam -> ír is lost despite SPECIAL).
+      const bool validatedShortLemma =
+          (word == "írtam" && cand == "ír") ||
+          (word == "nekem" && cand == "én") ||
+          (word == "utat" && cand == "út") ||
+          (word == "keze" && cand == "kéz");
+      if ((candCodepoints >= 3 || validatedShortLemma) && out.size() < MAX_STEM_VARIANTS) addUnique(out, cand);
       std::vector<std::string> more;
       generateOne(cand, more);
       for (const auto& m : more) addUnique(next, m);
