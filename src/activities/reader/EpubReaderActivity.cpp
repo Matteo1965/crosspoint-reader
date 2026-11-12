@@ -1868,6 +1868,8 @@ void EpubReaderActivity::renderBook() {
             GfxRenderer::FrameBufferLoan loan(renderer);
             started = section->startBuild(renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); });
           }
+          LOG_DBG("ERS", "Chapter startup: spine=%d html/parser time=%lums cached_html=%d",
+                  currentSpineIndex, millis() - buildStartMs, willInflate ? 0 : 1);
           if (!started) {
             LOG_ERR("ERS", "Failed to start section build");
             section.reset();
@@ -1886,6 +1888,7 @@ void EpubReaderActivity::renderBook() {
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               showBuildPopup(renderer, pagesUntilFullRefresh);
             }
+            const unsigned long chunkStartedMs = millis();
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
               LOG_ERR("ERS", "Failed during incremental section build");
               section.reset();
@@ -1893,6 +1896,8 @@ void EpubReaderActivity::renderBook() {
               showBuildError();
               return;
             }
+            LOG_DBG("ERS", "Chapter pagination chunk: spine=%d pages=%d duration=%lums",
+                    currentSpineIndex, section->pageCount, millis() - chunkStartedMs);
             if (sequentialChapterStart) break;
           }
           buildPopupPending = false;
