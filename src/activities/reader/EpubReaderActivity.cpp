@@ -711,6 +711,23 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // A new chapter's requested page is not yet indexed. Keep processing input frames,
+  // but discard repeat page-turn releases instead of replaying them after the build.
+  // The background builder produces a couple of pages per idle frame and requests a
+  // render once the page is available. Back/menu actions are intentionally deferred.
+  if (waitingForChapterPage) {
+    if (!section) {
+      waitingForChapterPage = false;
+    } else {
+      if (section->currentPage < static_cast<int>(section->pageCount) || section->isBuildComplete()) {
+        requestUpdate();
+      } else {
+        backgroundBuildTick();
+      }
+      return;
+    }
+  }
+
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   {
     RenderLock lock(RenderLock::Mode::Try);
@@ -1858,10 +1875,13 @@ void EpubReaderActivity::renderBook() {
             showBuildError();
             return;
           }
-          while (!section->isBuildComplete() &&
-                 (anchorJump               ? !section->findAnchor(pendingAnchor)
-                  : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
-                                           : static_cast<int>(section->pageCount) <= target)) {
+          // Bound the initial build to a single chunk. If the target page is
+          // not ready, the loop task finishes pagination between input frames.
+          // Do not spin under RenderLock until the next page has been indexed.
+          if (!section->isBuildComplete() &&
+              (anchorJump               ? !section->findAnchor(pendingAnchor)
+               : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
+                                        : static_cast<int>(section->pageCount) <= target)) {
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               showBuildPopup(renderer, pagesUntilFullRefresh);
             }
@@ -1916,41 +1936,38 @@ void EpubReaderActivity::renderBook() {
     }
   }
 
-  // The two loops below build on until the page to show exists.
-  if ((section->isPartial() || section->isBuilding()) && section->currentPage >= static_cast<int>(section->pageCount) &&
-      !makeRoomForChapterBuild()) {
-    section.reset();
-    showBuildError(tr(STR_BT_BUILD_REFUSED));
-    return;
-  }
-  if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
-    pagesUntilFullRefresh = 1;
-  }
-  while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+  // Incremental chapter extension: never hold the render lock across many
+  // build chunks. The requested page is painted after the loop task finishes it.
+  if ((section->isPartial() || section->isBuilding()) &&
+      section->currentPage >= static_cast<int>(section->pageCount)) {
+    if (!makeRoomForChapterBuild()) {
+      section.reset();
+      showBuildError(tr(STR_BT_BUILD_REFUSED));
+      return;
+    }
     if (!section->isBuilding() && !section->startBuild(renderSpec)) {
       LOG_ERR("ERS", "Failed to start partial extension build");
       section.reset();
       showBuildError();
       return;
     }
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        section.reset();
-        showBuildError();
-        return;
-      }
+    if (!section->isBuildComplete() && !section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+      LOG_ERR("ERS", "Failed during incremental section build");
+      section.reset();
+      showBuildError();
+      return;
     }
-  }
-  if (section->isBuilding()) {
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        section.reset();
-        showBuildError();
-        return;
-      }
+    if (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+      waitingForChapterPage = true;
+      pendingManualTurn = 0;
+      pendingManualTurnTouch = false;
+      automaticPageTurnActive = false;
+      LOG_DBG("ERS", "Waiting for page %d of spine %d (built %d pages)", section->currentPage,
+              currentSpineIndex, section->pageCount);
+      renderer.clearScreen();
+      GUI.drawPopup(renderer, tr(STR_INDEXING));
+      renderer.displayBuffer();
+      return;
     }
   }
 
@@ -1984,6 +2001,7 @@ void EpubReaderActivity::renderBook() {
     return;
   }
 
+  waitingForChapterPage = false;
   updateBookmarkFlag();
 
   {
