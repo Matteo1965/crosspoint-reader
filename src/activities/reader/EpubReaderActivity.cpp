@@ -1875,13 +1875,14 @@ void EpubReaderActivity::renderBook() {
             showBuildError();
             return;
           }
-          // Bound the initial build to a single chunk. If the target page is
-          // not ready, the loop task finishes pagination between input frames.
-          // Do not spin under RenderLock until the next page has been indexed.
-          if (!section->isBuildComplete() &&
-              (anchorJump               ? !section->findAnchor(pendingAnchor)
-               : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
-                                        : static_cast<int>(section->pageCount) <= target)) {
+          // Ordinary next-chapter turns only need the first page. For these,
+          // build one chunk and yield to the input loop; special navigation to
+          // an anchor, offset, or a later page still resolves its target here.
+          const bool sequentialChapterStart = !anchorJump && !offsetJump.has_value() && target == 0;
+          while (!section->isBuildComplete() &&
+                 (anchorJump               ? !section->findAnchor(pendingAnchor)
+                  : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
+                                           : static_cast<int>(section->pageCount) <= target)) {
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               showBuildPopup(renderer, pagesUntilFullRefresh);
             }
@@ -1892,6 +1893,7 @@ void EpubReaderActivity::renderBook() {
               showBuildError();
               return;
             }
+            if (sequentialChapterStart) break;
           }
           buildPopupPending = false;
         }
