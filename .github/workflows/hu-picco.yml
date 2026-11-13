@@ -85,7 +85,7 @@ jobs:
           if match is None:
               raise SystemExit("HU-PICCO About version missing in picco build flags")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"name={match.group(1)}\\n")
+              out.write(f"name={match.group(1)}\n")
           PY
       - name: Upload Picco firmware
         if: success()
