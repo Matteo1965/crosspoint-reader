@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-145 preview: avoid repeated cpfont metric cache reloads across chapters.
+# HU-PICCO-146 preview: upstream Beta v2 font download fix; About version matches artifact.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -12,6 +12,7 @@ on:
       - agent/hu-picco-129-keyboard-symbol-width
       - agent/hu-picco-141-hyphen-chapter-response
       - agent/hu-picco-145-chapter-startup
+      - agent/hu-picco-146-beta2-font-fix
   workflow_dispatch:
 
 permissions:
@@ -71,8 +72,21 @@ jobs:
         id: artifact_name
         shell: bash
         run: |
-          # HU-PICCO-117: Night Mode remains available in Display settings.
-          printf 'name=HU-PICCO-145-PREVIEW\n' >> "$GITHUB_OUTPUT"
+          # Read the very same compile-time identifier used by AboutActivity.
+          # Keeping one source of truth prevents the artifact name and the
+          # displayed Hungarian Edition version from silently diverging.
+          python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          ini = Path("platformio.ini").read_text(encoding="utf-8")
+          picco = ini.split("[env:picco]", 1)[1].split("[env:picco-gh_release]", 1)[0]
+          match = re.search(r'-DHUNGARIAN_EDITION_VERSION=\\?"(HU-PICCO-[A-Za-z0-9-]+)\\?"', picco)
+          if match is None:
+              raise SystemExit("HU-PICCO About version missing in picco build flags")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"name={match.group(1)}\\n")
+          PY
       - name: Upload Picco firmware
         if: success()
         uses: actions/upload-artifact@v6
