@@ -1,5 +1,5 @@
 name: HU Picco firmware
-# HU-PICCO-146 preview: upstream Beta v2 font download fix; About version matches artifact.
+# HU-PICCO-146 public release: tested Beta v2 font download fix and Hungarian Edition.
 
 concurrency:
   group: hu-picco-${{ github.ref }}
@@ -13,6 +13,7 @@ on:
       - agent/hu-picco-141-hyphen-chapter-response
       - agent/hu-picco-145-chapter-startup
       - agent/hu-picco-146-beta2-font-fix
+      - release/hu-picco-146
   workflow_dispatch:
 
 permissions:
@@ -94,3 +95,46 @@ jobs:
           name: ${{ steps.artifact_name.outputs.name }}
           path: .pio/build/picco/firmware.bin
           if-no-files-found: error
+      - name: Publish HU-PICCO-146 public GitHub Release
+        if: success() && github.ref == 'refs/heads/release/hu-picco-146'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="hu-picco-146"
+          cp .pio/build/picco/firmware.bin HU-PICCO-146-firmware.bin
+          sha256sum HU-PICCO-146-firmware.bin > HU-PICCO-146-SHA256.txt
+          cat > release-notes.md <<'NOTES'
+          # CrossPoint Hungarian Edition – BOOX Picco HU-PICCO-146
+
+          Public firmware release based on CrossPoint 2.0.0, with the tested Hungarian Edition enhancements.
+
+          ## Changes
+          - Restores font catalogue and GitHub-hosted font downloads with the updated FreeInk SDK (including the oversized GitHub HTTP header fix).
+          - Hungarian language interface, extended Hungarian hyphenation and improved typography.
+          - Bookmark dog-ear indicator without redundant confirmation popup.
+          - Shows “Indexelés...” when an uncached chapter is prepared, including forward chapter transitions.
+          - Keeps the cpfont metrics cache between chapter builds to avoid unnecessary SD reads.
+          - About / Névjegy now shows HU-PICCO-146, matching the release filename.
+
+          ## Installation
+          Download HU-PICCO-146-firmware.bin below and flash using the BOOX Picco compatible firmware update process. Do not flash the GitHub Actions ZIP directly; extract its firmware.bin first if using Actions. Back up books and settings before updating.
+
+          ## Known limitation
+          First-time chapter indexing can still pause for a long time on some EPUBs. This release does not claim to eliminate that delay.
+
+          ## Compatibility
+          Target: BOOX Picco only. Do not use this binary for other CrossPoint devices.
+          NOTES
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; refusing to overwrite a published release" >&2
+            exit 1
+          fi
+          gh release create "$tag" HU-PICCO-146-firmware.bin HU-PICCO-146-SHA256.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "CrossPoint Hungarian Edition – BOOX Picco HU-PICCO-146" \
+            --notes-file release-notes.md \
+            --latest=false
+
