@@ -13,7 +13,6 @@ on:
       - agent/hu-picco-141-hyphen-chapter-response
       - agent/hu-picco-145-chapter-startup
       - agent/hu-picco-146-beta2-font-fix
-      - release/hu-picco-146
   workflow_dispatch:
 
 permissions:
@@ -108,24 +107,28 @@ jobs:
           cat > release-notes.md <<'NOTES'
           # CrossPoint Hungarian Edition – BOOX Picco HU-PICCO-146
 
-          Public firmware release based on CrossPoint 2.0.0, with the tested Hungarian Edition enhancements.
+          A CrossPoint 2.0.0 alapjaira épülő, kifejezetten a BOOX Picco készülékhez készült magyar nyelvű firmware.
 
-          ## Changes
-          - Restores font catalogue and GitHub-hosted font downloads with the updated FreeInk SDK (including the oversized GitHub HTTP header fix).
-          - Hungarian language interface, extended Hungarian hyphenation and improved typography.
-          - Bookmark dog-ear indicator without redundant confirmation popup.
-          - Shows “Indexelés...” when an uncached chapter is prepared, including forward chapter transitions.
-          - Keeps the cpfont metrics cache between chapter builds to avoid unnecessary SD reads.
-          - About / Névjegy now shows HU-PICCO-146, matching the release filename.
+          ## Főbb funkciók és javítások
 
-          ## Installation
-          Download HU-PICCO-146-firmware.bin below and flash using the BOOX Picco compatible firmware update process. Do not flash the GitHub Actions ZIP directly; extract its firmware.bin first if using Actions. Back up books and settings before updating.
+          - Magyar nyelvű felhasználói felület és olvasómenük.
+          - Kiterjesztett magyar szóelválasztás, összetett szavak elválasztásának javítása.
+          - Magyar olvasáshoz finomított tipográfiai és szövegmegjelenítési beállítások, .cpfont és TTF betűkészletek támogatása.
+          - A hivatalos BOOX Picco Beta v2-ből átvett fontletöltési javítás: a letölthető betűkészletek katalógusa és a GitHubról történő telepítés ismét működik.
+          - Könyvjelző hozzáadása és eltávolítása a jobb felső sarokban lévő ikonról, külön megerősítő üzenet nélkül.
+          - Az „Indexelés...” jelzés megjelenítése az új fejezetek előkészítésekor, előre- és visszalapozásnál is.
+          - A .cpfont betűkészletadatok gyorsítótárának megőrzése fejezetváltáskor.
+          - Névjegy: HU-PICCO-146 verzióazonosító.
 
-          ## Known limitation
-          First-time chapter indexing can still pause for a long time on some EPUBs. This release does not claim to eliminate that delay.
+          ## Letöltés és telepítés
 
-          ## Compatibility
-          Target: BOOX Picco only. Do not use this binary for other CrossPoint devices.
+          Töltsd le a **HU-PICCO-146-firmware.bin** fájlt a kiadás mellékletei közül, és a BOOX Picco kompatibilis firmware-frissítési eljárásával telepítsd. A GitHub Actions ZIP-állományát ne töltsd fel közvetlenül a készülékre: abból előbb ki kell bontani a firmware.bin fájlt. Frissítés előtt ajánlott biztonsági mentést készíteni a könyvekről és a beállításokról.
+
+          A **HU-PICCO-146-SHA256.txt** az állomány ellenőrzőösszegét tartalmazza.
+
+          ## Kompatibilitás
+
+          **Kizárólag BOOX Picco készülékhez.** Más CrossPoint-kompatibilis olvasóra ezt a firmware-t ne telepítsd.
           NOTES
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $tag already exists; refusing to overwrite a published release" >&2
