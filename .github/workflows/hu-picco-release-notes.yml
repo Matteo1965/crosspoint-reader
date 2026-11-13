@@ -1,0 +1,25 @@
+name: HU-PICCO-146 magyar Release-leiras
+
+on:
+  push:
+    branches:
+      - release/hu-picco-146
+    paths:
+      - HU-PICCO-146-RELEASE.md
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-release-description:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Frissites a publikus Release oldalon
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit hu-picco-146 \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes-file HU-PICCO-146-RELEASE.md
