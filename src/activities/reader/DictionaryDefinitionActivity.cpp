@@ -722,21 +722,28 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this, &currentPage] {
-    if (currentPage + 1 < content.totalPages) {
-      currentPage++;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  // Honor the configured physical side-button order in multi-page definitions.
+  // Keep the Picco's existing swipe, tap, and Power/Back behavior unchanged.
+  const bool frontSwapped = mappedInput.isNavDirectionSwapped();
+  const auto frontNext = frontSwapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const auto frontPrevious = frontSwapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageForward, frontNext},
+                                       [this, &currentPage] {
+                                         if (currentPage + 1 < content.totalPages) {
+                                           currentPage++;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 
-  buttonNavigator.onPrevious([this, &currentPage] {
-    if (currentPage > 0) {
-      currentPage--;
-      content.selection.valid = false;
-      requestUpdate();
-    }
-  });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::PageBack, frontPrevious},
+                                       [this, &currentPage] {
+                                         if (currentPage > 0) {
+                                           currentPage--;
+                                           content.selection.valid = false;
+                                           requestUpdate();
+                                         }
+                                       });
 }
 
 // Draws the current page: a styled Page when the HTML layout succeeded,
