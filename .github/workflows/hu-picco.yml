@@ -13,6 +13,7 @@ on:
       - agent/hu-picco-141-hyphen-chapter-response
       - agent/hu-picco-145-chapter-startup
       - agent/hu-picco-146-beta2-font-fix
+      - agent/hu-picco-147-upstream-selective
   workflow_dispatch:
 
 permissions:
