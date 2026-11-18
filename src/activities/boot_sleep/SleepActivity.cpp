@@ -736,6 +736,13 @@ void SleepActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
+  // Beta v4: erase the previous image before showing a new opaque sleep screen.
+  // Quick Resume and transparent sleep modes return above and retain their frame.
+  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::BLANK) {
+    renderer.clearScreen();
+    renderer.displayBuffer(kSleepClean);
+  }
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
