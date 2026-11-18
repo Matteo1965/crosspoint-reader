@@ -61,6 +61,9 @@ int nearestChoice(const uint8_t value, const uint8_t* values, const size_t count
   }
   return best;
 }
+constexpr StrId PARAGRAPH_INDENT_LABELS[] = {StrId::STR_STATE_OFF, StrId::STR_INDENT_SMALL,
+                                             StrId::STR_INDENT_MEDIUM, StrId::STR_INDENT_NORMAL,
+                                             StrId::STR_INDENT_LARGE, StrId::STR_INDENT_EXTRA_LARGE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
 }  // namespace
@@ -461,9 +464,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
     }
     case LayoutRow::ParaIndentation: {
       std::vector<std::string> options;
-      options.reserve(6);
-      options.push_back(tr(STR_STATE_OFF));
-      for (int spaces = 1; spaces <= 5; ++spaces) options.push_back(std::to_string(spaces));
+      options.reserve(std::size(PARAGRAPH_INDENT_LABELS));
+      for (const auto id : PARAGRAPH_INDENT_LABELS) options.emplace_back(I18N.get(id));
       optionPopup_.show(StrId::STR_PARAGRAPH_INDENTATION, options, SETTINGS.paragraphIndentSpaces, [](int idx) {
         SETTINGS.paragraphIndentSpaces = static_cast<uint8_t>(idx);
         SETTINGS.saveToFile();
@@ -532,7 +534,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
                                             : std::to_string(SETTINGS.extraParagraphSpacingPercent) + "%";
     case LayoutRow::ParaIndentation: {
       const int spaces = std::clamp<int>(SETTINGS.paragraphIndentSpaces, 0, 5);
-      return spaces == 0 ? tr(STR_STATE_OFF) : std::to_string(spaces);
+      return I18N.get(PARAGRAPH_INDENT_LABELS[spaces]);
     }
     case LayoutRow::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
