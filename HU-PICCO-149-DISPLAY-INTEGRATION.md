@@ -26,3 +26,6 @@ Upstream FreeInk SDK associated with that commit: `a8acebf919fdc92b304b80eb0352d
 - No public release until on-device test passes.
 
 Status: integration plan only — EPD driver changes have NOT been ported or built on this branch.
+
+## Development branch policy
+Continue HU-PICCO-150 and later preview integrations **on this same branch** (`agent/hu-picco-149-display-beta4`); do not create a separate feature branch. Keep the working HU-PICCO-149 commit identifiable as the rollback point. Each independent EPD/SDK change should be committed and tested separately. Bump the firmware version only when preparing the next test build.
