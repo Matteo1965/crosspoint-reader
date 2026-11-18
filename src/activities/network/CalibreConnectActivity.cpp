@@ -161,7 +161,12 @@ void CalibreConnectActivity::loop() {
       // Note: we DON'T reset lastProcessedCompleteAt here, so we won't re-process the old server value
       changed = true;
     }
-    if (changed) {
+    // Avoid frequent EPD refreshes while Calibre transfers a file.
+    constexpr unsigned long kMinRepaintMs = 5000;
+    if (changed) repaintPending = true;
+    if (repaintPending && millis() - lastRepaintAt >= kMinRepaintMs) {
+      repaintPending = false;
+      lastRepaintAt = millis();
       requestUpdate();
     }
   }
